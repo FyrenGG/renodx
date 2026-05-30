@@ -1,3 +1,8 @@
+#include "../shared.h"
+#include "diffuse_brdf.hlsli"
+#include "foliage_common.hlsli"
+#include "purkinje_common.hlsli"
+
 Texture2D<float4> __3__36__0__0__g_puddleMask : register(t124, space36);
 
 Texture2D<float4> __3__36__0__0__g_climateSandTex : register(t125, space36);
@@ -616,6 +621,17 @@ void main(
       _430 = _275;
       _431 = _276;
     }
+    // RenoDX: AO+ foliage color shaping.
+    if (FOLIAGE_COLOR_CORRECT > 0.0f && ((uint)(_108 - 12) < 7u)) {
+      float3 _rndx_fcBaseColor = float3(float(_429), float(_430), float(_431));
+      half4 _rndx_fcShadow = __3__36__0__0__g_sceneShadowColor.Load(int3(((int)((((uint)((_61 - (_62 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_84) << 5)) & 8160)))), ((int)((((uint)(_62 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_84)) >> 3) & 8160)))), 0));
+      float _rndx_fcShadowVis = saturate(dot(float3(_rndx_fcShadow.xyz), float3(0.2126f, 0.7152f, 0.0722f)));
+      float3 _rndx_fcCorrected = FoliageColorCorrect(_rndx_fcBaseColor, _sunDirection.xyz, _rndx_fcShadowVis, float3(1.0f, 1.0f, 1.0f));
+      float3 _rndx_fscColor = FoliageSelectiveColor(_rndx_fcCorrected);
+      _429 = half(_rndx_fscColor.x);
+      _430 = half(_rndx_fscColor.y);
+      _431 = half(_rndx_fscColor.z);
+    }
     float _432 = float(_250);
     float _433 = float(_251);
     float _434 = float(_252);
@@ -969,12 +985,10 @@ void main(
     if (_1551) {
       _1559 = 1.0f;
       _1563 = select((_108 == 65), 0.0f, _1559);
-      break;
     } else {
       if (!_399) {
         _1559 = select((_108 == 107), 1.0f, ((_1550 + _1542) - (_1550 * _1542)));
         _1563 = select((_108 == 65), 0.0f, _1559);
-        break;
       } else {
         _1563 = 0.0f;
       }
@@ -1420,6 +1434,15 @@ void main(
     float _2576 = (((_2558 * 0.6131200194358826f) + (_2559 * 0.3395099937915802f)) + (_2560 * 0.047370001673698425f)) * _2369;
     float _2577 = (((_2558 * 0.07020000368356705f) + (_2559 * 0.9163600206375122f)) + (_2560 * 0.013450000435113907f)) * _2369;
     float _2578 = (((_2558 * 0.02061999961733818f) + (_2559 * 0.10958000272512436f)) + (_2560 * 0.8697999715805054f)) * _2369;
+    // RenoDX: purkinje colour shift for direct moonlight
+    {
+      bool _purk_isMoon = !_2335 && (_sunDirection.y <= _moonDirection.y);
+      float3 _purk_light = ApplyPurkinjeShift(
+        float3(_2576, _2577, _2578), _sunDirection.y, _purk_isMoon);
+      _2576 = _purk_light.x;
+      _2577 = _purk_light.y;
+      _2578 = _purk_light.z;
+    }
     float _2581 = float(_2296.x);
     float _2582 = float(_2296.y);
     float _2583 = float(_2296.z);
@@ -1432,14 +1455,12 @@ void main(
       _2600 = true;
       _2603 = _2600;
       _2604 = (_108 == 106);
-      break;
     } else {
       bool _2594 = (_108 == 107);
       if (!((((_1551) || ((_108 == 28)))) || ((_722 == 26)))) {
         _2600 = _2594;
         _2603 = _2600;
         _2604 = (_108 == 106);
-        break;
       } else {
         _2603 = _2594;
         _2604 = true;
@@ -1493,7 +1514,12 @@ void main(
     float _2683 = saturate(dot(float3(_2661, _2662, _2663), float3(_2672, _2673, _2674)));
     float _2685 = float(max(0.010002136h, _2290));
     float _2686 = saturate(_2675);
-    float _2687 = _2685 * _2685;
+    float _rndx_spec_rough = _2685;
+    // Material Improvements: specular AA filters roughness only when the gate is enabled.
+    if (SPECULAR_AA > 0.0f) {
+      _rndx_spec_rough = NDFFilterRoughnessCS(float3(_2647, _2648, _2649), _2685, SPECULAR_AA);
+    }
+    float _2687 = _rndx_spec_rough * _rndx_spec_rough;
     float _2688 = _2687 * _2687;
     float _2689 = 1.0f - _2688;
     float _2690 = 1.0f - _2683;
@@ -1503,7 +1529,14 @@ void main(
     float _2696 = _2695 * _2695;
     float _2701 = 1.0f - _2678;
     float _2702 = _2701 * _2701;
-    float _2730 = saturate((_2686 * 0.31830987334251404f) * ((((((1.0f - ((_2696 * _2696) * (_2695 * 0.75f))) * (1.0f - ((_2702 * _2702) * (_2701 * 0.75f)))) - _2694) * saturate((_2689 * 2.200000047683716f) + -0.5f)) + _2694) + ((exp2(-0.0f - (max(((_2689 * 73.19999694824219f) + -21.200000762939453f), 8.899999618530273f) * sqrt(_2680))) * _2683) * ((((_2689 * 34.5f) + -59.0f) * _2689) + 24.5f))));
+    float _2730;
+    // Material Improvements: optional diffuse BRDF replacement, otherwise vanilla diffuse.
+    if (DIFFUSE_BRDF_MODE >= 1.0f) {
+      float _eon_LdotV = dot(float3(_2661, _2662, _2663), float3(_436, _438, _440));
+      _2730 = _2686 * EON_DiffuseScalar(_2686, _2678, _eon_LdotV, _2685);
+    } else {
+      _2730 = saturate((_2686 * 0.31830987334251404f) * ((((((1.0f - ((_2696 * _2696) * (_2695 * 0.75f))) * (1.0f - ((_2702 * _2702) * (_2701 * 0.75f)))) - _2694) * saturate((_2689 * 2.200000047683716f) + -0.5f)) + _2694) + ((exp2(-0.0f - (max(((_2689 * 73.19999694824219f) + -21.200000762939453f), 8.899999618530273f) * sqrt(_2680))) * _2683) * ((((_2689 * 34.5f) + -59.0f) * _2689) + 24.5f))));
+    }
     int _2731 = _2618 & 126;
     bool __defer_2660_2741 = false;
     bool __branch_chain_2660;
@@ -1584,14 +1617,61 @@ void main(
       _2855 = 0.0f;
       _2856 = 0.0f;
     }
+    // Material Improvements: diffraction tint is disabled unless the material gate is on.
+    if (DIFFRACTION > 0.0f && _2750 > 0.0f) {
+      float3 _rndx_dShift = DiffractionShiftAndSpeckleCS(
+          _2680, _2678, _rndx_spec_rough,
+          float2(_100, _101), _112,
+          float3(_2672, _2673, _2674),
+          float3(_2647, _2648, _2649),
+          float3(_2752, _2753, _2754));
+      float3 _rndx_dMod = lerp(1.0f, _rndx_dShift, DIFFRACTION * _2750);
+      _2854 *= _rndx_dMod.x;
+      _2855 *= _rndx_dMod.y;
+      _2856 *= _rndx_dMod.z;
+    }
+    // Material Improvements: smooth terminator is gated separately and defaults off.
+    if (SMOOTH_TERMINATOR > 0.0f) {
+      float _rndx_c2 = CallistoSmoothTerminator(_2686, _2683, _2680, SMOOTH_TERMINATOR, 0.5f);
+      _2730 *= _rndx_c2;
+      _2854 *= _rndx_c2;
+      _2855 *= _rndx_c2;
+      _2856 *= _rndx_c2;
+    }
+    float _rndx_foliageTransR = 0.0f;
+    float _rndx_foliageTransG = 0.0f;
+    float _rndx_foliageTransB = 0.0f;
+    // Foliage Improvements: transmission is foliage-stencil only and off below AO+.
+    if (FOLIAGE_TRANSMISSION > 0.0f && ((uint)(_108 - 12) < 7u)) {
+      FoliageTransmissionResult _rndx_ftResult = FoliageTransmission(
+          float3(_436, _438, _440),
+          float3(_2661, _2662, _2663),
+          float3(_2605, _2606, _2607),
+          _2675,
+          float3(_2752, _2753, _2754),
+          float3(_2581, _2582, _2583),
+          float3(_2664, _2665, _2666),
+          FOLIAGE_TRANSMISSION_THICKNESS);
+
+      _rndx_foliageTransR = _rndx_ftResult.transmission.x;
+      _rndx_foliageTransG = _rndx_ftResult.transmission.y;
+      _rndx_foliageTransB = _rndx_ftResult.transmission.z;
+
+      if (_rndx_ftResult.diffuseScale > 0.0f) {
+        _2730 *= _rndx_ftResult.diffuseScale;
+      } else {
+        float _rndx_wrap = 0.25f * (1.0f - FOLIAGE_TRANSMISSION_THICKNESS);
+        _2730 = max(0.0f, (_2675 + _rndx_wrap) / (1.0f + _rndx_wrap)) * 0.31830987334251404f * 0.75f;
+      }
+    }
     if ((_2591) || ((_2731 == 6))) {
       _2865 = ((max(0.0f, (0.30000001192092896f - _2675)) * 0.23190687596797943f) + _2730);
     } else {
       _2865 = _2730;
     }
-    float _2872 = ((_2581 * _2865) * _2664) + (_1212 * _1154);
-    float _2873 = ((_2582 * _2865) * _2665) + (_1213 * _1154);
-    float _2874 = ((_2583 * _2865) * _2666) + (_1214 * _1154);
+    float _2872 = ((_2581 * _2865) * _2664) + (_1212 * _1154) + _rndx_foliageTransR;
+    float _2873 = ((_2582 * _2865) * _2665) + (_1213 * _1154) + _rndx_foliageTransG;
+    float _2874 = ((_2583 * _2865) * _2666) + (_1214 * _1154) + _rndx_foliageTransB;
     uint _2877 = _frameNumber.x * 13;
     [branch]
     if (((((int)(_2877 + ((((uint)((_61 - (_62 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_84) << 5)) & 8160))))) | ((int)(_2877 + ((((uint)(_62 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_84)) >> 3) & 8160)))))) & 31) == 0) {
@@ -1711,6 +1791,15 @@ void main(
       _3199 = _3178;
       _3200 = _3179;
       _3201 = _3180;
+    }
+    // RenoDX: Apply foliage AO to direct-lit pixels at final output.
+    if (FOLIAGE_AO_STRENGTH > 0.0f && ((uint)(_108 - 12) < 7u)) {
+      half4 _rndx_shadow = __3__36__0__0__g_sceneShadowColor.Load(int3(((int)((((uint)((_61 - (_62 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_84) << 5)) & 8160)))), ((int)((((uint)(_62 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_84)) >> 3) & 8160)))), 0));
+      float _rndx_directRatio = saturate(dot(float3(_rndx_shadow.xyz), float3(0.333f, 0.333f, 0.333f)));
+      float _rndx_ao = lerp(1.0f, float(_334.x), _rndx_directRatio * FOLIAGE_AO_STRENGTH);
+      _3199 *= _rndx_ao;
+      _3200 *= _rndx_ao;
+      _3201 *= _rndx_ao;
     }
     __3__38__0__1__g_sceneColorUAV[int2(((int)((((uint)((_61 - (_62 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_84) << 5)) & 8160)))), ((int)((((uint)(_62 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_84)) >> 3) & 8160)))))] = float4(_3199, _3200, _3201, 1.0f);
   }

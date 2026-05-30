@@ -156,7 +156,8 @@ const std::unordered_map<std::string, float> VANILLA_VALUES = {
     {"FxVignette", 100.f},
 
     {"SkyScattering", 0.f},
-    {"SunMoonAdjustments", 0.f},
+    {"SunImprovements", 0.f},
+    {"MoonAdjustments", 0.f},
     {"MoonDiskSize", 1.f},
     {"ContactShadowQuality", 0.f},
     {"FoliageImprovements", 0.f},
@@ -209,6 +210,8 @@ uint32_t aurora_night_counter = 0;
 uint32_t dawn_dusk_day_counter = 0;
 std::chrono::steady_clock::time_point dawn_dusk_blend_start{};
 float dawn_dusk_blend_duration = 60.f;  // seconds to crossfade between presets
+bool postprocess_material_draw = false;
+bool final_sdr_draw = false;
 
 renodx::mods::shader::CustomShader CreateDetectionShader(
     uint32_t crc32,
@@ -230,6 +233,7 @@ void MarkShaderDraw(renodx::mods::shader::CustomShader& shader, bool* marker) {
 renodx::mods::shader::CustomShaders custom_shaders = [] {
   auto shaders = renodx::mods::shader::CustomShaders{__ALL_CUSTOM_SHADERS};
 
+  // Detect RR passes without replacing stale migrated HLSL.
   shaders[0x70C182EF] = CreateDetectionShader(0x70C182EF, [](reshade::api::command_list*) {
     rr_draw = true;
     return false;
@@ -243,6 +247,18 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
         night_shader_active = true;
         return false;
       });
+    }
+  }
+
+  for (uint32_t hash : {0x2F574E45u}) {
+    if (auto it = shaders.find(hash); it != shaders.end()) {
+      MarkShaderDraw(it->second, &postprocess_material_draw);
+    }
+  }
+
+  for (uint32_t hash : {0xB91769A4u, 0x3CF16709u, 0xD49AC7D1u, 0xF1CD8E87u}) {
+    if (auto it = shaders.find(hash); it != shaders.end()) {
+      MarkShaderDraw(it->second, &final_sdr_draw);
     }
   }
 
@@ -1095,19 +1111,51 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
-        .key = "SunMoonAdjustments",
+        .key = "SunImprovements",
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,
         .default_value = 1.f,
-        .packed_values = {0u, CUSTOM_FLAGS__SUN_MOON_ADJUSTMENTS},
+        .packed_values = {0u, CUSTOM_FLAGS__SUN_IMPROVEMENTS},
         .can_reset = true,
-        .label = "Sun Improvements + Moon Adjustments",
+        .label = "Sun Improvements",
         .section = "Rendering",
-        .tooltip = "Improves Sun and applies a 10x brightness reduction to the moon disk.\n"
-                   "Off = vanilla (Default shimmery sun blob + moon uses sun scale luminance, clips to white ball).\n"
-                   "On = Physically based sun additions + moon luminance reduced to reveal texture detail.",
+        .tooltip = "Improves the visible sun disk and suppresses vanilla sun bloom blowout.\n"
+                   "Off = vanilla hard/shimmery sun disk.\n"
+                   "On = wider softened disk, chromatic edge, limb darkening, corona, and Mie halo.",
         .labels = {"Off", "On"},
         .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
+        .key = "MoonAdjustments",
+        .binding = &shader_injection.custom_flags,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 1.f,
+        .packed_values = {0u, CUSTOM_FLAGS__MOON_ADJUSTMENTS},
+        .can_reset = true,
+        .label = "Moon Adjustments",
+        .section = "Rendering",
+        .tooltip = "Improves moon disk rendering.\n"
+                   "Off = vanilla moon size, luminance, and simple shading.\n"
+                   "On = Moon Disk Size slider, reduced luminance, limb darkening, inner glow, and EON diffuse shading.",
+        .labels = {"Off", "On"},
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
+        .key = "MoonDiskSize",
+        .binding = &shader_injection.moon_disk_size,
+        .default_value = 4.f,
+        .can_reset = true,
+        .label = "Moon Disk Size",
+        .section = "Rendering",
+        .tooltip = "Scales the angular size of the moon disk.\n"
+                   "1 = vanilla size. 10 = 10x larger.",
+        .tint = rendering,
+        .min = 1.f,
+        .max = 10.f,
+        .format = "%.1fx",
+        .is_enabled = []() { return MOON_ADJUSTMENTS == 1.f; },
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
@@ -1154,25 +1202,35 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
-        .key = "MoonDiskSize",
-        .binding = &shader_injection.moon_disk_size,
-        .default_value = 4.f,
+        .key = "ContactShadowQuality",
+        .binding = &shader_injection.custom_flags,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = MICRO_SHADOW_QUALITY_BALANCED,
+        .packed_values = {0u, CUSTOM_FLAGS__MICRO_SHADOW_QUALITY_BIT0, CUSTOM_FLAGS__MICRO_SHADOW_QUALITY_BIT1, CUSTOM_FLAGS__MICRO_SHADOW_QUALITY_BIT0 | CUSTOM_FLAGS__MICRO_SHADOW_QUALITY_BIT1},
         .can_reset = true,
-        .label = "Moon Disk Size",
+        .label = "Contact Micro Shadows",
         .section = "Rendering",
-        .tooltip = "Scales the angular size of the moon disk.\n"
-                   "1 = vanilla size. 10 = 10x larger.",
+        .tooltip = "Controls contact micro shadow detail.\n"
+                   "Off = stock contact shadows.\n"
+                   "Low = subtle contact detail with conservative reach and strength.\n"
+                   "Balanced = recommended contact micro shadow tuning.\n"
+                   "Full = strongest contact micro shadow tuning.",
+        .labels = {"Off", "Low", "Balanced", "Full"},
         .tint = rendering,
-        .min = 1.f,
-        .max = 10.f,
-        .format = "%.1fx",
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
         .value_type = renodx::utils::settings::SettingValueType::TEXT,
-        .label = "WARNING: Sliders disabled (doesn't matter what the slider says) until Ray Reconstruction/Ray Regeneration is detected\n",
+        .label = "Ray Reconstruction / Ray Regeneration Features\n",
         .section = "Rendering",
-        //.tint = 0xaa0000,
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
+        .value_type = renodx::utils::settings::SettingValueType::TEXT,
+        .label = "Not detected: settings below are disabled until Ray Reconstruction / Ray Regeneration is active.\n",
+        .section = "Rendering",
+        .tint = 0xaa0000,
         .is_visible = []() { return current_settings_mode == rendering_group && !RR_ENABLED; },
     },
     new renodx::utils::settings::Setting{
@@ -1211,23 +1269,6 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
-        .key = "ContactShadowQuality",
-        .binding = &shader_injection.custom_flags,
-        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
-        .default_value = 1.f,
-        .packed_values = {0u, CUSTOM_FLAGS__CONTACT_SHADOW_QUALITY},
-        .can_reset = true,
-        .label = "Contact Micro Shadows (WIP)",
-        .section = "Rendering",
-        .tooltip = "Toggles contact micro shadow detail.\n"
-                   "Off = vanilla contact shadows.\n"
-                   "On = Improved shadow details + SSDM aware details,\n",
-        .labels = {"Off", "On"},
-        .tint = rendering,
-        .is_enabled = []() { return RR_ENABLED; },
-        .is_visible = []() { return current_settings_mode == rendering_group; },
-    },
-    new renodx::utils::settings::Setting{
         .key = "FoliageImprovements",
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,
@@ -1255,11 +1296,10 @@ renodx::utils::settings::Settings settings = {
         .can_reset = true,
         .label = "Material Improvements",
         .section = "Rendering",
-        .tooltip = "Enables all material/lighting improvements:\n"
-                   "- EON 2025 energy preserving diffuse BRDF\n"
-                   "- Callisto smooth terminator\n"
+        .tooltip = "Enables the 1.09-validated material/lighting improvements:\n"
                    "- Geometric specular anti aliasing\n"
-                   "- Spectral diffraction on metals",
+                   "- Spectral diffraction on metals\n"
+                   "Diffuse BRDF and smooth terminator hooks remain present but disabled until revalidated.",
         .labels = {"Off", "On"},
         .tint = rendering,
         .is_enabled = []() { return RR_ENABLED; },
@@ -1467,7 +1507,8 @@ void OnPresetOff() {
       {"LocalLightSaturation", 50.f},
 
       {"SkyScattering", 0.f},
-      {"SunMoonAdjustments", 0.f},
+      {"SunImprovements", 0.f},
+      {"MoonAdjustments", 0.f},
       {"MoonDiskSize", 1.f},
       {"ContactShadowQuality", 0.f},
       {"FoliageImprovements", 0.f},
@@ -1506,8 +1547,18 @@ void OnPresent(reshade::api::command_queue* /*queue*/,
                const reshade::api::rect* /*dirty_rects*/) {
   rr_draw_counter++;
   if (rr_draw_counter >= 30) {
-    shader_injection.custom_flags = std::bit_cast<float>((CUSTOM_FLAGS_AS_UINT & ~CUSTOM_FLAGS__RR_ENABLED) | (rr_draw ? CUSTOM_FLAGS__RR_ENABLED : 0u));
+    uint32_t custom_flags = CUSTOM_FLAGS_AS_UINT & ~CUSTOM_FLAGS__RR_ENABLED & ~CUSTOM_FLAGS__BASIC_POSTPROCESS_FINAL;
+    if (rr_draw) {
+      custom_flags |= CUSTOM_FLAGS__RR_ENABLED;
+    }
+    if (!last_is_hdr && postprocess_material_draw && !final_sdr_draw) {
+      custom_flags |= CUSTOM_FLAGS__BASIC_POSTPROCESS_FINAL;
+    }
+
+    shader_injection.custom_flags = std::bit_cast<float>(custom_flags);
     rr_draw = false;
+    postprocess_material_draw = false;
+    final_sdr_draw = false;
     rr_draw_counter = 0;
   }
 

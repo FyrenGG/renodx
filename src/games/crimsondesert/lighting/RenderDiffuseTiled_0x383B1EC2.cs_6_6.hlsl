@@ -1,3 +1,8 @@
+#include "../shared.h"
+#include "diffuse_brdf.hlsli"
+#include "foliage_common.hlsli"
+#include "purkinje_common.hlsli"
+
 Texture2D<float4> __3__36__0__0__g_puddleMask : register(t124, space36);
 
 Texture2D<float4> __3__36__0__0__g_climateSandTex : register(t125, space36);
@@ -1424,6 +1429,17 @@ void main(
       _1027 = _281;
       _1028 = _282;
     }
+    // RenoDX: AO+ foliage color shaping.
+    if (FOLIAGE_COLOR_CORRECT > 0.0f && ((uint)(_117 - 12) < 7u)) {
+      float3 _rndx_fcBaseColor = float3(float(_1026), float(_1027), float(_1028));
+      half4 _rndx_fcShadow = __3__36__0__0__g_sceneShadowColor.Load(int3(((int)((((uint)((_70 - (_71 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_93) << 5)) & 8160)))), ((int)((((uint)(_71 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_93)) >> 3) & 8160)))), 0));
+      float _rndx_fcShadowVis = saturate(dot(float3(_rndx_fcShadow.xyz), float3(0.2126f, 0.7152f, 0.0722f)));
+      float3 _rndx_fcCorrected = FoliageColorCorrect(_rndx_fcBaseColor, _sunDirection.xyz, _rndx_fcShadowVis, float3(1.0f, 1.0f, 1.0f));
+      float3 _rndx_fscColor = FoliageSelectiveColor(_rndx_fcCorrected);
+      _1026 = half(_rndx_fscColor.x);
+      _1027 = half(_rndx_fscColor.y);
+      _1028 = half(_rndx_fscColor.z);
+    }
     int _1029 = _953 & -2;
     bool _1030 = (_1029 == 66);
     bool _1031 = (_953 == 54);
@@ -2679,6 +2695,15 @@ void main(
     float _3442 = (((_3424 * 0.6131200194358826f) + (_3425 * 0.3395099937915802f)) + (_3426 * 0.047370001673698425f)) * _3234;
     float _3443 = (((_3424 * 0.07020000368356705f) + (_3425 * 0.9163600206375122f)) + (_3426 * 0.013450000435113907f)) * _3234;
     float _3444 = (((_3424 * 0.02061999961733818f) + (_3425 * 0.10958000272512436f)) + (_3426 * 0.8697999715805054f)) * _3234;
+    // RenoDX: purkinje colour shift for direct moonlight
+    {
+      bool _purk_isMoon = !_3200 && (_sunDirection.y <= _moonDirection.y);
+      float3 _purk_light = ApplyPurkinjeShift(
+        float3(_3442, _3443, _3444), _sunDirection.y, _purk_isMoon);
+      _3442 = _purk_light.x;
+      _3443 = _purk_light.y;
+      _3444 = _purk_light.z;
+    }
     float _3450 = float(_967.x);
     float _3451 = float(_3160.x);
     float _3452 = float(_3160.y);
@@ -2774,7 +2799,12 @@ void main(
       _3594 = _3566;
       _3595 = _3567;
     }
-    float _3596 = _3464 * _3464;
+    float _rndx_spec_rough = _3464;
+    // Material Improvements: specular AA filters roughness only when the gate is enabled.
+    if (SPECULAR_AA > 0.0f) {
+      _rndx_spec_rough = NDFFilterRoughnessCS(float3(_3539, _3540, _3541), _3464, SPECULAR_AA);
+    }
+    float _3596 = _rndx_spec_rough * _rndx_spec_rough;
     float _3597 = _3596 * _3596;
     bool _3599 = ((uint)(_3505 + -97) < (uint)2);
     float _3601 = select(_3599, 0.5f, (_3464 * 0.60009765625f));
@@ -3017,6 +3047,10 @@ void main(
       _3978 = 0.0f;
       _3979 = 0.0f;
     }
+    float _rndx_foliageTransR = 0.0f;
+    float _rndx_foliageTransG = 0.0f;
+    float _rndx_foliageTransB = 0.0f;
+    bool _rndx_isFoliage = ((uint)(_117 - 12) < 7u);
     if (!_3682) {
       bool _3981 = (_3639 == 0);
       bool __defer_3980_4148 = false;
@@ -3101,7 +3135,14 @@ void main(
           float _4168 = _4167 * _4167;
           float _4173 = 1.0f - _3675;
           float _4174 = _4173 * _4173;
-          float _4201 = (_4160 * 0.31830987334251404f) * ((((_3680 * ((((_4161 * 34.5f) + -59.0f) * _4161) + 24.5f)) * exp2(-0.0f - (max(((_4161 * 73.19999694824219f) + -21.200000762939453f), 8.899999618530273f) * sqrt(_3677)))) + _4166) + ((((1.0f - ((_4168 * _4168) * (_4167 * 0.75f))) * (1.0f - ((_4174 * _4174) * (_4173 * 0.75f)))) - _4166) * saturate((_4161 * 2.200000047683716f) + -0.5f)));
+          float _4201;
+          // Material Improvements: optional diffuse BRDF replacement, otherwise vanilla diffuse.
+          if (DIFFUSE_BRDF_MODE >= 1.0f) {
+            float _eon_LdotV = dot(float3(_3658, _3659, _3660), float3(_1033, _1034, _1035));
+            _4201 = _4160 * EON_DiffuseScalar(_4160, _3675, _eon_LdotV, _3464);
+          } else {
+            _4201 = (_4160 * 0.31830987334251404f) * ((((_3680 * ((((_4161 * 34.5f) + -59.0f) * _4161) + 24.5f)) * exp2(-0.0f - (max(((_4161 * 73.19999694824219f) + -21.200000762939453f), 8.899999618530273f) * sqrt(_3677)))) + _4166) + ((((1.0f - ((_4168 * _4168) * (_4167 * 0.75f))) * (1.0f - ((_4174 * _4174) * (_4173 * 0.75f)))) - _4166) * saturate((_4161 * 2.200000047683716f) + -0.5f)));
+          }
           float _4204 = saturate(1.0f - saturate(_3678));
           float _4205 = _4204 * _4204;
           float _4207 = (_4205 * _4205) * _4204;
@@ -3122,6 +3163,50 @@ void main(
             _4247 = 0.0f;
             _4248 = 0.0f;
             _4249 = 0.0f;
+          }
+          // Material Improvements: diffraction tint is disabled unless the material gate is on.
+          if (DIFFRACTION > 0.0f && _3472 > 0.0f) {
+            float3 _rndx_dShift = DiffractionShiftAndSpeckleCS(
+                _3677, _3675, _rndx_spec_rough,
+                float2(_109, _110), _121,
+                float3(_3669, _3670, _3671),
+                float3(_3539, _3540, _3541),
+                float3(_3454, _3455, _3456));
+            float3 _rndx_dMod = lerp(1.0f, _rndx_dShift, DIFFRACTION * _3472);
+            _4247 *= _rndx_dMod.x;
+            _4248 *= _rndx_dMod.y;
+            _4249 *= _rndx_dMod.z;
+          }
+          // Material Improvements: smooth terminator is gated separately and defaults off.
+          if (SMOOTH_TERMINATOR > 0.0f) {
+            float _rndx_c2 = CallistoSmoothTerminator(_4160, _3680, _3677, SMOOTH_TERMINATOR, 0.5f);
+            _4201 *= _rndx_c2;
+            _4247 *= _rndx_c2;
+            _4248 *= _rndx_c2;
+            _4249 *= _rndx_c2;
+          }
+          // Foliage Improvements: transmission is foliage-stencil only and off below AO+.
+          if (FOLIAGE_TRANSMISSION > 0.0f && _rndx_isFoliage) {
+            FoliageTransmissionResult _rndx_ftResult = FoliageTransmission(
+                float3(_1033, _1034, _1035),
+                float3(_3658, _3659, _3660),
+                float3(_3488, _3489, _3490),
+                _3672,
+                float3(_3454, _3455, _3456),
+                float3(_3424, _3425, _3426),
+                float3(_3661, _3662, _3663),
+                FOLIAGE_TRANSMISSION_THICKNESS);
+
+            _rndx_foliageTransR = _rndx_ftResult.transmission.x;
+            _rndx_foliageTransG = _rndx_ftResult.transmission.y;
+            _rndx_foliageTransB = _rndx_ftResult.transmission.z;
+
+            if (_rndx_ftResult.diffuseScale > 0.0f) {
+              _4201 *= _rndx_ftResult.diffuseScale;
+            } else {
+              float _rndx_wrap = 0.25f * (1.0f - FOLIAGE_TRANSMISSION_THICKNESS);
+              _4201 = max(0.0f, (_3672 + _rndx_wrap) / (1.0f + _rndx_wrap)) * 0.31830987334251404f * 0.75f;
+            }
           }
           bool _4250 = (_3505 == 65);
           if (_3570) {
@@ -3681,9 +3766,9 @@ void main(
         }
       }
     }
-    float _4936 = _4921 + _3153;
-    float _4937 = _4922 + _3154;
-    float _4938 = _4923 + _3155;
+    float _4936 = _4921 + _3153 + _rndx_foliageTransR;
+    float _4937 = _4922 + _3154 + _rndx_foliageTransG;
+    float _4938 = _4923 + _3155 + _rndx_foliageTransB;
     uint _4941 = _frameNumber.x * 13;
     [branch]
     if (((((int)(_4941 + ((((uint)((_70 - (_71 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_93) << 5)) & 8160))))) | ((int)(_4941 + ((((uint)(_71 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_93)) >> 3) & 8160)))))) & 31) == 0) {
@@ -3850,6 +3935,15 @@ void main(
       _5387 = _5366;
       _5388 = _5367;
       _5389 = _5368;
+    }
+    // RenoDX: Apply foliage AO to direct-lit pixels at final output.
+    if (FOLIAGE_AO_STRENGTH > 0.0f && ((uint)(_117 - 12) < 7u)) {
+      half4 _rndx_shadow = __3__36__0__0__g_sceneShadowColor.Load(int3(((int)((((uint)((_70 - (_71 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_93) << 5)) & 8160)))), ((int)((((uint)(_71 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_93)) >> 3) & 8160)))), 0));
+      float _rndx_directRatio = saturate(dot(float3(_rndx_shadow.xyz), float3(0.333f, 0.333f, 0.333f)));
+      float _rndx_ao = lerp(1.0f, float(_967.x), _rndx_directRatio * FOLIAGE_AO_STRENGTH);
+      _5387 *= _rndx_ao;
+      _5388 *= _rndx_ao;
+      _5389 *= _rndx_ao;
     }
     __3__38__0__1__g_sceneColorUAV[int2(((int)((((uint)((_70 - (_71 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_93) << 5)) & 8160)))), ((int)((((uint)(_71 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_93)) >> 3) & 8160)))))] = float4(_5387, _5388, _5389, 1.0f);
   }

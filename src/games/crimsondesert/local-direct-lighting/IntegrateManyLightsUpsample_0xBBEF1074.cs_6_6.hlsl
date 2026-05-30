@@ -1,3 +1,6 @@
+#include "../shared.h"
+#include "../lighting/diffuse_brdf.hlsli"
+
 struct ManyLightsData {
   float4 _position;
   float4 _color;
@@ -458,7 +461,17 @@ void main(
           _652 = (max((((_616 * _383) + _615) * _641), 0.0f) * _624);
           _653 = (max((((_616 * _384) + _615) * _641), 0.0f) * _624);
           _654 = (max((((_616 * _385) + _615) * _641), 0.0f) * _624);
-          _655 = (_599 * 0.31830987334251404f);
+          // Material Improvements: optional diffuse BRDF replacement, otherwise vanilla diffuse.
+          if (DIFFUSE_BRDF_MODE >= 2.0f) {
+            float _rndx_sNdotL = saturate(_599);
+            float _rndx_LdotV = dot(float3(_588, _589, _590), float3(_554, _555, _556));
+            _655 = _rndx_sNdotL * EON_DiffuseScalar(_rndx_sNdotL, _602, _rndx_LdotV, _417);
+          } else if (DIFFUSE_BRDF_MODE >= 1.0f) {
+            float _rndx_sNdotL = saturate(_599);
+            _655 = _rndx_sNdotL * HammonDiffuseScalar(_rndx_sNdotL, _602, _604, _605, _417);
+          } else {
+            _655 = (_599 * 0.31830987334251404f);
+          }
         } else {
           _652 = 0.0f;
           _653 = 0.0f;
@@ -482,6 +495,27 @@ void main(
           _709 = _652;
           _710 = _653;
           _711 = _654;
+        }
+        // Material Improvements: diffraction tint is disabled unless the material gate is on.
+        if (DIFFRACTION > 0.0f && float(_341) > 0.0f) {
+          float3 _rndx_dShift = DiffractionShiftAndSpeckleCS(
+              _604, _602, _417,
+              float2(_92, _93), (_nearFarProj.x / _83),
+              float3(_596, _597, _598),
+              float3(_414, _415, _416),
+              float3(_383, _384, _385));
+          float3 _rndx_dMod = lerp(1.0f, _rndx_dShift, DIFFRACTION * float(_341));
+          _709 *= _rndx_dMod.x;
+          _710 *= _rndx_dMod.y;
+          _711 *= _rndx_dMod.z;
+        }
+        // Material Improvements: smooth terminator is gated separately and defaults off.
+        if (SMOOTH_TERMINATOR > 0.0f) {
+          float _rndx_st = CallistoSmoothTerminator(_599, _605, _604, SMOOTH_TERMINATOR, 0.5f);
+          _655 *= _rndx_st;
+          _709 *= _rndx_st;
+          _710 *= _rndx_st;
+          _711 *= _rndx_st;
         }
         float _713 = saturate(select((_539 > 99999.0f), 1.0f, (1.0f / max((_539 * _539), (_462 * _462))))) * (float((bool)(uint)((float((uint)((uint)(_425.x & 65535))) * 0.015609979629516602f) >= 1000.0f)) * asfloat(_425.y));
         float _714 = _713 * _536;

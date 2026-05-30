@@ -1,3 +1,6 @@
+#include "../shared.h"
+#include "../lighting/diffuse_brdf.hlsli"
+
 struct ManyLightsData {
   float4 _position;
   float4 _color;
@@ -821,7 +824,17 @@ void main(
               _1220 = (max((((_1184 * _601) + _1183) * _1209), 0.0f) * _1192);
               _1221 = (max((((_1184 * _602) + _1183) * _1209), 0.0f) * _1192);
               _1222 = (max((((_1184 * _603) + _1183) * _1209), 0.0f) * _1192);
-              _1223 = (_820 * 0.31830987334251404f);
+              // Material Improvements: optional diffuse BRDF replacement, otherwise vanilla diffuse.
+              if (DIFFUSE_BRDF_MODE >= 2.0f) {
+                float _rndx_sNdotL = saturate(_820);
+                float _rndx_LdotV = dot(float3(_809, _810, _811), float3(_775, _776, _777));
+                _1223 = _rndx_sNdotL * EON_DiffuseScalar(_rndx_sNdotL, _823, _rndx_LdotV, _606);
+              } else if (DIFFUSE_BRDF_MODE >= 1.0f) {
+                float _rndx_sNdotL = saturate(_820);
+                _1223 = _rndx_sNdotL * HammonDiffuseScalar(_rndx_sNdotL, _823, _825, _826, _606);
+              } else {
+                _1223 = (_820 * 0.31830987334251404f);
+              }
             } else {
               _1220 = 0.0f;
               _1221 = 0.0f;
@@ -891,8 +904,40 @@ void main(
             _1280 = ((((max((_1153 * _1109), 0.0f) - _1134) * _464) + _1134) * _1169);
             _1281 = ((((max((_1153 * _1110), 0.0f) - _1135) * _464) + _1135) * _1169);
             _1282 = ((((max((_1153 * _1111), 0.0f) - _1136) * _464) + _1136) * _1169);
-            _1283 = ((saturate(_820) * 0.31830987334251404f) * (((saturate(1.0f - _effectiveMetallicForVelvet) + -1.0f) * _466) + 1.0f));
+            float _rndx_velvet_mod = (((saturate(1.0f - _effectiveMetallicForVelvet) + -1.0f) * _466) + 1.0f);
+            // Material Improvements: optional diffuse BRDF replacement, otherwise vanilla diffuse.
+            if (DIFFUSE_BRDF_MODE >= 2.0f) {
+              float _rndx_sNdotL2 = saturate(_820);
+              float _rndx_LdotV2 = dot(float3(_809, _810, _811), float3(_775, _776, _777));
+              _1283 = (_rndx_sNdotL2 * EON_DiffuseScalar(_rndx_sNdotL2, _823, _rndx_LdotV2, _606)) * _rndx_velvet_mod;
+            } else if (DIFFUSE_BRDF_MODE >= 1.0f) {
+              float _rndx_sNdotL2 = saturate(_820);
+              _1283 = (_rndx_sNdotL2 * HammonDiffuseScalar(_rndx_sNdotL2, _823, _825, _826, _606)) * _rndx_velvet_mod;
+            } else {
+              _1283 = (saturate(_820) * 0.31830987334251404f) * _rndx_velvet_mod;
+            }
           }
+        }
+        // Material Improvements: diffraction tint is disabled unless the material gate is on.
+        if (DIFFRACTION > 0.0f && float(_564) > 0.0f) {
+          float3 _rndx_dShift = DiffractionShiftAndSpeckleCS(
+              _825, _823, _606,
+              float2(_98, _99), (_nearFarProj.x / _89),
+              float3(_817, _818, _819),
+              float3(_635, _636, _637),
+              float3(_601, _602, _603));
+          float3 _rndx_dMod = lerp(1.0f, _rndx_dShift, DIFFRACTION * float(_564));
+          _1280 *= _rndx_dMod.x;
+          _1281 *= _rndx_dMod.y;
+          _1282 *= _rndx_dMod.z;
+        }
+        // Material Improvements: smooth terminator is gated separately and defaults off.
+        if (SMOOTH_TERMINATOR > 0.0f) {
+          float _rndx_st = CallistoSmoothTerminator(_820, _826, _825, SMOOTH_TERMINATOR, 0.5f);
+          _1283 *= _rndx_st;
+          _1280 *= _rndx_st;
+          _1281 *= _rndx_st;
+          _1282 *= _rndx_st;
         }
         float _1285 = saturate(select((_760 > 99999.0f), 1.0f, (1.0f / max((_760 * _760), (_683 * _683))))) * (_674 * asfloat(_646.y));
         float _1286 = _1285 * _757;

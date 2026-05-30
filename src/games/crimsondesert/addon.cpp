@@ -210,24 +210,44 @@ uint32_t dawn_dusk_day_counter = 0;
 std::chrono::steady_clock::time_point dawn_dusk_blend_start{};
 float dawn_dusk_blend_duration = 60.f;  // seconds to crossfade between presets
 
-renodx::mods::shader::CustomShaders custom_shaders = {
-    CustomShaderEntryCallback(0x5C16951B, [](reshade::api::command_list* /*cmd_list*/) {
-      rr_draw = true;
-      return true;
-    }),
+renodx::mods::shader::CustomShader CreateDetectionShader(
+    uint32_t crc32,
+    std::function<bool(reshade::api::command_list*)> callback) {
+  renodx::mods::shader::CustomShader shader = {};
+  shader.crc32 = crc32;
+  shader.on_replace = std::move(callback);
+  return shader;
+}
 
-    // SceneShadowTiledNight shaders
-    CustomShaderEntryCallback(0x4CC930DF, [](reshade::api::command_list* /*cmd_list*/) {
-      night_shader_active = true;
-      return true;
-    }),
-    CustomShaderEntryCallback(0xE71F351D, [](reshade::api::command_list* /*cmd_list*/) {
-      night_shader_active = true;
-      return true;
-    }),
+void MarkShaderDraw(renodx::mods::shader::CustomShader& shader, bool* marker) {
+  auto previous_on_replace = std::move(shader.on_replace);
+  shader.on_replace = [previous_on_replace = std::move(previous_on_replace), marker](reshade::api::command_list* cmd_list) {
+    *marker = true;
+    return previous_on_replace == nullptr || previous_on_replace(cmd_list);
+  };
+}
 
-    __ALL_CUSTOM_SHADERS};
-// renodx::mods::shader::CustomShaders custom_shaders;
+renodx::mods::shader::CustomShaders custom_shaders = [] {
+  auto shaders = renodx::mods::shader::CustomShaders{__ALL_CUSTOM_SHADERS};
+
+  shaders[0x70C182EF] = CreateDetectionShader(0x70C182EF, [](reshade::api::command_list*) {
+    rr_draw = true;
+    return false;
+  });
+
+  for (uint32_t hash : {0x1E61F5E3u, 0x6D2F2634u}) {
+    if (auto it = shaders.find(hash); it != shaders.end()) {
+      MarkShaderDraw(it->second, &night_shader_active);
+    } else {
+      shaders[hash] = CreateDetectionShader(hash, [](reshade::api::command_list*) {
+        night_shader_active = true;
+        return false;
+      });
+    }
+  }
+
+  return shaders;
+}();
 
 const std::string build_date = __DATE__;
 const std::string build_time = __TIME__;

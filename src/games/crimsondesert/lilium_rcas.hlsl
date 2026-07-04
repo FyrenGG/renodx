@@ -90,9 +90,16 @@ float3 ApplyRCASTaps(float3 e, float3 b, float3 d, float3 f, float3 h) {
 // 0.25f - (1.f / 16.f)
 #define FSR_RCAS_LIMIT 0.1875f
 
+  // RenoDX: >>> [Patch: RcasStrengthStabilityCap] [Version: 1.13.00]
+  // Description: The Sharpening setting can save typed values up to 200 so the vanilla
+  // sharpener can use the full range, but RCAS becomes unstable above about 133%.
+  // At that point the resolve denominator approaches zero and can produce black-edge
+  // artifacts. Clamp only the strength used by RCAS at 1.33, so values at or below
+  // 133 behave exactly as before while higher typed values remain safe.
   float lobe = max(float(-FSR_RCAS_LIMIT),
                    min(localLobe, 0.f))
-               * CUSTOM_SHARPENING;
+               * min(CUSTOM_SHARPENING, 1.33f);
+  // RenoDX: <<< [Patch: RcasStrengthStabilityCap]
 
 #if ENABLE_NOISE_REMOVAL
   float bLuma2x = bLum * 2.f;

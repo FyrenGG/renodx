@@ -1395,7 +1395,13 @@ renodx::utils::settings::Settings settings = {
         .section = "Post Processing",
         .tooltip = "Adjusts sharpening strength. 100 = Vanilla. (DLAA requires RCAS type)",
         .tint = effects,
-        .max = 100.f,
+        // Typed values above the visible slider range persist across restarts up to
+        // 200 (the load clamp uses max, the slider shows slider_max). Values above
+        // 100 are accepted for typed input only and are not presented in the tooltip.
+        // The vanilla sharpener can use the full range; the RCAS path applies its own
+        // safety cap at 1.33 (see RcasStrengthStabilityCap in lilium_rcas.hlsl).
+        .max = 200.f,
+        .slider_max = 100.f,
         .parse = [](float value) { return value * 0.01f; },
         .is_visible = []() { return current_settings_mode == effects_group || current_settings_mode == basic_group; },
     },

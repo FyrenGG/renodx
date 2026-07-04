@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$SourceFolder = 'G:\Games\Steam\steamapps\common\Crimson Desert\bin64\renodx-dev\dump',
-    [string]$GradingFolder = 'G:\Projects\source\repos\renodx\src\games\crimsondesert\grading',
+    [string]$GradingFolder = 'G:\Projects\source\repos\renodx\src\games\crimsondesert\grading\finals',
     [string]$Needle = '_localToneMappingParams.w > 0.0f',
     [string[]]$RequiredNeedles = @('__3__36__0__0__g_sceneColor', '_postProcessParams.w', '_etcParams.w', '_userImageAdjust', '_colorGradingParams.w'),
     [string[]]$ExcludeNeedles = @('_exposure0.x', 'BindlessParameters_PostProcessUber_CD')

@@ -1,6 +1,30 @@
+# Regenerates the RenoDX treatment for the standalone postprocessing final family
+# (grading/postprocessing_final*, RenderPostProcessPS*). Two structural shapes exist
+# in the 1.13.00 package:
+#   SLIM (the plain, fsr, and RenderPostProcessPS finals in every shipped build): input scene color is already
+#     tonemapped; treatment = chromatic aberration scaling, vanilla film-grain gate,
+#     CustomPostProcessing injection (grain/sharpen), sharpening gates/strength,
+#     HDR sRGB-decode removal, CUSTOM_VIGNETTE, FinalizeSDR/HDR. Detected by the
+#     ABSENCE of ExposureConstantBuffer b31.
+#   FUSED (unobserved package permutations): the vanilla tonemap pipeline is inlined
+#     UNCONDITIONALLY in the final pass (exposure, slope/offset/power grade, one of
+#     several tone-curve families, per-permutation output transform), with the screen
+#     fade fused at the curve output. Treatment = tonemap.hlsli include arrangement,
+#     opaque segment replacement from the first CDL grade line (constant
+#     1.705049991607666f) through the three fade output lines with TonemapReplacer,
+#     RCAS sharpening with re-tonemapped neighbor taps, RenoDX film grain, fade
+#     re-emission, plus the shared CA/grain-gate/vignette/Finalize patches. Detected
+#     by ExposureConstantBuffer b31.
+# Optional -NativeFolder re-stages each file from the fresh native decompile
+# (matched by the 0x hash in the file name) before patching.
+# Every skipped pattern is reported; treat any MISSING/FAILED list as
+# stop-and-investigate. Decompiler note: declarations are hoisted, so no regex here
+# may require a float/bool prefix before SSA temporaries, and .NET multiline $ does
+# not match before \r - use explicit \r?\n or drop the anchor.
 [CmdletBinding()]
 param(
     [string]$Folder = '',
+    [string]$NativeFolder = '',
     [switch]$WhatIf
 )
 
@@ -9,7 +33,7 @@ $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($Folder)) {
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-    $Folder = Join-Path $scriptDir '..'
+    $Folder = Join-Path $scriptDir '..\finals'
 }
 
 if (-not (Test-Path -LiteralPath $Folder)) {
@@ -17,14 +41,34 @@ if (-not (Test-Path -LiteralPath $Folder)) {
 }
 
 $folderPath = (Resolve-Path -LiteralPath $Folder).Path
+
+$nativePath = $null
+if (-not [string]::IsNullOrWhiteSpace($NativeFolder)) {
+    if (-not (Test-Path -LiteralPath $NativeFolder)) {
+        throw "Native folder not found: $NativeFolder"
+    }
+    $nativePath = (Resolve-Path -LiteralPath $NativeFolder).Path
+}
+
 $files = @(Get-ChildItem -LiteralPath $folderPath -File -Filter '*.hlsl' |
     Where-Object {
-        $_.Name -match '^(RenderPostProcessPS|postprocessing_final|postprocessing_final_fsr)_0x[0-9A-Fa-f]+\.ps_6_6\.hlsl$'
+        $_.Name -match '^(RenderPostProcessPS|postprocessing_final|postprocessing_final_fsr|postprocessing_final_fused)_0x[0-9A-Fa-f]+\.ps_6_6\.hlsl$'
     })
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+$patchVersion = '1.13.00'
+
 $updatedFiles = New-Object System.Collections.Generic.List[string]
+$stagedFiles = New-Object System.Collections.Generic.List[string]
+$nativeMissing = New-Object System.Collections.Generic.List[string]
 $missingPattern = New-Object System.Collections.Generic.List[string]
+$fusedSegmentFailed = New-Object System.Collections.Generic.List[string]
+$missingCBufferPattern = New-Object System.Collections.Generic.List[string]
+$curveVarLeaks = New-Object System.Collections.Generic.List[string]
+
+$slimCount = 0
+$fusedCount = 0
+$fusedTonemapReplaced = 0
 
 function Find-BlockEnd {
     param(
@@ -85,18 +129,101 @@ function Find-LineStart {
     return $lineStart + $Newline.Length
 }
 
+# Wrap a cbuffer the tonemap.hlsli include also provides in '#if 0'. Returns the
+# updated text and whether the cbuffer was found (already-wrapped counts as found).
+function Set-CBufferWrap {
+    param([string]$Text, [string]$CBufferPattern, [string]$Newline)
+
+    $cbufferMatch = [regex]::Match($Text, $CBufferPattern)
+    if ($cbufferMatch.Success) {
+        $beforeCBuffer = $Text.Substring(0, $cbufferMatch.Index)
+        $lastProvidedIf = $beforeCBuffer.LastIndexOf('#if 0 // Provided by tonemap.hlsli', [System.StringComparison]::Ordinal)
+        $lastEndIf = $beforeCBuffer.LastIndexOf('#endif', [System.StringComparison]::Ordinal)
+        $nextEndIf = $Text.IndexOf('#endif', $cbufferMatch.Index + $cbufferMatch.Length, [System.StringComparison]::Ordinal)
+        if ($lastProvidedIf -gt $lastEndIf -and $nextEndIf -ge 0) {
+            return [pscustomobject]@{ Content = $Text; Found = $true }
+        }
+
+        $updated = $Text.Substring(0, $cbufferMatch.Index) +
+            "#if 0 // Provided by tonemap.hlsli$Newline" + $cbufferMatch.Value + "$Newline#endif" +
+            $Text.Substring($cbufferMatch.Index + $cbufferMatch.Length)
+        return [pscustomobject]@{ Content = $updated; Found = $true }
+    }
+
+    return [pscustomobject]@{ Content = $Text; Found = $false }
+}
+
 foreach ($file in $files) {
     $content = [System.IO.File]::ReadAllText($file.FullName)
-    $originalContent = $content
+
+    # ---- Optional native re-staging by file-name hash ----
+    if ($null -ne $nativePath) {
+        $hashMatch = [regex]::Match($file.Name, '0x[0-9A-Fa-f]{8}')
+        if ($hashMatch.Success) {
+            $nativeFile = Join-Path $nativePath ($hashMatch.Value + '.ps_6_6.hlsl')
+            if (Test-Path -LiteralPath $nativeFile) {
+                $content = [System.IO.File]::ReadAllText($nativeFile)
+                # Keep the destination file's newline convention so regeneration
+                # does not churn line endings against the committed tree.
+                $existing = [System.IO.File]::ReadAllText($file.FullName)
+                if (-not $existing.Contains("`r`n") -and $content.Contains("`r`n")) {
+                    $content = $content.Replace("`r`n", "`n")
+                }
+                $stagedFiles.Add($file.Name)
+            } else {
+                $nativeMissing.Add($file.Name)
+            }
+        } else {
+            $nativeMissing.Add($file.Name)
+        }
+    }
+
+    $originalContent = [System.IO.File]::ReadAllText($file.FullName)
     $newline = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
     $missing = $false
 
-    if ($content -notmatch '(?m)^#include\s+"\.\./common\.hlsl"\r?$') {
-        $content = '#include "../common.hlsl"' + $newline + $newline + $content
-    }
-
     $isHdr = $content.Contains('78.84375f')
     $hasDepth = $content.Contains('__3__36__0__0__g_depth')
+    # Fused permutations inline the tonemap and are the only finals reading the
+    # exposure buffer; slim finals receive already-tonemapped scene color.
+    $isFused = [regex]::IsMatch($content, 'cbuffer \S+ExposureConstantBuffer : register\(b31, space35\)')
+    if ($isFused) { $fusedCount++ } else { $slimCount++ }
+
+    if ($isFused) {
+        # tonemap.hlsli supplies TonemapReplacer/ApplyRCASTaps/effects and its own
+        # Exposure/GlobalPushConstants/ColorBlind declarations, so the include goes
+        # after SceneConstantBuffer and the duplicate cbuffers get '#if 0' wraps.
+        if ($content -notmatch '(?m)^#include\s+"\.\./tonemap\.hlsli"\r?$') {
+            $includeBlock = '#define RENODX_TONEMAP_EXTERNAL_SCENE_CONSTANT_BUFFER 1' + $newline +
+                '#define RENODX_TONEMAP_SCENE_TIME_W _time.w' + $newline +
+                '#include "../tonemap.hlsli"' + $newline + $newline
+
+            $sceneMatch = [regex]::Match($content, '(?s)cbuffer __3__35__0__0__SceneConstantBuffer : register\(b(?:15|16), space35\) \{.*?\};')
+            if ($sceneMatch.Success) {
+                $insertAt = $sceneMatch.Index + $sceneMatch.Length
+                $content = $content.Substring(0, $insertAt) + $newline + $newline + $includeBlock + $content.Substring($insertAt)
+            } else {
+                $missingCBufferPattern.Add("$($file.Name): SceneConstantBuffer")
+            }
+        }
+
+        $exposureWrap = Set-CBufferWrap -Text $content -CBufferPattern '(?s)cbuffer __3__35__0__0__ExposureConstantBuffer : register\(b31, space35\) \{.*?\};' -Newline $newline
+        $content = $exposureWrap.Content
+        if (-not $exposureWrap.Found) { $missingCBufferPattern.Add("$($file.Name): ExposureConstantBuffer") }
+
+        $pushWrap = Set-CBufferWrap -Text $content -CBufferPattern '(?s)cbuffer __3__1__0__0__GlobalPushConstants : register\(b0, space1\) \{.*?\};' -Newline $newline
+        $content = $pushWrap.Content
+        if (-not $pushWrap.Found) { $missingCBufferPattern.Add("$($file.Name): GlobalPushConstants") }
+
+        # HDR fused permutations have no color-blind cbuffer; wrap only when present.
+        $colorBlindWrap = Set-CBufferWrap -Text $content -CBufferPattern '(?s)cbuffer __3__35__0__0__ColorBlindConstantBuffer : register\(b47, space35\) \{.*?\};' -Newline $newline
+        $content = $colorBlindWrap.Content
+        if (-not $colorBlindWrap.Found -and -not $isHdr) { $missingCBufferPattern.Add("$($file.Name): ColorBlindConstantBuffer") }
+    } else {
+        if ($content -notmatch '(?m)^#include\s+"\.\./\.\./common\.hlsl"\r?$') {
+            $content = '#include "../../common.hlsl"' + $newline + $newline + $content
+        }
+    }
 
     $sceneSampleMatch = [regex]::Match($content, '(?m)^\s*(?:(?:float4)\s+)?(_\d+)\s*=\s*__3__36__0__0__g_sceneColor\.Sample\(')
     if (-not $sceneSampleMatch.Success) {
@@ -117,7 +244,7 @@ foreach ($file in $files) {
                 $redVar = $redMatch.Groups[1].Value
                 $blueVar = $blueMatch.Groups[1].Value
                 $insert = $newline +
-                    "  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: 1.10]$newline" +
+                    "  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: $patchVersion]$newline" +
                     "  $redVar = lerp($sceneSample.x, $redVar, CUSTOM_CHROMATIC_ABERRATION);$newline" +
                     "  $blueVar = lerp($sceneSample.z, $blueVar, CUSTOM_CHROMATIC_ABERRATION);$newline" +
                     "  // RenoDX: <<< [Patch: FinalChromaticAberration]$newline"
@@ -133,14 +260,14 @@ foreach ($file in $files) {
     $filmGrainMatch = [regex]::Match($content, 'if\s*\(\s*_slopeParams\.w\s*>\s*0\.0f\s*\)\s*\{')
     if ($filmGrainMatch.Success -and -not $content.Contains('CUSTOM_FILM_GRAIN_TYPE == 0')) {
         $lineStart = Find-LineStart -Text $content -Index $filmGrainMatch.Index -Newline $newline
-        $prefix = "  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: 1.10]$newline" +
+        $prefix = "  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: $patchVersion]$newline" +
             "  bool vanilla_film_grain = (_slopeParams.w > 0.0f) && CUSTOM_FILM_GRAIN_TYPE == 0;$newline" +
             "  // RenoDX: <<< [Patch: CustomFilmGrainGate]$newline"
         $content = $content.Substring(0, $lineStart) + $prefix + $content.Substring($lineStart)
         $content = [regex]::Replace($content, 'if\s*\(\s*_slopeParams\.w\s*>\s*0\.0f\s*\)\s*\{', 'if (vanilla_film_grain) {', 1)
     }
 
-    if (-not $content.Contains('CustomPostProcessing(')) {
+    if (-not $isFused -and -not $content.Contains('CustomPostProcessing(')) {
         $filmGateMatch = [regex]::Match($content, 'if\s*\(\s*vanilla_film_grain\s*\)\s*\{')
         if ($filmGateMatch.Success) {
             $filmEnd = Find-IfElseEnd -Text $content -IfMatch $filmGateMatch
@@ -159,7 +286,7 @@ foreach ($file in $files) {
 
                 if ($isHdr) {
                     $postProcessBlock = $newline +
-                        "  // RenoDX: >>> [Patch: FinalCustomPostProcessingHDR] [Version: 1.10]$newline" +
+                        "  // RenoDX: >>> [Patch: FinalCustomPostProcessingHDR] [Version: $patchVersion]$newline" +
                         "  if (CUSTOM_FILM_GRAIN_TYPE != 0 || CUSTOM_SHARPENING_TYPE != 0) {$newline" +
                         "    float3 color_pq = float3($colorX, $colorY, $colorZ);$newline$newline" +
                         "    float scaling = RENODX_TONE_MAP_TYPE == 0 ? 100.0f : RENODX_DIFFUSE_WHITE_NITS;$newline" +
@@ -175,7 +302,7 @@ foreach ($file in $files) {
                         "  // RenoDX: <<< [Patch: FinalCustomPostProcessingHDR]$newline"
                 } else {
                     $postProcessBlock = $newline +
-                        "  // RenoDX: >>> [Patch: FinalCustomPostProcessingSDR] [Version: 1.10]$newline" +
+                        "  // RenoDX: >>> [Patch: FinalCustomPostProcessingSDR] [Version: $patchVersion]$newline" +
                         "  if (CUSTOM_FILM_GRAIN_TYPE != 0 || CUSTOM_SHARPENING_TYPE != 0) {$newline" +
                         "    float3 color_bt709 = renodx::color::srgb::Decode(float3($colorX, $colorY, $colorZ));$newline" +
                         "    color_bt709 = CustomPostProcessing(color_bt709, TEXCOORD, __3__36__0__0__g_sceneColor, __0__4__0__0__g_staticBilinearClamp, 1);$newline" +
@@ -196,18 +323,20 @@ foreach ($file in $files) {
         }
     }
 
-    $vanillaSharpeningStrength = '(CUSTOM_SHARPENING_TYPE == 0 ? CUSTOM_SHARPENING : 0.f)'
-    $content = $content.Replace("* $vanillaSharpeningStrength) +", '* CUSTOM_SHARPENING) +')
-    $content = $content.Replace(", $vanillaSharpeningStrength);", ', CUSTOM_SHARPENING);')
-    $content = $content.Replace("$newline$newline$newline    // RenoDX: >>> [Patch: FinalSharpeningStrength]", "$newline$newline    // RenoDX: >>> [Patch: FinalSharpeningStrength]")
+    if (-not $isFused) {
+        $vanillaSharpeningStrength = '(CUSTOM_SHARPENING_TYPE == 0 ? CUSTOM_SHARPENING : 0.f)'
+        $content = $content.Replace("* $vanillaSharpeningStrength) +", '* CUSTOM_SHARPENING) +')
+        $content = $content.Replace(", $vanillaSharpeningStrength);", ', CUSTOM_SHARPENING);')
+        $content = $content.Replace("$newline$newline$newline    // RenoDX: >>> [Patch: FinalSharpeningStrength]", "$newline$newline    // RenoDX: >>> [Patch: FinalSharpeningStrength]")
 
-    $content = [regex]::Replace(
-        $content,
-        "(?ms)\r?\n\s*// RenoDX: >>> \[Patch: FinalSharpeningStrength\] \[Version: 1\.10\]\r?\n\s*_\d+\s*=\s*lerp\([^;]+;\r?\n\s*_\d+\s*=\s*lerp\([^;]+;\r?\n\s*_\d+\s*=\s*lerp\([^;]+;\r?\n\s*// RenoDX: <<< \[Patch: FinalSharpeningStrength\](?!\r?\n\s*\}\s*else)",
-        $newline,
-        1)
+        $content = [regex]::Replace(
+            $content,
+            "(?ms)\r?\n\s*// RenoDX: >>> \[Patch: FinalSharpeningStrength\] \[Version: [^\]]+\]\r?\n\s*_\d+\s*=\s*lerp\([^;]+;\r?\n\s*_\d+\s*=\s*lerp\([^;]+;\r?\n\s*_\d+\s*=\s*lerp\([^;]+;\r?\n\s*// RenoDX: <<< \[Patch: FinalSharpeningStrength\](?!\r?\n\s*\}\s*else)",
+            $newline,
+            1)
+    }
 
-    if ($hasDepth) {
+    if (-not $isFused -and $hasDepth) {
         $depthSampleMatch = [regex]::Match($content, '__3__36__0__0__g_depth\.Sample\([^;]+;')
         if ($depthSampleMatch.Success) {
             $depthIfMatch = [regex]::Match($content.Substring($depthSampleMatch.Index + $depthSampleMatch.Length), 'if\s*\(')
@@ -222,21 +351,21 @@ foreach ($file in $files) {
         }
     }
 
-    if ($isHdr -and -not $content.Contains('* CUSTOM_SHARPENING) +')) {
+    if (-not $isFused -and $isHdr -and -not $content.Contains('* CUSTOM_SHARPENING) +')) {
         $content = [regex]::Replace($content, '(?m)^(\s*_\d+\s*=\s*\(\(_\d+\s*\*\s*_\d+)(\)\s*\+\s*_\d+\);)', '$1 * CUSTOM_SHARPENING$2', 3)
     }
 
-    if ($isHdr -and -not $content.Contains('Patch: RemoveFinalSrgbDecodeHDR')) {
-        $srgbDecodePattern = '(?m)^(?<indent>\s*)float\s+(?<out>_\d+)\s*=\s*\((?<scale>_\d+)\s*\*\s*select\(\((?<in>_\d+)\s*<\s*0\.040449999272823334f\),\s*\(\k<in>\s*\*\s*0\.07739938050508499f\),\s*exp2\(log2\(\(\k<in>\s*\+\s*0\.054999999701976776f\)\s*\*\s*0\.9478673338890076f\)\s*\*\s*2\.4000000953674316f\)\)\)\s*\+\s*(?<offset>_\d+)\s*;\r?$'
+    if (-not $isFused -and $isHdr -and -not $content.Contains('Patch: RemoveFinalSrgbDecodeHDR')) {
+        $srgbDecodePattern = '(?m)^(?<indent>\s*)(?<decl>float\s+)?(?<out>_\d+)\s*=\s*\((?<scale>_\d+)\s*\*\s*select\(\((?<in>_\d+)\s*<\s*0\.040449999272823334f\),\s*\(\k<in>\s*\*\s*0\.07739938050508499f\),\s*exp2\(log2\(\(\k<in>\s*\+\s*0\.054999999701976776f\)\s*\*\s*0\.9478673338890076f\)\s*\*\s*2\.4000000953674316f\)\)\)\s*\+\s*(?<offset>_\d+)\s*;\r?$'
         $srgbDecodeMatches = @([regex]::Matches($content, $srgbDecodePattern))
         if ($srgbDecodeMatches.Count -ge 3) {
             $firstSrgbDecode = $srgbDecodeMatches[0]
             $thirdSrgbDecode = $srgbDecodeMatches[2]
             $replacementLines = @(
-                "$($firstSrgbDecode.Groups['indent'].Value)// RenoDX: >>> [Patch: RemoveFinalSrgbDecodeHDR] [Version: 1.10]",
-                "$($srgbDecodeMatches[0].Groups['indent'].Value)float $($srgbDecodeMatches[0].Groups['out'].Value) = ($($srgbDecodeMatches[0].Groups['scale'].Value) * $($srgbDecodeMatches[0].Groups['in'].Value)) + $($srgbDecodeMatches[0].Groups['offset'].Value);",
-                "$($srgbDecodeMatches[1].Groups['indent'].Value)float $($srgbDecodeMatches[1].Groups['out'].Value) = ($($srgbDecodeMatches[1].Groups['scale'].Value) * $($srgbDecodeMatches[1].Groups['in'].Value)) + $($srgbDecodeMatches[1].Groups['offset'].Value);",
-                "$($srgbDecodeMatches[2].Groups['indent'].Value)float $($srgbDecodeMatches[2].Groups['out'].Value) = ($($srgbDecodeMatches[2].Groups['scale'].Value) * $($srgbDecodeMatches[2].Groups['in'].Value)) + $($srgbDecodeMatches[2].Groups['offset'].Value);",
+                "$($firstSrgbDecode.Groups['indent'].Value)// RenoDX: >>> [Patch: RemoveFinalSrgbDecodeHDR] [Version: $patchVersion]",
+                "$($srgbDecodeMatches[0].Groups['indent'].Value)$($srgbDecodeMatches[0].Groups['decl'].Value)$($srgbDecodeMatches[0].Groups['out'].Value) = ($($srgbDecodeMatches[0].Groups['scale'].Value) * $($srgbDecodeMatches[0].Groups['in'].Value)) + $($srgbDecodeMatches[0].Groups['offset'].Value);",
+                "$($srgbDecodeMatches[1].Groups['indent'].Value)$($srgbDecodeMatches[1].Groups['decl'].Value)$($srgbDecodeMatches[1].Groups['out'].Value) = ($($srgbDecodeMatches[1].Groups['scale'].Value) * $($srgbDecodeMatches[1].Groups['in'].Value)) + $($srgbDecodeMatches[1].Groups['offset'].Value);",
+                "$($srgbDecodeMatches[2].Groups['indent'].Value)$($srgbDecodeMatches[2].Groups['decl'].Value)$($srgbDecodeMatches[2].Groups['out'].Value) = ($($srgbDecodeMatches[2].Groups['scale'].Value) * $($srgbDecodeMatches[2].Groups['in'].Value)) + $($srgbDecodeMatches[2].Groups['offset'].Value);",
                 "$($thirdSrgbDecode.Groups['indent'].Value)// RenoDX: <<< [Patch: RemoveFinalSrgbDecodeHDR]"
             )
             $replacement = $replacementLines -join $newline
@@ -248,7 +377,7 @@ foreach ($file in $files) {
         }
     }
 
-    if (-not $isHdr -and $hasDepth -and -not $content.Contains('FinalSharpeningStrength')) {
+    if (-not $isFused -and -not $isHdr -and $hasDepth -and -not $content.Contains('FinalSharpeningStrength')) {
         $depthSampleMatch = [regex]::Match($content, '__3__36__0__0__g_depth\.Sample\([^;]+;')
         $depthMatch = $null
         if ($depthSampleMatch.Success) {
@@ -280,7 +409,7 @@ foreach ($file in $files) {
                     $out3 = $elseAssigns[$elseAssigns.Count - 1].Groups[1].Value
                     $in3 = $elseAssigns[$elseAssigns.Count - 1].Groups[2].Value
                     $sharpenBlock = $newline +
-                        "    // RenoDX: >>> [Patch: FinalSharpeningStrength] [Version: 1.10]$newline" +
+                        "    // RenoDX: >>> [Patch: FinalSharpeningStrength] [Version: $patchVersion]$newline" +
                         "    $out1 = lerp($in1, $out1, CUSTOM_SHARPENING);$newline" +
                         "    $out2 = lerp($in2, $out2, CUSTOM_SHARPENING);$newline" +
                         "    $out3 = lerp($in3, $out3, CUSTOM_SHARPENING);$newline" +
@@ -295,6 +424,134 @@ foreach ($file in $files) {
         }
     }
 
+    # ---- Fused permutations: replace the inlined vanilla tonemap ----
+    if ($isFused -and -not $content.Contains('[Patch: FusedFinalTonemapReplace]')) {
+        $failReason = $null
+
+        # Segment start: the first CDL grade line (AP1-style input matrix R row).
+        $gradeIdx = $content.IndexOf('1.705049991607666f', [System.StringComparison]::Ordinal)
+        if ($gradeIdx -lt 0) { $failReason = 'grade constant not found' }
+
+        $fadeMatch = $null
+        if ($null -eq $failReason) {
+            foreach ($m in [regex]::Matches($content, '(?m)^(?<ind>[ \t]*)(?<k>_\d+) = 1\.0f - abs\(_etcParams\.w\);')) {
+                if ($m.Index -gt $gradeIdx) { $fadeMatch = $m; break }
+            }
+            if ($null -eq $fadeMatch) { $failReason = 'fade lead-in not found after grade' }
+        }
+
+        $fadeAdd = $null
+        $outVars = $null
+        $washIdx = -1
+        if ($null -eq $failReason) {
+            $washIdx = $content.IndexOf('if (_colorGradingParams.w > 0.0f) {', $fadeMatch.Index, [System.StringComparison]::Ordinal)
+            if ($washIdx -lt 0) { $failReason = 'wash branch not found after fade' }
+        }
+
+        if ($null -eq $failReason) {
+            $fadeRegion = $content.Substring($fadeMatch.Index, $washIdx - $fadeMatch.Index)
+            $addMatch = [regex]::Match($fadeRegion, '(?m)^[ \t]*(_\d+) = saturate\(_etcParams\.w\);')
+            if ($addMatch.Success) { $fadeAdd = $addMatch.Groups[1].Value } else { $failReason = 'fade saturate line not found' }
+
+            if ($null -eq $failReason) {
+                $keepVar = $fadeMatch.Groups['k'].Value
+                $outMatches = @([regex]::Matches($fadeRegion, '(?m)^[ \t]*(_\d+) = \([^\r\n]*' + [regex]::Escape($keepVar) + '[^\r\n]*\) \+ ' + [regex]::Escape($fadeAdd) + ';'))
+                if ($outMatches.Count -eq 3) {
+                    $outVars = @($outMatches[0].Groups[1].Value, $outMatches[1].Groups[1].Value, $outMatches[2].Groups[1].Value)
+                } else {
+                    $failReason = "expected 3 fade output lines, found $($outMatches.Count)"
+                }
+            }
+        }
+
+        $inR = $null; $inG = $null; $inB = $null
+        $segStart = -1
+        if ($null -eq $failReason) {
+            $segStart = Find-LineStart -Text $content -Index $gradeIdx -Newline $newline
+            $segText = $content.Substring($segStart, $washIdx - $segStart)
+            $rM = [regex]::Match($segText, '\((_\d+) \* 1\.705049991607666f\)')
+            $gM = [regex]::Match($segText, '\((_\d+) \* 1\.1407999992370605f\)')
+            $bM = [regex]::Match($segText, '\((_\d+) \* 1\.1529699563980103f\)')
+            if ($rM.Success -and $gM.Success -and $bM.Success) {
+                $inR = $rM.Groups[1].Value; $inG = $gM.Groups[1].Value; $inB = $bM.Groups[1].Value
+            } else {
+                $failReason = 'tonemap input trio not found in grade lines'
+            }
+        }
+
+        $sceneRes = $null
+        $clampSampler = $null
+        if ($null -eq $failReason) {
+            $resM = [regex]::Match($content, '(__\d+__\d+__\d+__\d+__g_sceneColor)\b')
+            $clampM = [regex]::Match($content, '(__\d+__\d+__\d+__\d+__g_staticBilinearClamp)\b')
+            if ($resM.Success -and $clampM.Success) {
+                $sceneRes = $resM.Groups[1].Value
+                $clampSampler = $clampM.Groups[1].Value
+            } else {
+                $failReason = 'scene color resource or clamp sampler not found'
+            }
+        }
+
+        if ($null -eq $failReason) {
+            $washLineStart = Find-LineStart -Text $content -Index $washIdx -Newline $newline
+            $removedSegment = $content.Substring($segStart, $washLineStart - $segStart)
+            $ind = $fadeMatch.Groups['ind'].Value
+            $keepVar = $fadeMatch.Groups['k'].Value
+
+            $emitted =
+                "$ind// RenoDX: >>> [Patch: FusedFinalTonemapReplace] [Version: $patchVersion]$newline" +
+                "$ind// Description: This standalone-final permutation inlines the vanilla tonemap pipeline directly in the final pass and runs it unconditionally on the raw scene color, so an unreplaced permutation renders the whole screen with the vanilla look whenever the game selects it. This block replaces everything from the color-matrix grade through the per-permutation tone curve and output transform with the shared TonemapReplacer. The vanilla screen fade that was fused with the curve output is re-emitted below so the untouched downstream suite - wash, user brightness and contrast, user gamma, color-blind matrix where present, vignette, letterbox, and the alpha passthrough - keeps running unchanged on the replaced color.$newline" +
+                "$ind" + "float3 _rndx_tonemapped_color = TonemapReplacer(float3($inR, $inG, $inB));$newline" +
+                "$ind// RenoDX: <<< [Patch: FusedFinalTonemapReplace]$newline" +
+                "$ind// RenoDX: >>> [Patch: FusedFinalSharpening] [Version: $patchVersion]$newline" +
+                "$ind// Description: The standalone final pass is where RenoDX RCAS sharpening runs, but this fused permutation tonemaps inside the final pass itself, so no completed final-color texture exists to sample neighbor pixels from. Reconstruct the four RCAS neighbor taps by sampling the raw scene color one texel away in each direction and pass each tap through the same TonemapReplacer applied to the center pixel, then run the shared RCAS resolve. The fused vanilla sharpener, where this permutation carried one, was removed together with the replaced tonemap segment above.$newline" +
+                "$ind" + "if (CUSTOM_SHARPENING_TYPE == 1 && CUSTOM_SHARPENING > 0.f) {$newline" +
+                "$ind  uint _rndx_scene_w, _rndx_scene_h;$newline" +
+                "$ind  $sceneRes.GetDimensions(_rndx_scene_w, _rndx_scene_h);$newline" +
+                "$ind  float2 _rndx_texel = 1.0f / float2(_rndx_scene_w, _rndx_scene_h);$newline" +
+                "$ind  float3 _rndx_tap_b = TonemapReplacer($sceneRes.SampleLevel($clampSampler, TEXCOORD + float2(0.0f, -_rndx_texel.y), 0).rgb);$newline" +
+                "$ind  float3 _rndx_tap_d = TonemapReplacer($sceneRes.SampleLevel($clampSampler, TEXCOORD + float2(-_rndx_texel.x, 0.0f), 0).rgb);$newline" +
+                "$ind  float3 _rndx_tap_f = TonemapReplacer($sceneRes.SampleLevel($clampSampler, TEXCOORD + float2(_rndx_texel.x, 0.0f), 0).rgb);$newline" +
+                "$ind  float3 _rndx_tap_h = TonemapReplacer($sceneRes.SampleLevel($clampSampler, TEXCOORD + float2(0.0f, _rndx_texel.y), 0).rgb);$newline" +
+                "$ind  _rndx_tonemapped_color = ApplyRCASTaps(_rndx_tonemapped_color, _rndx_tap_b, _rndx_tap_d, _rndx_tap_f, _rndx_tap_h);$newline" +
+                "$ind}$newline" +
+                "$ind// RenoDX: <<< [Patch: FusedFinalSharpening]$newline" +
+                "$ind// RenoDX: >>> [Patch: FusedFinalFilmGrain] [Version: $patchVersion]$newline" +
+                "$ind// Description: The standalone final pass is where RenoDX custom film grain runs. This fused permutation is the visible final output whenever it draws, so apply the custom film grain to the tonemapped color here, in the same pipeline position the slim standalone finals apply it. The vanilla film grain earlier in this shader stays under the CustomFilmGrainGate patch and only runs when custom grain is off.$newline" +
+                "$ind" + "if (CUSTOM_FILM_GRAIN_TYPE != 0) {$newline" +
+                "$ind  _rndx_tonemapped_color = renodx::effects::ApplyFilmGrain(_rndx_tonemapped_color, TEXCOORD, CUSTOM_RANDOM, CUSTOM_FILM_GRAIN_STRENGTH * 0.03f);$newline" +
+                "$ind}$newline" +
+                "$ind// RenoDX: <<< [Patch: FusedFinalFilmGrain]$newline" +
+                "$ind// RenoDX: >>> [Patch: FusedFinalFadeRestore] [Version: $patchVersion]$newline" +
+                "$ind// Description: Re-emits the vanilla screen-fade lines that were fused with the replaced tone curve so the downstream final-output suite consumes the replaced color through the original variables.$newline" +
+                "$ind$keepVar = 1.0f - abs(_etcParams.w);$newline" +
+                "$ind$fadeAdd = saturate(_etcParams.w);$newline" +
+                "$ind$($outVars[0]) = ($keepVar * saturate(_rndx_tonemapped_color.x)) + $fadeAdd;$newline" +
+                "$ind$($outVars[1]) = ($keepVar * saturate(_rndx_tonemapped_color.y)) + $fadeAdd;$newline" +
+                "$ind$($outVars[2]) = ($keepVar * saturate(_rndx_tonemapped_color.z)) + $fadeAdd;$newline" +
+                "$ind// RenoDX: <<< [Patch: FusedFinalFadeRestore]$newline"
+
+            $content = $content.Substring(0, $segStart) + $emitted + $content.Substring($washLineStart)
+            $fusedTonemapReplaced++
+
+            # Removed temporaries must not be read later; declarations are hoisted,
+            # so a stale read would compile but break.
+            $removedVars = New-Object System.Collections.Generic.HashSet[string]
+            foreach ($am in [regex]::Matches($removedSegment, '(?m)^\s*(_\d+)\s*=')) {
+                [void]$removedVars.Add($am.Groups[1].Value)
+            }
+            foreach ($v in @($keepVar, $fadeAdd) + $outVars) { [void]$removedVars.Remove($v) }
+            $tailContent = $content.Substring($segStart + $emitted.Length)
+            foreach ($rv in $removedVars) {
+                if ([regex]::IsMatch($tailContent, "(?<![\w])$([regex]::Escape($rv))(?![\d])")) {
+                    $curveVarLeaks.Add("$($file.Name): $rv")
+                }
+            }
+        } else {
+            $fusedSegmentFailed.Add("$($file.Name): $failReason")
+        }
+    }
+
     if (-not $content.Contains('CUSTOM_VIGNETTE')) {
         $content = [regex]::Replace($content, '(_localToneMappingParams\.w[\s\S]*?saturate\(1\.0f - \(\(_\d+ \* _postProcessParams\.x)(\) \* dot\(float2)', '$1 * CUSTOM_VIGNETTE$2', 1)
     }
@@ -304,12 +561,12 @@ foreach ($file in $files) {
         if ($targetWMatch.Success) {
             if ($isHdr) {
                 $finalizeBlock = $newline + $newline +
-                    "  // RenoDX: >>> [Patch: FinalizePostProcessHDR] [Version: 1.10]$newline" +
+                    "  // RenoDX: >>> [Patch: FinalizePostProcessHDR] [Version: $patchVersion]$newline" +
                     "  SV_Target.xyz = FinalizeHDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);$newline" +
                     "  // RenoDX: <<< [Patch: FinalizePostProcessHDR]"
             } else {
                 $finalizeBlock = $newline + $newline +
-                    "  // RenoDX: >>> [Patch: FinalizePostProcessSDR] [Version: 1.10]$newline" +
+                    "  // RenoDX: >>> [Patch: FinalizePostProcessSDR] [Version: $patchVersion]$newline" +
                     "  SV_Target.xyz = FinalizeSDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);$newline" +
                     "  // RenoDX: <<< [Patch: FinalizePostProcessSDR]"
             }
@@ -334,8 +591,32 @@ foreach ($file in $files) {
 
 Write-Output "TOTAL_FILES=$($files.Count)"
 Write-Output "UPDATED_FILES=$($updatedFiles.Count)"
+Write-Output "STAGED_FROM_NATIVE=$($stagedFiles.Count)"
+Write-Output "SLIM_FILES=$slimCount"
+Write-Output "FUSED_FILES=$fusedCount"
+Write-Output "FUSED_TONEMAP_REPLACED=$fusedTonemapReplaced"
+
+if ($nativeMissing.Count -gt 0) {
+    Write-Output "NATIVE_MISSING=$($nativeMissing.Count)"
+    $nativeMissing | ForEach-Object { Write-Output ("  " + $_) }
+}
 
 if ($missingPattern.Count -gt 0) {
     Write-Output "MISSING_PATTERN=$($missingPattern.Count)"
     $missingPattern | ForEach-Object { Write-Output ("  " + $_) }
+}
+
+if ($fusedSegmentFailed.Count -gt 0) {
+    Write-Output "FUSED_SEGMENT_FAILED=$($fusedSegmentFailed.Count)"
+    $fusedSegmentFailed | ForEach-Object { Write-Output ("  " + $_) }
+}
+
+if ($missingCBufferPattern.Count -gt 0) {
+    Write-Output "MISSING_CBUFFER_PATTERN=$($missingCBufferPattern.Count)"
+    $missingCBufferPattern | ForEach-Object { Write-Output ("  " + $_) }
+}
+
+if ($curveVarLeaks.Count -gt 0) {
+    Write-Output "CURVE_VAR_LEAKS=$($curveVarLeaks.Count)"
+    $curveVarLeaks | ForEach-Object { Write-Output ("  " + $_) }
 }

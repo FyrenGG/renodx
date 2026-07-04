@@ -270,11 +270,11 @@ void AttachUIShaderDrawGate(renodx::mods::shader::CustomShaders& shaders, uint32
 renodx::mods::shader::CustomShaders custom_shaders = [] {
   auto shaders = renodx::mods::shader::CustomShaders{__ALL_CUSTOM_SHADERS};
 
-  // 1.12 Ray Reconstruction/Regeneration detectors:
-  // - kDlssRayReconstructionDetectorHash: DLSS RR prep signal, observed in NVIDIA RR-on lanes.
+  // Ray Reconstruction/Regeneration detectors:
+  // - kDlssRayReconstructionDetectorHash: DLSS RR prep signal, observed when NVIDIA Ray Reconstruction is enabled.
   // - kSpecularRayRegenerationDetectorHash: specular Ray Regeneration signal from EvaluateSpecularRadianceCS.
-  constexpr uint32_t kDlssRayReconstructionDetectorHash = 0x3E2E5981u;    // PrepareDlssRRCS
-  constexpr uint32_t kSpecularRayRegenerationDetectorHash = 0x542B9F0Au;  // EvaluateSpecularRadianceCS
+  constexpr uint32_t kDlssRayReconstructionDetectorHash = 0xA7CC2788u;    // PrepareDlssRRCS
+  constexpr uint32_t kSpecularRayRegenerationDetectorHash = 0x9E1AB330u;  // EvaluateSpecularRadianceCS
   for (uint32_t hash : {kDlssRayReconstructionDetectorHash, kSpecularRayRegenerationDetectorHash}) {
     if (auto it = shaders.find(hash); it != shaders.end()) {
       MarkShaderDraw(it->second, &rr_draw);
@@ -286,11 +286,11 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
     }
   }
 
-  // 1.12 night-only shadow tiled compute replacements.
+  // Night-only SceneShadowTiled compute replacements.
   // These are draw detectors for SceneShadowTiledNight variants; they do not change
   // rendering by themselves, but mark night_shader_active for transition timing.
-  constexpr uint32_t kSceneShadowTiledNightHashA = 0xAD47167Fu;  // SceneShadowTiledNightCS
-  constexpr uint32_t kSceneShadowTiledNightHashB = 0x8254FE23u;  // SceneShadowTiledNightCS
+  constexpr uint32_t kSceneShadowTiledNightHashA = 0x4A1CD2F1u;  // SceneShadowTiledNightCS
+  constexpr uint32_t kSceneShadowTiledNightHashB = 0xF0636402u;  // SceneShadowTiledNightCS
   for (uint32_t hash : {kSceneShadowTiledNightHashA, kSceneShadowTiledNightHashB}) {
     if (auto it = shaders.find(hash); it != shaders.end()) {
       MarkShaderDraw(it->second, &night_shader_active);
@@ -307,49 +307,241 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
   // While any of them draws, OnPresent keeps BASIC_POSTPROCESS_FINAL active for the
   // material composite path; the shaders themselves decide final-vs-intermediate per draw via the
   // game's _etcParams.z encode toggle.
-  // 0x9884336C: psPostProcessMaterial SDR tonemap.
-  // 0x21212A93: psPostProcessCompositeMaterial SDR tonemap.
-  // 0x21A05DE2 / 0x1E5F79F5: KnowledgeGain location-discovery effect SDR variants.
-  // Remaining hashes: screen-effect material SDR variants (water submersion,
-  // custom-render-pass, overlay, and tint/fade effect composites).
+  // The list is the full SDR half of the PostProcessMaterial tonemap shader group
+  // enumerated from the 1.13.00 packaged shaders (140 permutations): the main
+  // composite shaders, the screen-effect and KnowledgeGain variants, and the
+  // second build of each permutation that the game ships for the alternate
+  // final-path arrangement. The 1.12.02 underwater hashes are gone: 1.13 rebuilt
+  // PostProcessUnderwater as 8 new permutations, all members of this shader group.
   for (uint32_t hash : {
-           0x9884336Cu,
-           0x21212A93u,
-           0x21A05DE2u,
-           0x1E5F79F5u,
-           0x7246F312u,
-           0xEE368A7Eu,
-           0xB4588179u,
-           0xA2D37183u,
-           0xBF1DCB47u,
-           0xE94A87D2u,
-           0x471F208Du,
+           0x02D9ADF6u,
+           0x032E9FBFu,
+           0x062A2B3Du,
+           0x09219215u,
+           0x0B003AD0u,
+           0x0C1EA0D2u,
+           0x0C34494Au,
+           0x0CD37244u,
+           0x0F6E131Au,
+           0x11C52DD6u,
+           0x16294603u,
+           0x181DE9EBu,
+           0x1AEA49D2u,
+           0x1CA6613Eu,
+           0x1EF6E452u,
+           0x1F2956DFu,
+           0x1FA08878u,
+           0x2375D0E3u,
+           0x237BBDC3u,
+           0x27D6CE6Au,
+           0x28629564u,
+           0x2A1B93E2u,
+           0x2B0CCEB5u,
+           0x2B2103C7u,
+           0x2BEF8995u,
+           0x2D8BBFA0u,
+           0x316683A2u,
+           0x336BDE6Du,
+           0x337B32B2u,
+           0x38C09070u,
+           0x3E62E20Cu,
+           0x3E79F88Du,
+           0x44652E54u,
+           0x44A30393u,
+           0x48177516u,
+           0x481E0A4Au,
+           0x486AF369u,
+           0x4A460B4Fu,
+           0x4A6C8CC4u,
+           0x4A93F197u,
+           0x4AE1F7FBu,
+           0x4BE9C288u,
+           0x5052AC7Eu,
+           0x5236D950u,
+           0x5643E318u,
+           0x56EC6F4Au,
+           0x583E312Au,
+           0x58EB7106u,
+           0x5950F100u,
+           0x5A4A6603u,
+           0x5B961CD9u,
+           0x5C1824BEu,
+           0x616F0CC3u,
+           0x62F60091u,
+           0x648761A7u,
+           0x664CF28Cu,
+           0x673638A3u,
+           0x67A0D0DBu,
+           0x68E9FD5Bu,
+           0x6D424B0Cu,
+           0x6E04524Cu,
+           0x7188D099u,
+           0x73E66BCDu,
+           0x752F4388u,
+           0x767A160Bu,
+           0x77B7E630u,
+           0x77CAF827u,
+           0x7B7DE415u,
+           0x7BE32845u,
+           0x7DC7DCC6u,
+           0x826931FCu,
+           0x83EAAF6Eu,
+           0x85B09858u,
+           0x89DC1A78u,
+           0x8B52704Du,
+           0x8D9ABEFFu,
+           0x8F5C7FF2u,
+           0x8FF11FCEu,
+           0x9300D774u,
+           0x9360496Fu,
+           0x94AF9701u,
+           0x94CB42B0u,
+           0x958202A9u,
+           0x9816033Du,
+           0x98FA3444u,
+           0x9A1CD32Du,
+           0x9AC31AB3u,
+           0x9DCC8D55u,
+           0xA1FCD481u,
+           0xA20ED3CBu,
+           0xA25D4227u,
+           0xA355C31Eu,
+           0xA6E5BD7Bu,
+           0xA8F812E8u,
+           0xA9883DB5u,
+           0xAC339F4Au,
+           0xB10D9D6Bu,
+           0xB1A34A8Cu,
+           0xB25F80B8u,
+           0xB2A4AFFFu,
+           0xBED3F351u,
+           0xC043C3ADu,
+           0xC19C688Fu,
+           0xC491E1F6u,
+           0xC7852A47u,
+           0xC820FB0Cu,
+           0xC8BDDBCAu,
+           0xC9AD74DDu,
+           0xCA5F3ED9u,
+           0xCA6F1EC5u,
+           0xCBCBE91Cu,
+           0xD6227803u,
+           0xD6FB6D5Au,
+           0xD80D2267u,
+           0xD977515Au,
+           0xDB0D3CB8u,
+           0xDD8F1908u,
+           0xDFFCC393u,
+           0xE0336C2Bu,
+           0xE14B8A96u,
+           0xE480F3BCu,
+           0xE4FB0B6Fu,
+           0xE7719FEBu,
+           0xEB288C5Du,
+           0xEC65F2C0u,
+           0xED4E4197u,
+           0xF008360Au,
+           0xF0E9EAEDu,
+           0xF27182A6u,
+           0xF56AC229u,
+           0xF6B6AE41u,
+           0xF7527932u,
+           0xFAA340B3u,
+           0xFBB3FFECu,
+           0xFC5A472Au,
+           0xFD7F3551u,
+           0xFEFC2025u,
+           0xFF0B155Du,
+           0xFF1BFCADu,
+           0xFFBB755Cu,
        }) {
     if (auto it = shaders.find(hash); it != shaders.end()) {
       MarkShaderDraw(it->second, &postprocess_material_draw);
     }
   }
-
   // SDR standalone final-pass draw gates. These replacements already run the
   // standalone SDR finalization path, so their presence suppresses the material
-  // fallback gate above. HDR finals call FinalizeHDR directly and are not listed here.
-  // 0xE5C29C6A: RenderPostProcessPS SDR final.
-  // 0x96C827AE / 0xF6FF6DB9: postprocessing_final SDR variants.
-  // 0xA15081C2 / 0xA9F53F51 / 0xDFBDBD09: postprocessing_final_fsr SDR variants.
+  // fallback gate above. HDR finals (ST.2084 tail constant 78.84375) call
+  // FinalizeHDR directly and are not listed here.
+  // The list is the full SDR half of the standalone final family enumerated from
+  // the 1.13.00 shader package (68 permutations): the plain and fsr finals in
+  // every build the package ships, plus the fused permutations that inline the vanilla
+  // tonemap in the final pass (replaced as postprocessing_final_fused_*).
   for (uint32_t hash : {
-           0xE5C29C6Au,
-           0x96C827AEu,
-           0xF6FF6DB9u,
-           0xA15081C2u,
-           0xA9F53F51u,
-           0xDFBDBD09u,
+           0x048BFCF4u,
+           0x0573B807u,
+           0x0E6A1A41u,
+           0x0EBDA045u,
+           0x12E7C3CEu,
+           0x141BD26Au,
+           0x154B6800u,
+           0x170D44B5u,
+           0x1892ECDBu,
+           0x19B239C8u,
+           0x1A0D1BFCu,
+           0x1E4DDE6Eu,
+           0x269123D8u,
+           0x2845889Cu,
+           0x2A66D4AEu,
+           0x2AD529BEu,
+           0x2F34893Bu,
+           0x3031D7BEu,
+           0x364158B0u,
+           0x39F43EE9u,
+           0x406C002Fu,
+           0x454AB960u,
+           0x48A4BBE7u,
+           0x505359E6u,
+           0x5D56F49Fu,
+           0x64E51CE9u,
+           0x66609692u,
+           0x68B13723u,
+           0x6A53F401u,
+           0x6CF90530u,
+           0x71040D77u,
+           0x77A321C8u,
+           0x7ACF4B95u,
+           0x7DA6C7FDu,
+           0x800F53C5u,
+           0x82A66472u,
+           0x82F8E4E1u,
+           0x8958B138u,
+           0x89BF2106u,
+           0x9689758Du,
+           0x9AC10812u,
+           0x9D92A16Fu,
+           0xA1C01112u,
+           0xA2B047F7u,
+           0xA3B71F87u,
+           0xAD50C044u,
+           0xADB47AAEu,
+           0xBB05C812u,
+           0xBB584BDCu,
+           0xBFD87707u,
+           0xBFE2C2FEu,
+           0xC1076727u,
+           0xCB33BF7Cu,
+           0xCB6870DBu,
+           0xCD9214F5u,
+           0xD0BB552Au,
+           0xD118CBE8u,
+           0xD4C696BBu,
+           0xD80AFE40u,
+           0xDAE077E9u,
+           0xDD97B417u,
+           0xDE8656CFu,
+           0xDF007954u,
+           0xE76D92C9u,
+           0xE7BE71EBu,
+           0xF03DE715u,
+           0xF73013B2u,
+           0xF74F4F8Cu,
        }) {
     if (auto it = shaders.find(hash); it != shaders.end()) {
       MarkShaderDraw(it->second, &final_sdr_draw);
     }
   }
-
-  // 1.12 UI/HUD draw gates from SDR/HDR DevKit snapshots.
+  // UI/HUD draw gates from SDR/HDR DevKit snapshots.
   // These VSMain families cover the observed UI pixel shader variants
   for (uint32_t hash : {
            0x8D440999u,
@@ -1570,7 +1762,7 @@ renodx::utils::settings::Settings settings = {
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,
         .default_value = 0.f,
-        // SPMIS is disabled for 1.12 until active RT replacement shaders are restored.
+        // SPMIS is disabled until active RT replacement shaders are restored.
         // Keep this UI breadcrumb visible, but force all choices to Off so saved values do not set RT_QUALITY.
         .packed_values = {0u, 0u, 0u},
         .can_reset = true,
@@ -1867,7 +2059,7 @@ void OnPresent(reshade::api::command_queue* /*queue*/,
                const reshade::api::rect* /*dirty_rects*/) {
   // Basic postprocess final-output detector. The flag marks that the SDR material
   // composite render path is active; the final-vs-intermediate decision happens per draw
-  // inside PostProcessMaterial_0x21212A93 via the game's own _etcParams.z constant
+  // inside PostProcessMaterial_0x3E62E20C via the game's own _etcParams.z constant
   // (the composite manually sRGB-encodes only when feeding a standalone SDR final;
   // when it writes the display target directly the sRGB view encodes in hardware and
   // _etcParams.z is 0). The in-shader test has zero latency; a CPU-side windowed

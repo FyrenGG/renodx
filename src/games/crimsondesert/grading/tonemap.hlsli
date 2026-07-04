@@ -13,8 +13,8 @@
 // ("ColorGradeExposure" in the addon UI). It sits on top of the AE solve.
 
 #ifndef RENODX_TONEMAP_EXTERNAL_SCENE_CONSTANT_BUFFER
-cbuffer __3__35__0__0__SceneConstantBuffer : register(b15, space35) {
-  uint4 __3__35__0__0__SceneConstantBuffer_raw[172];
+cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
+  uint4 __3__35__0__0__SceneConstantBuffer_raw[173];
 };
 #define RENODX_TONEMAP_SCENE_TIME_W asfloat(__3__35__0__0__SceneConstantBuffer_raw[0u].w)
 #else
@@ -23,7 +23,7 @@ cbuffer __3__35__0__0__SceneConstantBuffer : register(b15, space35) {
 #endif
 #endif
 
-cbuffer __3__35__0__0__ExposureConstantBuffer : register(b30, space35) {
+cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure0 : packoffset(c000.x);
   float4 _exposure1 : packoffset(c001.x);
   float4 _exposure2 : packoffset(c002.x);
@@ -48,7 +48,7 @@ cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   int3 _padding : packoffset(c012.y);
 };
 
-cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b46, space35) {
+cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
   float4 _colorBlind0 : packoffset(c000.x);
   float4 _colorBlind1 : packoffset(c001.x);
   float4 _colorBlind2 : packoffset(c002.x);

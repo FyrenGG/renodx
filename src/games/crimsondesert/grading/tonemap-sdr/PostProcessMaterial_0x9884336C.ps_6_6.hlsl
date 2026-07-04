@@ -887,10 +887,42 @@ float4 main(
     _1789 = _1416;
     _1790 = _1417;
   }
+  // RenoDX: >>> [Patch: ScreenEffectVanillaFinalSuite] [Version: 1.12.02]
+  // Description: This 0x9884336C psPostProcessMaterial overlay variant (SDR permutation; discard-gated item-highlight/detect, temperature-warning, and electrocution screen effects) inlines the full vanilla tonemap pipeline and can be the visible final output while its effect plays. In the vanilla shader the tonemap branch is followed by an inline _etcParams.z == 0 final-output suite that only runs when this draw is the visible final (the game skips its manual sRGB encode because the display target's sRGB view encodes in hardware): the screen fade (_etcParams.w), the fade-to-inverse wash used by loading fades and location-discovery flashes (_colorGradingParams.w), the game's user brightness/contrast options (_userImageAdjust.xy), the user gamma option (_userImageAdjust.w), and the color-blind accessibility matrix (_colorBlind0/1/2). The bulk RenoDX tonemap replacement consumed that suite along with the vanilla curve, so on the composite-final path these game-driven effects and settings silently did nothing while the overlay effect drew, and any handoff to the standalone-final arrangement (which still applies them) showed an abrupt color shift mid-fade. This block transplants the vanilla suite math verbatim after the replaced tonemap, operating on the TonemapReplacer output, under the same conditions as the vanilla shader (decompiled 1.12.02 vanilla lines 1221-1250). Mirrors BasicPostProcessVanillaFinalSuite in PostProcessMaterial_0x21212A93.
+  if (_1435 && !(_etcParams.z > 0.0f)) {
+    float _rndx_fade_keep = 1.0f - abs(_etcParams.w);
+    float _rndx_fade_add = saturate(_etcParams.w);
+    float _rndx_suite_r = (_rndx_fade_keep * _1788) + _rndx_fade_add;
+    float _rndx_suite_g = (_rndx_fade_keep * _1789) + _rndx_fade_add;
+    float _rndx_suite_b = (_rndx_fade_keep * _1790) + _rndx_fade_add;
+    if (_colorGradingParams.w > 0.0f) {
+      float _rndx_wash = saturate(_colorGradingParams.w);
+      _rndx_suite_r = (((max(0.0f, (1.0f - _rndx_suite_r)) - _rndx_suite_r) * _rndx_wash) + _rndx_suite_r);
+      _rndx_suite_g = (((max(0.0f, (1.0f - _rndx_suite_g)) - _rndx_suite_g) * _rndx_wash) + _rndx_suite_g);
+      _rndx_suite_b = (((max(0.0f, (1.0f - _rndx_suite_b)) - _rndx_suite_b) * _rndx_wash) + _rndx_suite_b);
+    }
+    float _rndx_contrast = _userImageAdjust.y + 1.0f;
+    float _rndx_brightness = _userImageAdjust.x + 0.5f;
+    _rndx_suite_r = ((_rndx_suite_r + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    _rndx_suite_g = ((_rndx_suite_g + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    _rndx_suite_b = ((_rndx_suite_b + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    float _rndx_user_gamma = 2.200000047683716f / ((min(max(_userImageAdjust.w, -1.0f), 1.0f) * 0.800000011920929f) + 2.200000047683716f);
+    _1788 = exp2(log2(saturate(mad(_colorBlind0.z, _rndx_suite_b, mad(_colorBlind0.y, _rndx_suite_g, (_colorBlind0.x * _rndx_suite_r))))) * _rndx_user_gamma);
+    _1789 = exp2(log2(saturate(mad(_colorBlind1.z, _rndx_suite_b, mad(_colorBlind1.y, _rndx_suite_g, (_colorBlind1.x * _rndx_suite_r))))) * _rndx_user_gamma);
+    _1790 = exp2(log2(saturate(mad(_colorBlind2.z, _rndx_suite_b, mad(_colorBlind2.y, _rndx_suite_g, (_colorBlind2.x * _rndx_suite_r))))) * _rndx_user_gamma);
+  }
+  // RenoDX: <<< [Patch: ScreenEffectVanillaFinalSuite]
   if (_etcParams.y > 1.0f) {
     float _1796 = abs(_69);
     float _1797 = abs(_70 + -1.0f);
-    float _1801 = saturate(1.0f - (dot(float2(_1796, _1797), float2(_1796, _1797)) * saturate(_etcParams.y + -1.0f)));
+    // RenoDX: >>> [Patch: ScreenEffectVignette] [Version: 1.12.02]
+    // Description: When this 0x9884336C overlay-effect variant is the visible final on the SDR lane (_etcParams.z == 0, hardware sRGB view encodes), scale its native output vignette by the RenoDX Vignette setting so the vignette strength matches the main composite's behavior while the item-highlight/temperature/electrocution effect plays instead of snapping to full native strength. HDR and intermediate (_etcParams.z > 0) uses stay untouched. Mirrors BasicPostProcessVignette in PostProcessMaterial_0x21212A93.
+    float _rndx_vignette_strength = saturate(_etcParams.y + -1.0f);
+    if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
+      _rndx_vignette_strength *= CUSTOM_VIGNETTE;
+    }
+    float _1801 = saturate(1.0f - (dot(float2(_1796, _1797), float2(_1796, _1797)) * _rndx_vignette_strength));
+    // RenoDX: <<< [Patch: ScreenEffectVignette]
     _1806 = (_1801 * _1788);
     _1807 = (_1801 * _1789);
     _1808 = (_1801 * _1790);
@@ -930,6 +962,15 @@ float4 main(
     _1855 = _1839;
     _1856 = _1840;
   }
+  // RenoDX: >>> [Patch: ScreenEffectFinalizeSDR] [Version: 1.12.02]
+  // Description: On the SDR lane this 0x9884336C psPostProcessMaterial overlay variant can be the visible final output while its item-highlight/temperature/electrocution effect plays (the game skips its manual sRGB encode because the display target's sRGB view encodes in hardware, _etcParams.z == 0). Without this block the RenoDX SDR finalization (white point/color temperature, Purkinje gating, and the SDR Gamma setting) dropped out for the duration of the effect and snapped back afterward. The vanilla final-output color suite is restored separately by the ScreenEffectVanillaFinalSuite patch. Mirrors BasicPostProcessFinalizeSDR in PostProcessMaterial_0x21212A93.
+  if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
+    float3 _rndx_final_color = FinalizeSDR(float3(_1854, _1855, _1856), _sunDirection.y, _moonDirection.y);
+    _1854 = _rndx_final_color.x;
+    _1855 = _rndx_final_color.y;
+    _1856 = _rndx_final_color.z;
+  }
+  // RenoDX: <<< [Patch: ScreenEffectFinalizeSDR]
   SV_Target.x = _1854;
   SV_Target.y = _1855;
   SV_Target.z = _1856;

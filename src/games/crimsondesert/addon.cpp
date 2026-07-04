@@ -302,13 +302,29 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
     }
   }
 
-  // SDR material/postprocess draw gates. These paths can be the final visible SDR
+  // SDR material/postprocess draw gates. These paths can produce the visible SDR
   // postprocess output even though they are not the standalone final-pass shaders.
-  // When one runs without a standalone SDR final in the same present window,
-  // OnPresent sets BASIC_POSTPROCESS_FINAL so shared helpers use the basic SDR path.
+  // While any of them draws, OnPresent keeps BASIC_POSTPROCESS_FINAL active for the
+  // material composite path; the shaders themselves decide final-vs-intermediate per draw via the
+  // game's _etcParams.z encode toggle.
   // 0x9884336C: psPostProcessMaterial SDR tonemap.
   // 0x21212A93: psPostProcessCompositeMaterial SDR tonemap.
-  for (uint32_t hash : {0x9884336Cu, 0x21212A93u}) {
+  // 0x21A05DE2 / 0x1E5F79F5: KnowledgeGain location-discovery effect SDR variants.
+  // Remaining hashes: screen-effect material SDR variants (water submersion,
+  // custom-render-pass, overlay, and tint/fade effect composites).
+  for (uint32_t hash : {
+           0x9884336Cu,
+           0x21212A93u,
+           0x21A05DE2u,
+           0x1E5F79F5u,
+           0x7246F312u,
+           0xEE368A7Eu,
+           0xB4588179u,
+           0xA2D37183u,
+           0xBF1DCB47u,
+           0xE94A87D2u,
+           0x471F208Du,
+       }) {
     if (auto it = shaders.find(hash); it != shaders.end()) {
       MarkShaderDraw(it->second, &postprocess_material_draw);
     }

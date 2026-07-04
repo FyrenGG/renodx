@@ -370,6 +370,31 @@ float4 main(
     _802 = _429;
     _803 = _430;
   }
+  // RenoDX: >>> [Patch: ScreenEffectVanillaFinalSuite] [Version: 1.12.02]
+  // Description: This is the HDR (PQ/ST.2084-output) permutation of the KnowledgeGain screen-effect postprocess material (hash 0x72C98E21). Like every member of this material family, the vanilla shader statically inlines the full tonemap pipeline, and inside its tonemap branch (gated on _localToneMappingParams.w > 0) it runs a final-output color suite whenever the draw is the visible final (the game skips its manual encode because _etcParams.z == 0): the screen fade (_etcParams.w), the fade-to-inverse wash used by loading fades and location-discovery flashes (_colorGradingParams.w), the game's user brightness/contrast options (_userImageAdjust.xy), the user gamma option (_userImageAdjust.w), and the color-blind accessibility matrix (_colorBlind0/1/2). The RenoDX tonemap replacement had replaced the whole tonemap branch with a TonemapReplacer call and consumed this suite, so while this effect owned the visible final these game-driven fades and accessibility/user settings silently did nothing and handoffs to shaders that still apply them showed abrupt color shifts mid-fade or mid-effect. This block transplants the vanilla suite math verbatim after the replaced tonemap, operating on the TonemapReplacer outputs under the same conditions as the vanilla shader (tonemap branch taken and _etcParams.z == 0; vanilla 1.12.02 decompile lines 527-551).
+  if (_448 && !(_etcParams.z > 0.0f)) {
+    float _rndx_fade_keep = 1.0f - abs(_etcParams.w);
+    float _rndx_fade_add = saturate(_etcParams.w);
+    float _rndx_suite_r = (_rndx_fade_keep * _801) + _rndx_fade_add;
+    float _rndx_suite_g = (_rndx_fade_keep * _802) + _rndx_fade_add;
+    float _rndx_suite_b = (_rndx_fade_keep * _803) + _rndx_fade_add;
+    if (_colorGradingParams.w > 0.0f) {
+      float _rndx_wash = saturate(_colorGradingParams.w);
+      _rndx_suite_r = (((max(0.0f, (1.0f - _rndx_suite_r)) - _rndx_suite_r) * _rndx_wash) + _rndx_suite_r);
+      _rndx_suite_g = (((max(0.0f, (1.0f - _rndx_suite_g)) - _rndx_suite_g) * _rndx_wash) + _rndx_suite_g);
+      _rndx_suite_b = (((max(0.0f, (1.0f - _rndx_suite_b)) - _rndx_suite_b) * _rndx_wash) + _rndx_suite_b);
+    }
+    float _rndx_contrast = _userImageAdjust.y + 1.0f;
+    float _rndx_brightness = _userImageAdjust.x + 0.5f;
+    _rndx_suite_r = ((_rndx_suite_r + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    _rndx_suite_g = ((_rndx_suite_g + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    _rndx_suite_b = ((_rndx_suite_b + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    float _rndx_user_gamma = 2.200000047683716f / ((min(max(_userImageAdjust.w, -1.0f), 1.0f) * 0.800000011920929f) + 2.200000047683716f);
+    _801 = exp2(log2(saturate(mad(_colorBlind0.z, _rndx_suite_b, mad(_colorBlind0.y, _rndx_suite_g, (_colorBlind0.x * _rndx_suite_r))))) * _rndx_user_gamma);
+    _802 = exp2(log2(saturate(mad(_colorBlind1.z, _rndx_suite_b, mad(_colorBlind1.y, _rndx_suite_g, (_colorBlind1.x * _rndx_suite_r))))) * _rndx_user_gamma);
+    _803 = exp2(log2(saturate(mad(_colorBlind2.z, _rndx_suite_b, mad(_colorBlind2.y, _rndx_suite_g, (_colorBlind2.x * _rndx_suite_r))))) * _rndx_user_gamma);
+  }
+  // RenoDX: <<< [Patch: ScreenEffectVanillaFinalSuite]
   if (_etcParams.y > 1.0f) {
     float _812 = abs((TEXCOORD.x * 2.0f) + -1.0f);
     float _813 = abs((TEXCOORD.y * 2.0f) + -1.0f);

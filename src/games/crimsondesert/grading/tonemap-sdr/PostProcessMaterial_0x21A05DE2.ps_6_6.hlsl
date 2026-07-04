@@ -361,10 +361,42 @@ float4 main(
     _694 = _321;
     _695 = _322;
   }
+  // RenoDX: >>> [Patch: ScreenEffectVanillaFinalSuite] [Version: 1.12.02]
+  // Description: This PostProcessKnowledgeGain composite variant (0x21A05DE2, SDR permutation, sibling of 0x1E5F79F5) draws mid-chain while the location-discovery (knowledge gain) screen effect plays and can own the visible final output when the game skips its manual sRGB encode (_etcParams.z == 0; the display target's sRGB view encodes in hardware). In the vanilla shader the inlined tonemap branch is followed by a final-output color suite: the screen fade (_etcParams.w), the fade-to-inverse wash used by loading fades and location-discovery flashes (_colorGradingParams.w), the game's user brightness/contrast options (_userImageAdjust.xy), the user gamma option (_userImageAdjust.w), and the color-blind accessibility matrix (_colorBlind0/1/2). The bulk RenoDX tonemap replacement consumed that suite together with the vanilla curve, so on the composite-final path these game-driven effects and settings silently did nothing and any handoff to a pass arrangement that still applies them showed an abrupt color shift mid-fade or mid-effect. This block transplants the vanilla suite math verbatim from the 1.12.02 vanilla decompile, applied to the TonemapReplacer output under the same conditions as the vanilla shader. Mirrors BasicPostProcessVanillaFinalSuite in PostProcessMaterial_0x21212A93.
+  if (_340 && !(_etcParams.z > 0.0f)) {
+    float _rndx_fade_keep = 1.0f - abs(_etcParams.w);
+    float _rndx_fade_add = saturate(_etcParams.w);
+    float _rndx_suite_r = (_rndx_fade_keep * _693) + _rndx_fade_add;
+    float _rndx_suite_g = (_rndx_fade_keep * _694) + _rndx_fade_add;
+    float _rndx_suite_b = (_rndx_fade_keep * _695) + _rndx_fade_add;
+    if (_colorGradingParams.w > 0.0f) {
+      float _rndx_wash = saturate(_colorGradingParams.w);
+      _rndx_suite_r = (((max(0.0f, (1.0f - _rndx_suite_r)) - _rndx_suite_r) * _rndx_wash) + _rndx_suite_r);
+      _rndx_suite_g = (((max(0.0f, (1.0f - _rndx_suite_g)) - _rndx_suite_g) * _rndx_wash) + _rndx_suite_g);
+      _rndx_suite_b = (((max(0.0f, (1.0f - _rndx_suite_b)) - _rndx_suite_b) * _rndx_wash) + _rndx_suite_b);
+    }
+    float _rndx_contrast = _userImageAdjust.y + 1.0f;
+    float _rndx_brightness = _userImageAdjust.x + 0.5f;
+    _rndx_suite_r = ((_rndx_suite_r + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    _rndx_suite_g = ((_rndx_suite_g + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    _rndx_suite_b = ((_rndx_suite_b + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    float _rndx_user_gamma = 2.200000047683716f / ((min(max(_userImageAdjust.w, -1.0f), 1.0f) * 0.800000011920929f) + 2.200000047683716f);
+    _693 = exp2(log2(saturate(mad(_colorBlind0.z, _rndx_suite_b, mad(_colorBlind0.y, _rndx_suite_g, (_colorBlind0.x * _rndx_suite_r))))) * _rndx_user_gamma);
+    _694 = exp2(log2(saturate(mad(_colorBlind1.z, _rndx_suite_b, mad(_colorBlind1.y, _rndx_suite_g, (_colorBlind1.x * _rndx_suite_r))))) * _rndx_user_gamma);
+    _695 = exp2(log2(saturate(mad(_colorBlind2.z, _rndx_suite_b, mad(_colorBlind2.y, _rndx_suite_g, (_colorBlind2.x * _rndx_suite_r))))) * _rndx_user_gamma);
+  }
+  // RenoDX: <<< [Patch: ScreenEffectVanillaFinalSuite]
   if (_etcParams.y > 1.0f) {
     float _704 = abs((TEXCOORD.x * 2.0f) + -1.0f);
     float _705 = abs((TEXCOORD.y * 2.0f) + -1.0f);
-    float _709 = saturate(1.0f - (dot(float2(_704, _705), float2(_704, _705)) * saturate(_etcParams.y + -1.0f)));
+    // RenoDX: >>> [Patch: ScreenEffectVignette] [Version: 1.12.02]
+    // Description: When this KnowledgeGain composite variant (0x21A05DE2, SDR permutation) is the visible final on the SDR lane during the location-discovery effect, scale its native output vignette by the RenoDX Vignette setting so the vignette state matches the main composite material's behavior instead of snapping to full native strength while the effect plays. Intermediate uses that still feed the standalone final pass (_etcParams.z > 0) are left untouched. Mirrors BasicPostProcessVignette in PostProcessMaterial_0x21212A93.
+    float _rndx_vignette_strength = saturate(_etcParams.y + -1.0f);
+    if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
+      _rndx_vignette_strength *= CUSTOM_VIGNETTE;
+    }
+    float _709 = saturate(1.0f - (dot(float2(_704, _705), float2(_704, _705)) * _rndx_vignette_strength));
+    // RenoDX: <<< [Patch: ScreenEffectVignette]
     _714 = (_709 * _693);
     _715 = (_709 * _694);
     _716 = (_709 * _695);
@@ -404,6 +436,15 @@ float4 main(
     _763 = _747;
     _764 = _748;
   }
+  // RenoDX: >>> [Patch: ScreenEffectFinalizeSDR] [Version: 1.12.02]
+  // Description: On the SDR lane this KnowledgeGain composite variant (0x21A05DE2) can be the visible final output while the location-discovery effect plays (no standalone SDR final draws and this shader writes the display target with _etcParams.z == 0; live snapshot confirmed the chain 0x21212A93 -> 0x21A05DE2 -> 0x1E5F79F5 with zero standalone-final draws). Without this block the RenoDX SDR finalization (white point/color temperature, Purkinje gating, and the SDR Gamma setting) dropped out for the duration of the effect and snapped back afterward. Mirrors BasicPostProcessFinalizeSDR in PostProcessMaterial_0x21212A93; the vanilla final-output color suite is restored separately by the ScreenEffectVanillaFinalSuite patch above.
+  if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
+    float3 _rndx_final_color = FinalizeSDR(float3(_762, _763, _764), _sunDirection.y, _moonDirection.y);
+    _762 = _rndx_final_color.x;
+    _763 = _rndx_final_color.y;
+    _764 = _rndx_final_color.z;
+  }
+  // RenoDX: <<< [Patch: ScreenEffectFinalizeSDR]
   SV_Target.x = _762;
   SV_Target.y = _763;
   SV_Target.z = _764;

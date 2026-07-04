@@ -1,0 +1,689 @@
+struct PostProcessInteraction_CDStruct {
+  uint _lineTex;
+};
+
+
+Texture2D<float4> __0__7__0__0__g_bindlessTextures[] : register(t0, space7);
+
+Texture2D<float4> __3__36__0__0__g_sceneColor : register(t9, space36);
+
+Texture2D<float> __3__36__0__0__g_depth : register(t29, space36);
+
+Texture2D<uint2> __3__36__0__0__g_stencil : register(t33, space36);
+
+Texture2D<uint4> __3__36__0__0__g_gbufferBaseColor : register(t71, space36);
+
+Texture2D<float4> __3__36__0__0__g_gbufferNormal : register(t97, space36);
+
+Texture2D<uint> __3__36__0__0__g_CustomRenderPassValue : register(t45, space36);
+
+Texture2D<float4> __3__36__0__0__g_CustomRenderPassDepth : register(t87, space36);
+
+cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
+  float4 _time;
+  float4 _timeNoScale;
+  uint4 _frameNumber;
+  float4 _screenSizeAndInvSize;
+  float4 _bufferSizeAndInvSize;
+  float4 _hiZUVScaleAndInvScale;
+  float4 _resolutionScale;
+  float4 _temporalReprojectionParams;
+  float4 _viewPos;
+  float4 _viewDir;
+  row_major float4x4 _viewProj;
+  row_major float4x4 _viewProjNoJitter;
+  row_major float4x4 _viewProjRelative;
+  row_major float4x4 _viewProjRelativeNoJitter;
+  row_major float4x4 _invViewProj;
+  row_major float4x4 _invViewProjRelative;
+  row_major float4x4 _invViewProjRelativeNoJitter;
+  row_major float4x4 _viewProjRelativeOrtho;
+  float4 _sunDirection;
+  float4 _moonDirection;
+  float4 _moonRight;
+  float4 _moonUp;
+  float4 _ssaoRandomDirection[16];
+  row_major float4x4 _view;
+  row_major float4x4 _viewRelative;
+  row_major float4x4 _viewRelativePrev;
+  row_major float4x4 _proj;
+  row_major float4x4 _projNoJitter;
+  float4 _viewPosPrev;
+  row_major float4x4 _viewProjNoJitterPrev;
+  row_major float4x4 _viewProjRelativePrev;
+  row_major float4x4 _viewProjRelativeNoJitterPrev;
+  row_major float4x4 _invViewProjPrev;
+  row_major float4x4 _invViewProjRelativePrev;
+  row_major float4x4 _projToPrevProj;
+  row_major float4x4 _projToPrevProjNoTranslation;
+  row_major float4x4 _viewProjectionTexScale;
+  float4 _temporalAAJitter;
+  float4 _temporalAAJitterParams;
+  float4 _frustumPlanes[6];
+  float4 _frustumPlanesPrev[6];
+  float4 _frustumCornerDirs[4];
+  float4 _screenPercentage;
+  float4 _nearFarProj;
+  float4 _renderingOriginPos;
+  float4 _renderingOriginPosPrev;
+  float4 _lodMaskRenderRate;
+  float4 _terrainNormalParams;
+  int4 _hiZMapInfo;
+  int4 _hiZMapInfoCurrent;
+  float4 _treeParams;
+  uint4 _clusterSize;
+  uint4 _globalLightParams;
+  float4 _bevelParams;
+  float4 _variableRateShadingParams;
+  float4 _cavityParams;
+  float4 _customRenderPassSizeInvSize;
+  uint4 _impostorParams;
+  float4 _clusterDecalSizeAndInvSize;
+  uint4 _globalWindParams;
+  float4 _windFluidVolumeParams;
+  float4 _windFluidTextureParams;
+  float4 _raytracingAccelerationStructureOrigin;
+  float4 _debugBaseColor;
+  float4 _debugNormal;
+  float4 _debugMaterial;
+  float4 _debugMultiplier;
+  min16float4 _debugBaseColor16;
+  min16float4 _debugNormal16;
+  min16float4 _debugMaterial16;
+  min16float4 _debugMultiplier16;
+  float4 _debugCursorWorldPos;
+  uint4 _debugRenderToggle01;
+  uint4 _debugTreeShapeVariation;
+  float4 _positionBasedDynamicsParameter;
+  float _effectiveMetallicForVelvet;
+  float _debugCharacterSnowRate;
+  uint _systemRandomSeed;
+  uint _skinnedMeshDebugFlag;
+  float4 _viewPosShifted;
+  float4 _viewPosShiftedPrev;
+  float4 _viewTileRelativePos;
+  float4 _viewTileRelativePosPrev;
+  int2 _viewTileIndex;
+  int2 _viewTileIndexPrev;
+  float4 _worldVolume;
+  float3 _diffViewPosAccurate;
+  uint _isPhotosensitiveMode_isAllolwBlood;
+  float _earthRadius;
+  float3 _sceneConstantDummy;
+};
+
+#define RENODX_TONEMAP_EXTERNAL_SCENE_CONSTANT_BUFFER 1
+#define RENODX_TONEMAP_SCENE_TIME_W _time.w
+#include "../tonemap.hlsli"
+
+
+
+#if 0 // Provided by tonemap.hlsli
+cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
+  float4 _exposure0 : packoffset(c000.x);
+  float4 _exposure1 : packoffset(c001.x);
+  float4 _exposure2 : packoffset(c002.x);
+  float4 _exposure3 : packoffset(c003.x);
+  float4 _exposure4 : packoffset(c004.x);
+};
+#endif
+
+#if 0 // Provided by tonemap.hlsli
+cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
+  float4 _postProcessParams : packoffset(c000.x);
+  float4 _postProcessParams1 : packoffset(c001.x);
+  float4 _toneMapParams0 : packoffset(c002.x);
+  float4 _toneMapParams1 : packoffset(c003.x);
+  float4 _colorGradingParams : packoffset(c004.x);
+  float4 _colorCorrectionParams : packoffset(c005.x);
+  float4 _localToneMappingParams : packoffset(c006.x);
+  float4 _etcParams : packoffset(c007.x);
+  float4 _userImageAdjust : packoffset(c008.x);
+  float4 _slopeParams : packoffset(c009.x);
+  float4 _offsetParams : packoffset(c010.x);
+  float4 _powerParams : packoffset(c011.x);
+  int _nightToneParm : packoffset(c012.x);
+  int3 _padding : packoffset(c012.y);
+};
+#endif
+
+cbuffer __3__1__0__0__PostProcessSizeConstant : register(b1, space1) {
+  float4 _srcTargetSizeAndInv : packoffset(c000.x);
+  float4 _destTargetSizAndInv : packoffset(c001.x);
+};
+
+cbuffer __3__1__0__0__PostProcessMaterialIndex : register(b2, space1) {
+  int _materialIndex : packoffset(c000.x);
+  int _passIndex : packoffset(c000.y);
+};
+
+#if 0 // Provided by tonemap.hlsli
+cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
+  float4 _colorBlind0 : packoffset(c000.x);
+  float4 _colorBlind1 : packoffset(c001.x);
+  float4 _colorBlind2 : packoffset(c002.x);
+};
+#endif
+
+cbuffer GlobalMaterialGlobalParameter_Common : register(b50, space98) {
+  float3 _mainPosition : packoffset(c000.x);
+  float3 _mainPositionPrev : packoffset(c001.x);
+  float3 _targetFocusPosition : packoffset(c002.x);
+  float _hpPercentage : packoffset(c002.w);
+  uint _skinnedMeshNoiseTexture : packoffset(c003.x);
+  float _highLightForVision : packoffset(c003.y);
+  float _highLightForVisionRemoteCatch : packoffset(c003.z);
+  float _characterHighlight : packoffset(c003.w);
+  uint _specialModeType : packoffset(c004.x);
+  float _visionRadius : packoffset(c004.y);
+  float _interactionTime : packoffset(c004.z);
+  float3 _questGuideWorldPosition : packoffset(c005.x);
+  float3 _detectModeUp : packoffset(c006.x);
+  float3 _detectModeLook : packoffset(c007.x);
+  float3 _detectModePosition : packoffset(c008.x);
+  float2 _detectModeLightProfileOffset : packoffset(c009.x);
+  uint _detectModeLightProfileIndex : packoffset(c009.z);
+  float _detectModeAngle : packoffset(c009.w);
+  float _detectModeRadius : packoffset(c010.x);
+  uint _useHatMode : packoffset(c010.y);
+  uint4 _oreVeinBitMask : packoffset(c011.x);
+  uint _oreVeinDissolveIndex : packoffset(c012.x);
+  float _oreVeinDissolveRatio : packoffset(c012.y);
+  float _hideStateRatio : packoffset(c012.z);
+  float3 _hazardAlertPosition : packoffset(c013.x);
+  float _wantedRegionRatio : packoffset(c013.w);
+  float _wantedRegionOpacity : packoffset(c014.x);
+  float _wantedRegionRadius : packoffset(c014.y);
+  float3 _wantedRegionPosition : packoffset(c015.x);
+  float _elementActivateDuration : packoffset(c015.w);
+  float _temperatureWarning : packoffset(c016.x);
+  float _electrocutionWarning : packoffset(c016.y);
+  float _fleeCount : packoffset(c016.z);
+  float _followLearning : packoffset(c016.w);
+  float4 _enemyAlert1 : packoffset(c017.x);
+  float4 _enemyAlert2 : packoffset(c018.x);
+  float _pullingEffectAttractionOffRadius : packoffset(c019.x);
+  float _pullingEffectPushFromCharacter : packoffset(c019.y);
+  float _pullingEffectPushScale : packoffset(c019.z);
+  float _pullingEffectAttractionScale : packoffset(c019.w);
+  float _pullingEffectExternalScale : packoffset(c020.x);
+  float _pullingEffectVectorFieldScale : packoffset(c020.y);
+  float _pullingEffectHeightOffset : packoffset(c020.z);
+  float _housingPreviewState : packoffset(c020.w);
+  float _customEffectOpacity : packoffset(c021.x);
+  uint _renderPassInteraction : packoffset(c021.y);
+  uint _renderPassSelfPlayer : packoffset(c021.z);
+  uint _renderPassEnemy : packoffset(c021.w);
+  uint _renderPassTargetFocus : packoffset(c022.x);
+  uint _renderPassLearning : packoffset(c022.y);
+  uint _renderPassTest : packoffset(c022.z);
+  uint _enableChromaticAberration : packoffset(c022.w);
+  uint _renderPassDetectObjective : packoffset(c023.x);
+  uint _renderPassDetectItem : packoffset(c023.y);
+  uint _renderPassDetectGimmick : packoffset(c023.z);
+  uint _renderPassDetectRemoteCatch : packoffset(c023.w);
+  uint _renderPassDetectPickedRemoteCatch : packoffset(c024.x);
+  uint _renderPassDetectLift : packoffset(c024.y);
+  uint _renderPassKnowledgeNPC : packoffset(c024.z);
+  uint _renderPassKnowledgeGain : packoffset(c024.w);
+  uint _renderPassAnamorphicMural : packoffset(c025.x);
+  uint _renderPassMemoryBackground : packoffset(c025.y);
+  uint _renderPassMemory : packoffset(c025.z);
+  uint _renderPassEnemyBoss : packoffset(c025.w);
+  uint _renderPassAimHighlight : packoffset(c026.x);
+  float4 _aimHighlightPosition : packoffset(c027.x);
+  uint _renderPassNPCGhost : packoffset(c028.x);
+  uint _renderPassHousing : packoffset(c028.y);
+  uint _characterMeshEffectType : packoffset(c028.z);
+};
+
+struct BindlessParameters_PostProcessInteraction_CD {
+  PostProcessInteraction_CDStruct BindlessParameters_PostProcessInteraction_CD;
+};
+
+typedef BindlessParameters_PostProcessInteraction_CD BindlessParameters_PostProcessInteraction_CD_t;
+ConstantBuffer<BindlessParameters_PostProcessInteraction_CD_t> BindlessParameters_PostProcessInteraction_CD[] : register(b0, space100);
+
+SamplerState __0__4__0__0__g_staticBilinearWrap : register(s0, space4);
+
+SamplerState __0__4__0__0__g_staticBilinearClamp : register(s3, space4);
+
+// DXIL FirstbitHi: returns bit position counting from MSB (leading zeros count)
+uint firstbithigh_msb(int value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
+uint firstbithigh_msb(uint value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
+
+float4 main(
+  precise noperspective float4 SV_Position : SV_Position,
+  linear float2 TEXCOORD : TEXCOORD
+) : SV_Target {
+  float4 SV_Target;
+  uint2 _28;
+  int _45;
+  float4 _48;
+  float _58;
+  float _59;
+  float _60;
+  float _82;
+  float _83;
+  float _84;
+  float _85;
+  float _86;
+  float _87;
+  float _139;
+  float _140;
+  float _560;
+  float _561;
+  float _562;
+  float _576;
+  float _781;
+  float _782;
+  float _783;
+  float _876;
+  float _877;
+  float _878;
+  float _932;
+  float _933;
+  float _934;
+  float _953;
+  float _954;
+  float _955;
+  float _985;
+  float _986;
+  float _987;
+  float _1001;
+  float _1002;
+  float _1003;
+  int _97;
+  int _105;
+  int _156;
+  float4 _158;
+  float _160;
+  float _161;
+  float _167;
+  float _169;
+  float _170;
+  float _206;
+  float _210;
+  float _216;
+  float _217;
+  float _233;
+  float _237;
+  float _238;
+  int _241;
+  float _246;
+  float _248;
+  float _249;
+  float _250;
+  float _254;
+  float _258;
+  float _262;
+  float _265;
+  float _269;
+  float _275;
+  float _276;
+  float _288;
+  float _292;
+  float _293;
+  float _294;
+  float _295;
+  float _296;
+  float _297;
+  float _300;
+  float _303;
+  float _306;
+  float _308;
+  float _309;
+  float _310;
+  float _311;
+  float _320;
+  float _336;
+  float _340;
+  float _343;
+  float _351;
+  float _352;
+  float _358;
+  float _360;
+  float _366;
+  float _367;
+  float _375;
+  float _376;
+  float _377;
+  float _385;
+  float _386;
+  uint _414;
+  uint _415;
+  uint4 _417;
+  float4 _420;
+  float _438;
+  float _439;
+  float _440;
+  float _442;
+  float _443;
+  float _444;
+  float _445;
+  float _448;
+  float _449;
+  float _452;
+  float _453;
+  float _457;
+  float _459;
+  float _460;
+  float _461;
+  float _462;
+  float _464;
+  float _467;
+  float _468;
+  float _469;
+  float _470;
+  float _479;
+  float _483;
+  float _487;
+  float _489;
+  float _490;
+  float _491;
+  float _492;
+  float _501;
+  float _518;
+  float _525;
+  float _528;
+  float _544;
+  float _545;
+  float _552;
+  uint _563;
+  bool _579;
+  float _585;
+  float _634;
+  float _635;
+  float _636;
+  float _638;
+  float _645;
+  float _646;
+  float _647;
+  float _666;
+  float _667;
+  float _668;
+  float _669;
+  float _670;
+  float _671;
+  float _672;
+  float _673;
+  float _674;
+  float _720;
+  float _721;
+  float _722;
+  float _723;
+  float _724;
+  float _725;
+  float _726;
+  float _743;
+  float _744;
+  float _745;
+  float _746;
+  float _752;
+  float _755;
+  float _762;
+  float _763;
+  float _764;
+  float _793;
+  float _818;
+  float _819;
+  float _820;
+  float _839;
+  float _840;
+  float _841;
+  float _847;
+  float _851;
+  float _852;
+  float _853;
+  float _854;
+  float _859;
+  float _884;
+  float _888;
+  float _889;
+  float _890;
+  float _891;
+  float _921;
+  float _943;
+  float _944;
+  float _948;
+  float _992;
+  float _1013;
+  float _1014;
+  float _1015;
+  __3__36__0__0__g_CustomRenderPassValue.GetDimensions(_28.x, _28.y);
+  _45 = (((uint)(__3__36__0__0__g_CustomRenderPassValue.Load(int3(int((float((int)(int(float((int)((int)(_28.x)))))) + 0.5f) * TEXCOORD.x), int((float((int)(int(float((int)((int)(_28.y)))))) + 0.5f) * TEXCOORD.y), 0)))).x) & 255;
+  _48 = __3__36__0__0__g_sceneColor.Sample(__0__4__0__0__g_staticBilinearWrap, float2(TEXCOORD.x, TEXCOORD.y));  // [sem: _3__36__0__0__g_sceneColor_sample]
+  _58 = (pow(_48.x, 0.012683313339948654f));  // [sem: _3__36__0__0__g_sceneColor_sample_derived]
+  _59 = (pow(_48.y, 0.012683313339948654f));  // [sem: _3__36__0__0__g_sceneColor_sample_derived]
+  _60 = (pow(_48.z, 0.012683313339948654f));  // [sem: _3__36__0__0__g_sceneColor_sample_derived]
+  _82 = exp2(log2(max(0.0f, (_58 + -0.8359375f)) / (18.8515625f - (_58 * 18.6875f))) * 6.277394771575928f);
+  _83 = exp2(log2(max(0.0f, (_59 + -0.8359375f)) / (18.8515625f - (_59 * 18.6875f))) * 6.277394771575928f);
+  _84 = exp2(log2(max(0.0f, (_60 + -0.8359375f)) / (18.8515625f - (_60 * 18.6875f))) * 6.277394771575928f);
+  _85 = _82 * 10000.0f;
+  _86 = _83 * 10000.0f;
+  _87 = _84 * 10000.0f;
+  if (_45 == _renderPassInteraction) {
+    _97 = WaveReadLaneFirst(_materialIndex);
+    _105 = WaveReadLaneFirst(BindlessParameters_PostProcessInteraction_CD[((int)((uint)(select(((uint)_97 < (uint)170000), _97, 0)) + 0u))].BindlessParameters_PostProcessInteraction_CD._lineTex);
+    _139 = (((float4)(__0__7__0__0__g_bindlessTextures[((int)((uint)(select(((uint)_105 < (uint)65000), _105, 0)) + 0u))].Sample(__0__4__0__0__g_staticBilinearWrap, float2((TEXCOORD.x * 50.0f), (TEXCOORD.y * 50.0f))))).x);
+  // [sem: expr_sat]
+    _140 = saturate(ceil(((_nearFarProj.x / max(1.0000000116860974e-07f, ((__3__36__0__0__g_depth.Sample(__0__4__0__0__g_staticBilinearClamp, float2(TEXCOORD.x, TEXCOORD.y))).x))) + 0.05000000074505806f) - (_nearFarProj.x / max(1.0000000116860974e-07f, (((float4)(__3__36__0__0__g_CustomRenderPassDepth.Load(int3(int(_customRenderPassSizeInvSize.x * TEXCOORD.x), int(_customRenderPassSizeInvSize.y * TEXCOORD.y), 0)))).x)))));
+  } else {
+    _139 = 0.0f;
+    _140 = 0.0f;  // [sem: expr_sat]
+  }
+  if (_45 == _renderPassInteraction) {
+    _156 = int(_customRenderPassSizeInvSize.y * TEXCOORD.y);
+  // [sem: _3__36__0__0__g_CustomRenderPassDepth_load]
+    _158 = __3__36__0__0__g_CustomRenderPassDepth.Load(int3(int(_customRenderPassSizeInvSize.x * (TEXCOORD.x - (0.10000000149011612f / _srcTargetSizeAndInv.x))), _156, 0));
+    _160 = 2.200000047683716f / _srcTargetSizeAndInv.x;
+    _161 = TEXCOORD.x - _160;
+    _167 = (_161 * 2.0f) + -1.0f;
+    _169 = 1.0f - (TEXCOORD.y * 2.0f);
+    _170 = max(1.0000000116860974e-07f, (((float4)(__3__36__0__0__g_CustomRenderPassDepth.Load(int3(int(_161 * _customRenderPassSizeInvSize.x), _156, 0)))).x));
+    _206 = mad((_invViewProj[2].w), _170, mad((_invViewProj[1].w), _169, ((_invViewProj[0].w) * _167))) + (_invViewProj[3].w);
+    _210 = _160 + TEXCOORD.x;
+    _216 = (_210 * 2.0f) + -1.0f;
+    _217 = max(1.0000000116860974e-07f, (((float4)(__3__36__0__0__g_CustomRenderPassDepth.Load(int3(int(_210 * _customRenderPassSizeInvSize.x), _156, 0)))).x));
+    _233 = mad((_invViewProj[2].w), _217, mad((_invViewProj[1].w), _169, ((_invViewProj[0].w) * _216))) + (_invViewProj[3].w);
+    _237 = 2.200000047683716f / _srcTargetSizeAndInv.y;
+    _238 = TEXCOORD.y - _237;
+    _241 = int(_customRenderPassSizeInvSize.x * TEXCOORD.x);
+    _246 = (TEXCOORD.x * 2.0f) + -1.0f;
+    _248 = 1.0f - (_238 * 2.0f);
+    _249 = max(1.0000000116860974e-07f, (((float4)(__3__36__0__0__g_CustomRenderPassDepth.Load(int3(_241, int(_238 * _customRenderPassSizeInvSize.y), 0)))).x));
+    _250 = (_invViewProj[0].x) * _246;
+    _254 = (_invViewProj[0].y) * _246;
+    _258 = (_invViewProj[0].z) * _246;
+    _262 = (_invViewProj[0].w) * _246;
+    _265 = mad((_invViewProj[2].w), _249, mad((_invViewProj[1].w), _248, _262)) + (_invViewProj[3].w);
+    _269 = _237 + TEXCOORD.y;
+    _275 = 1.0f - (_269 * 2.0f);
+    _276 = max(1.0000000116860974e-07f, (((float4)(__3__36__0__0__g_CustomRenderPassDepth.Load(int3(_241, int(_269 * _customRenderPassSizeInvSize.y), 0)))).x));
+    _288 = mad((_invViewProj[2].w), _276, mad((_invViewProj[1].w), _275, _262)) + (_invViewProj[3].w);
+    _292 = ((mad((_invViewProj[2].x), _276, mad((_invViewProj[1].x), _275, _250)) + (_invViewProj[3].x)) / _288) - ((mad((_invViewProj[2].x), _249, mad((_invViewProj[1].x), _248, _250)) + (_invViewProj[3].x)) / _265);
+    _293 = ((mad((_invViewProj[2].y), _276, mad((_invViewProj[1].y), _275, _254)) + (_invViewProj[3].y)) / _288) - ((mad((_invViewProj[2].y), _249, mad((_invViewProj[1].y), _248, _254)) + (_invViewProj[3].y)) / _265);
+    _294 = ((mad((_invViewProj[2].z), _276, mad((_invViewProj[1].z), _275, _258)) + (_invViewProj[3].z)) / _288) - ((mad((_invViewProj[2].z), _249, mad((_invViewProj[1].z), _248, _258)) + (_invViewProj[3].z)) / _265);
+    _295 = ((mad((_invViewProj[2].x), _217, mad((_invViewProj[1].x), _169, ((_invViewProj[0].x) * _216))) + (_invViewProj[3].x)) / _233) - ((mad((_invViewProj[2].x), _170, mad((_invViewProj[1].x), _169, ((_invViewProj[0].x) * _167))) + (_invViewProj[3].x)) / _206);
+    _296 = ((mad((_invViewProj[2].y), _217, mad((_invViewProj[1].y), _169, ((_invViewProj[0].y) * _216))) + (_invViewProj[3].y)) / _233) - ((mad((_invViewProj[2].y), _170, mad((_invViewProj[1].y), _169, ((_invViewProj[0].y) * _167))) + (_invViewProj[3].y)) / _206);
+    _297 = ((mad((_invViewProj[2].z), _217, mad((_invViewProj[1].z), _169, ((_invViewProj[0].z) * _216))) + (_invViewProj[3].z)) / _233) - ((mad((_invViewProj[2].z), _170, mad((_invViewProj[1].z), _169, ((_invViewProj[0].z) * _167))) + (_invViewProj[3].z)) / _206);
+    _300 = (_294 * _296) - (_293 * _297);
+    _303 = (_292 * _297) - (_294 * _295);
+    _306 = (_293 * _295) - (_292 * _296);
+    _308 = rsqrt(dot(float3(_300, _303, _306), float3(_300, _303, _306)));  // [sem: invLength]
+    _309 = _300 * _308;
+    _310 = _303 * _308;
+    _311 = _306 * _308;
+  // [sem: expr_sat]
+    _320 = saturate(dot(float3(_309, _310, _311), float3((-0.0f - _viewDir.x), (-0.0f - _viewDir.y), (-0.0f - _viewDir.z))));
+    _336 = frac(_time.x * 0.4000000059604645f);
+    _340 = abs((1.9989999532699585f - _320) - (_336 * 2.5f));
+    _343 = saturate(1.0f - (_340 * 5.0f));  // [sem: expr_sat]
+  // [sem: expr_sat]
+    _351 = saturate((saturate(((2.0f - _320) * _139) + exp2(log2(1.0f - _320) * 4.0f)) * _158.x) * (_343 - (_343 * _336)));
+    _352 = _351 * _140;
+    _358 = _158.x * 50.0f;  // [sem: _3__36__0__0__g_CustomRenderPassDepth_load_derived]
+    _360 = saturate(_358 * _358);  // [sem: expr_sat]
+    _366 = saturate(1.0f - (_340 * 1.25f)) * _360;
+    _367 = _366 * 20.0f;
+    _375 = (_exposure2.x * 5000.0f) * (lerp(_352, _351, 2.0f));
+    _376 = (_360 - (_360 * _140)) * _exposure2.x;
+    _377 = _376 * 2.0f;
+    _385 = (_376 * 8.0f) * saturate(exp2(log2(1.0f - abs(dot(float3(_309, _310, _311), float3(_viewDir.x, _viewDir.y, _viewDir.z)))) * 2.5f));
+    _386 = _367 + 10000.0f;
+    _560 = ((((_375 - (_366 * _85)) + _385) + (_386 * _82)) + ((1.0f - (_367 * _82)) * _377));
+    _561 = ((((_375 - (_366 * _86)) + _385) + (_386 * _83)) + ((1.0f - (_367 * _83)) * _377));
+    _562 = ((((_375 - (_366 * _87)) + _385) + (_386 * _84)) + ((1.0f - (_367 * _84)) * _377));
+  } else {
+    if (_45 == _renderPassDetectObjective) {
+      _414 = uint((_bufferSizeAndInvSize.x * TEXCOORD.x) + -0.5f);
+      _415 = uint((_bufferSizeAndInvSize.y * TEXCOORD.y) + -0.5f);
+      _417 = __3__36__0__0__g_gbufferBaseColor.Load(int3(_414, _415, 0));  // [sem: _3__36__0__0__g_gbufferBaseColor_load]
+      _420 = __3__36__0__0__g_gbufferNormal.Load(int3(_414, _415, 0));  // [sem: _3__36__0__0__g_gbufferNormal_load]
+      _438 = (saturate(_420.x * 1.0009784698486328f) * 2.0f) + -1.0f;  // [sem: _3__36__0__0__g_gbufferNormal_load_derived]
+      _439 = (saturate(_420.y * 1.0009784698486328f) * 2.0f) + -1.0f;  // [sem: _3__36__0__0__g_gbufferNormal_load_derived]
+      _440 = (saturate(_420.z * 1.0009784698486328f) * 2.0f) + -1.0f;  // [sem: _3__36__0__0__g_gbufferNormal_load_derived]
+      _442 = rsqrt(dot(float3(_438, _439, _440), float3(_438, _439, _440)));  // [sem: invLength]
+      _443 = _442 * _438;
+      _444 = _442 * _439;
+      _445 = _440 * _442;
+      _448 = (((float)((uint)((uint)(((uint)((uint)(_417.w)) >> 8) & 255)))) * 0.007843137718737125f) + -1.0f;  // [sem: _3__36__0__0__g_gbufferBaseColor_load_derived]
+      _449 = (((float)((uint)((uint)(_417.w & 255)))) * 0.007843137718737125f) + -1.0f;  // [sem: _3__36__0__0__g_gbufferBaseColor_load_derived]
+      _452 = (_448 + _449) * 0.5f;
+      _453 = (_448 - _449) * 0.5f;
+      _457 = (1.0f - abs(_452)) - abs(_453);
+      _459 = rsqrt(dot(float3(_452, _453, _457), float3(_452, _453, _457)));  // [sem: invLength]
+      _460 = _459 * _452;
+      _461 = _459 * _453;
+      _462 = _459 * _457;
+      _464 = select((_445 >= 0.0f), 1.0f, -1.0f);
+      _467 = -0.0f - (1.0f / (_464 + _445));
+      _468 = _444 * _467;
+      _469 = _468 * _443;
+      _470 = _464 * _443;
+      _479 = mad(_462, _443, mad(_461, _469, ((((_470 * _443) * _467) + 1.0f) * _460)));
+      _483 = mad(_462, _444, mad(_461, (_464 + (_468 * _444)), ((_460 * _464) * _469)));
+      _487 = mad(_462, _445, mad(_461, (-0.0f - _444), (-0.0f - (_470 * _460))));
+      _489 = rsqrt(dot(float3(_479, _483, _487), float3(_479, _483, _487)));  // [sem: invLength]
+      _490 = _489 * _479;
+      _491 = _489 * _483;
+      _492 = _489 * _487;
+  // [sem: expr_sat]
+      _501 = saturate(dot(float3(_490, _491, _492), float3((-0.0f - _viewDir.x), (-0.0f - _viewDir.y), (-0.0f - _viewDir.z))));
+      _518 = _time.x - _interactionTime;
+      _525 = abs((1.9989999532699585f - _501) - ((pow(_518, 0.5f)) * 2.25f));
+      _528 = saturate(1.0f - (_525 * 40.0f));  // [sem: expr_sat]
+      _544 = (saturate(exp2(log2(1.0f - abs(dot(float3(_490, _491, _492), float3(_viewDir.x, _viewDir.y, _viewDir.z)))) * 0.800000011920929f)) * _140) * saturate(1.0f - (_525 * 3.3333332538604736f));
+      _545 = _exposure2.x * 25.0f;
+      _552 = _545 * saturate((saturate(((2.0f - _501) * _139) + exp2(log2(1.0f - _501) * 4.0f)) * _140) * (_528 - ((_518 * 0.8999999761581421f) * _528)));
+      _560 = ((_552 + _85) + ((_545 - _85) * _544));
+      _561 = ((_552 + _86) + ((_545 - _86) * _544));
+      _562 = ((_552 + _87) + ((_545 - _87) * _544));
+    } else {
+      _560 = _85;
+      _561 = _86;
+      _562 = _87;
+    }
+  }
+  _563 = uint(SV_Position.y);
+  if (_etcParams.y == 1.0f) {
+    _576 = (((float)((uint)((uint)((((uint2)(__3__36__0__0__g_stencil.Load(int3((int)(uint(SV_Position.x)), _563, 0)))).x) & 127)))) + 0.5f);
+  } else {
+    _576 = 1.0f;
+  }
+  _579 = (_localToneMappingParams.w > 0.0f);
+  if (_579) {
+    // RenoDX: >>> [Patch: PostProcessMaterialTonemapReplace] [Version: 1.13.00]
+    // Description: Every PostProcessMaterial permutation statically inlines the full vanilla tonemap pipeline and can own the visible final output while its effect draws: the game skips this shader's manual sRGB encode and writes the display target directly when _etcParams.z == 0. An unreplaced curve renders the whole screen with the vanilla look for the duration of that effect. This block replaces the vanilla slope/offset/power grade, log-space tone curve, night tone adjustment, and output matrix with the shared TonemapReplacer while preserving the vanilla _etcParams.z == 0 final-output suite below (screen fade, fade-to-inverse wash, user brightness/contrast, user gamma, color-blind matrix), which must keep running when this draw is the visible final.
+    float3 _rndx_tonemapped_color = TonemapReplacer(float3(_560, _561, _562));
+    _839 = _rndx_tonemapped_color.x;
+    _840 = _rndx_tonemapped_color.y;
+    _841 = _rndx_tonemapped_color.z;
+    // RenoDX: <<< [Patch: PostProcessMaterialTonemapReplace]
+    if (_etcParams.z == 0.0f) {
+      _847 = 1.0f - abs(_etcParams.w);
+      _851 = saturate(_etcParams.w);  // [sem: expr_sat]
+      _852 = (_847 * _839) + _851;
+      _853 = (_847 * _840) + _851;
+      _854 = (_847 * _841) + _851;
+      if (_colorGradingParams.w > 0.0f) {
+        _859 = saturate(_colorGradingParams.w);  // [sem: expr_sat]
+        _876 = (((max(0.0f, (1.0f - _852)) - _852) * _859) + _852);
+        _877 = (((max(0.0f, (1.0f - _853)) - _853) * _859) + _853);
+        _878 = (((max(0.0f, (1.0f - _854)) - _854) * _859) + _854);
+      } else {
+        _876 = _852;
+        _877 = _853;
+        _878 = _854;
+      }
+      _884 = _userImageAdjust.y + 1.0f;
+      _888 = _userImageAdjust.x + 0.5f;
+      _889 = ((_876 + -0.5f) * _884) + _888;
+      _890 = ((_877 + -0.5f) * _884) + _888;
+      _891 = ((_878 + -0.5f) * _884) + _888;
+      _921 = 2.200000047683716f / ((min(max(_userImageAdjust.w, -1.0f), 1.0f) * 0.800000011920929f) + 2.200000047683716f);
+      _932 = exp2(log2(saturate(mad(_colorBlind0.z, _891, mad(_colorBlind0.y, _890, (_colorBlind0.x * _889))))) * _921);
+      _933 = exp2(log2(saturate(mad(_colorBlind1.z, _891, mad(_colorBlind1.y, _890, (_colorBlind1.x * _889))))) * _921);
+      _934 = exp2(log2(saturate(mad(_colorBlind2.z, _891, mad(_colorBlind2.y, _890, (_colorBlind2.x * _889))))) * _921);
+    } else {
+      _932 = _839;
+      _933 = _840;
+      _934 = _841;
+    }
+  } else {
+    _932 = _560;
+    _933 = _561;
+    _934 = _562;
+  }
+  if (_etcParams.y > 1.0f) {
+    _943 = abs((TEXCOORD.x * 2.0f) + -1.0f);
+    _944 = abs((TEXCOORD.y * 2.0f) + -1.0f);
+    _948 = saturate(1.0f - (dot(float2(_943, _944), float2(_943, _944)) * saturate(_etcParams.y + -1.0f)));  // [sem: expr_sat]
+    _953 = (_948 * _932);
+    _954 = (_948 * _933);
+    _955 = (_948 * _934);
+  } else {
+    _953 = _932;
+    _954 = _933;
+    _955 = _934;
+  }
+  if (_579 && (_etcParams.z > 0.0f)) {
+    _985 = select((_953 <= 0.0031308000907301903f), (_953 * 12.920000076293945f), (((pow(_953, 0.4166666567325592f)) * 1.0549999475479126f) + -0.054999999701976776f));
+    _986 = select((_954 <= 0.0031308000907301903f), (_954 * 12.920000076293945f), (((pow(_954, 0.4166666567325592f)) * 1.0549999475479126f) + -0.054999999701976776f));
+    _987 = select((_955 <= 0.0031308000907301903f), (_955 * 12.920000076293945f), (((pow(_955, 0.4166666567325592f)) * 1.0549999475479126f) + -0.054999999701976776f));
+  } else {
+    _985 = _953;
+    _986 = _954;
+    _987 = _955;
+  }
+  if (!(!(_etcParams.y >= 1.0f))) {
+    _992 = (float)((uint)_563);
+    if (!(_992 < _viewDir.w)) {
+      if (!(_992 >= (_screenSizeAndInvSize.y - _viewDir.w))) {
+        _1001 = _985;
+        _1002 = _986;
+        _1003 = _987;
+      } else {
+        _1001 = 0.0f;
+        _1002 = 0.0f;
+        _1003 = 0.0f;
+      }
+    } else {
+      _1001 = 0.0f;
+      _1002 = 0.0f;
+      _1003 = 0.0f;
+    }
+  } else {
+    _1001 = _985;
+    _1002 = _986;
+    _1003 = _987;
+  }
+  _1013 = exp2(log2(_1001 * 9.999999747378752e-05f) * 0.1593017578125f);
+  _1014 = exp2(log2(_1002 * 9.999999747378752e-05f) * 0.1593017578125f);
+  _1015 = exp2(log2(_1003 * 9.999999747378752e-05f) * 0.1593017578125f);
+  SV_Target.x = exp2(log2((1.0f / ((_1013 * 18.6875f) + 1.0f)) * ((_1013 * 18.8515625f) + 0.8359375f)) * 78.84375f);
+  SV_Target.y = exp2(log2((1.0f / ((_1014 * 18.6875f) + 1.0f)) * ((_1014 * 18.8515625f) + 0.8359375f)) * 78.84375f);
+  SV_Target.z = exp2(log2((1.0f / ((_1015 * 18.6875f) + 1.0f)) * ((_1015 * 18.8515625f) + 0.8359375f)) * 78.84375f);
+  SV_Target.w = _576;
+  return SV_Target;
+}

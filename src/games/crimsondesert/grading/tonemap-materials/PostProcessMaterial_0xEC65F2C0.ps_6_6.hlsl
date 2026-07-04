@@ -1,0 +1,1634 @@
+struct PostProcessAbyssEnterIntro_CDStruct {
+  float _cubeScale;
+  float _cameraSpeed;
+  float _cameraSinIntensity;
+  float3 _screenFadeColor;
+  float _screenFadeRatio;
+  float3 _fogColor;
+  float3 _ambientColor;
+  float3 _mainTintColor;
+  float3 _waveColor;
+  float3 _globalColor;
+  float3 _lightColor;
+  float3 _centerGlowColor;
+  float _centerGlowRadius;
+  float _stardustIntensity;
+  float _stardustDensity;
+  float _particleIntensity;
+  float _particleEmissionWidth;
+  float _anamorphicIntensity;
+  float _anamorphicWidth;
+  float _largeHalo;
+  float _largeHaloIntensity;
+  float _middleHaloIntensity;
+  float _blubIntensity;
+  float _streakGlowIntensity;
+  float _centerpoint;
+  float _tunnelTotal;
+  float _cameraFov;
+  float _cubeDistance;
+  uint _screenWarpTex;
+  float _screenWarpRatio;
+  float _edgeFlowSpeed;
+  float _cubeMinScale;
+  float _borderRatio;
+  float _borderWidth;
+  float _borderSmoothness;
+  uint _borderColor;
+  float _fadeRatio;
+};
+
+
+Texture2D<float4> __3__36__0__0__g_sceneColor : register(t9, space36);
+
+Texture2D<uint2> __3__36__0__0__g_stencil : register(t33, space36);
+
+cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
+  float4 _time : packoffset(c000.x);
+  float4 _timeNoScale : packoffset(c001.x);
+  uint4 _frameNumber : packoffset(c002.x);
+  float4 _screenSizeAndInvSize : packoffset(c003.x);
+  float4 _bufferSizeAndInvSize : packoffset(c004.x);
+  float4 _hiZUVScaleAndInvScale : packoffset(c005.x);
+  float4 _resolutionScale : packoffset(c006.x);
+  float4 _temporalReprojectionParams : packoffset(c007.x);
+  float4 _viewPos : packoffset(c008.x);
+  float4 _viewDir : packoffset(c009.x);
+  float4 _viewProj[4] : packoffset(c010.x);
+  float4 _viewProjNoJitter[4] : packoffset(c014.x);
+  float4 _viewProjRelative[4] : packoffset(c018.x);
+  float4 _viewProjRelativeNoJitter[4] : packoffset(c022.x);
+  float4 _invViewProj[4] : packoffset(c026.x);
+  float4 _invViewProjRelative[4] : packoffset(c030.x);
+  float4 _invViewProjRelativeNoJitter[4] : packoffset(c034.x);
+  float4 _viewProjRelativeOrtho[4] : packoffset(c038.x);
+  float4 _sunDirection : packoffset(c042.x);
+  float4 _moonDirection : packoffset(c043.x);
+  float4 _moonRight : packoffset(c044.x);
+  float4 _moonUp : packoffset(c045.x);
+  float4 _ssaoRandomDirection[16] : packoffset(c046.x);
+  float4 _view[4] : packoffset(c062.x);
+  float4 _viewRelative[4] : packoffset(c066.x);
+  float4 _viewRelativePrev[4] : packoffset(c070.x);
+  float4 _proj[4] : packoffset(c074.x);
+  float4 _projNoJitter[4] : packoffset(c078.x);
+  float4 _viewPosPrev : packoffset(c082.x);
+  float4 _viewProjNoJitterPrev[4] : packoffset(c083.x);
+  float4 _viewProjRelativePrev[4] : packoffset(c087.x);
+  float4 _viewProjRelativeNoJitterPrev[4] : packoffset(c091.x);
+  float4 _invViewProjPrev[4] : packoffset(c095.x);
+  float4 _invViewProjRelativePrev[4] : packoffset(c099.x);
+  float4 _projToPrevProj[4] : packoffset(c103.x);
+  float4 _projToPrevProjNoTranslation[4] : packoffset(c107.x);
+  float4 _viewProjectionTexScale[4] : packoffset(c111.x);
+  float4 _temporalAAJitter : packoffset(c115.x);
+  float4 _temporalAAJitterParams : packoffset(c116.x);
+  float4 _frustumPlanes[6] : packoffset(c117.x);
+  float4 _frustumPlanesPrev[6] : packoffset(c123.x);
+  float4 _frustumCornerDirs[4] : packoffset(c129.x);
+  float4 _screenPercentage : packoffset(c133.x);
+  float4 _nearFarProj : packoffset(c134.x);
+  float4 _renderingOriginPos : packoffset(c135.x);
+  float4 _renderingOriginPosPrev : packoffset(c136.x);
+  float4 _lodMaskRenderRate : packoffset(c137.x);
+  float4 _terrainNormalParams : packoffset(c138.x);
+  int4 _hiZMapInfo : packoffset(c139.x);
+  int4 _hiZMapInfoCurrent : packoffset(c140.x);
+  float4 _treeParams : packoffset(c141.x);
+  uint4 _clusterSize : packoffset(c142.x);
+  uint4 _globalLightParams : packoffset(c143.x);
+  float4 _bevelParams : packoffset(c144.x);
+  float4 _variableRateShadingParams : packoffset(c145.x);
+  float4 _cavityParams : packoffset(c146.x);
+  float4 _customRenderPassSizeInvSize : packoffset(c147.x);
+  uint4 _impostorParams : packoffset(c148.x);
+  float4 _clusterDecalSizeAndInvSize : packoffset(c149.x);
+  uint4 _globalWindParams : packoffset(c150.x);
+  float4 _windFluidVolumeParams : packoffset(c151.x);
+  float4 _windFluidTextureParams : packoffset(c152.x);
+  float4 _raytracingAccelerationStructureOrigin : packoffset(c153.x);
+  float4 _debugBaseColor : packoffset(c154.x);
+  float4 _debugNormal : packoffset(c155.x);
+  float4 _debugMaterial : packoffset(c156.x);
+  float4 _debugMultiplier : packoffset(c157.x);
+  uint2 _debugBaseColor16 : packoffset(c158.x);
+  uint2 _debugNormal16 : packoffset(c158.z);
+  uint2 _debugMaterial16 : packoffset(c159.x);
+  uint2 _debugMultiplier16 : packoffset(c159.z);
+  float4 _debugCursorWorldPos : packoffset(c160.x);
+  uint4 _debugRenderToggle01 : packoffset(c161.x);
+  uint4 _debugTreeShapeVariation : packoffset(c162.x);
+  float4 _positionBasedDynamicsParameter : packoffset(c163.x);
+  float _effectiveMetallicForVelvet : packoffset(c164.x);
+  float _debugCharacterSnowRate : packoffset(c164.y);
+  uint _systemRandomSeed : packoffset(c164.z);
+  uint _skinnedMeshDebugFlag : packoffset(c164.w);
+  float4 _viewPosShifted : packoffset(c165.x);
+  float4 _viewPosShiftedPrev : packoffset(c166.x);
+  float4 _viewTileRelativePos : packoffset(c167.x);
+  float4 _viewTileRelativePosPrev : packoffset(c168.x);
+  int2 _viewTileIndex : packoffset(c169.x);
+  int2 _viewTileIndexPrev : packoffset(c169.z);
+  float4 _worldVolume : packoffset(c170.x);
+  float3 _diffViewPosAccurate : packoffset(c171.x);
+  uint _isPhotosensitiveMode_isAllolwBlood : packoffset(c171.w);
+  float _earthRadius : packoffset(c172.x);
+  float3 _sceneConstantDummy : packoffset(c172.y);
+};
+
+#define RENODX_TONEMAP_EXTERNAL_SCENE_CONSTANT_BUFFER 1
+#define RENODX_TONEMAP_SCENE_TIME_W _time.w
+#include "../tonemap.hlsli"
+
+
+
+#if 0 // Provided by tonemap.hlsli
+cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
+  float4 _exposure0 : packoffset(c000.x);
+  float4 _exposure1 : packoffset(c001.x);
+  float4 _exposure2 : packoffset(c002.x);
+  float4 _exposure3 : packoffset(c003.x);
+  float4 _exposure4 : packoffset(c004.x);
+};
+#endif
+
+#if 0 // Provided by tonemap.hlsli
+cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
+  float4 _postProcessParams : packoffset(c000.x);
+  float4 _postProcessParams1 : packoffset(c001.x);
+  float4 _toneMapParams0 : packoffset(c002.x);
+  float4 _toneMapParams1 : packoffset(c003.x);
+  float4 _colorGradingParams : packoffset(c004.x);
+  float4 _colorCorrectionParams : packoffset(c005.x);
+  float4 _localToneMappingParams : packoffset(c006.x);
+  float4 _etcParams : packoffset(c007.x);
+  float4 _userImageAdjust : packoffset(c008.x);
+  float4 _slopeParams : packoffset(c009.x);
+  float4 _offsetParams : packoffset(c010.x);
+  float4 _powerParams : packoffset(c011.x);
+  int _nightToneParm : packoffset(c012.x);
+  int3 _padding : packoffset(c012.y);
+};
+#endif
+
+cbuffer __3__1__0__0__PostProcessSizeConstant : register(b1, space1) {
+  float4 _srcTargetSizeAndInv : packoffset(c000.x);
+  float4 _destTargetSizAndInv : packoffset(c001.x);
+};
+
+cbuffer __3__1__0__0__PostProcessMaterialIndex : register(b2, space1) {
+  int _materialIndex : packoffset(c000.x);
+  int _passIndex : packoffset(c000.y);
+};
+
+#if 0 // Provided by tonemap.hlsli
+cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
+  float4 _colorBlind0 : packoffset(c000.x);
+  float4 _colorBlind1 : packoffset(c001.x);
+  float4 _colorBlind2 : packoffset(c002.x);
+};
+#endif
+
+struct BindlessParameters_PostProcessAbyssEnterIntro_CD {
+  PostProcessAbyssEnterIntro_CDStruct BindlessParameters_PostProcessAbyssEnterIntro_CD;
+};
+
+typedef BindlessParameters_PostProcessAbyssEnterIntro_CD BindlessParameters_PostProcessAbyssEnterIntro_CD_t;
+ConstantBuffer<BindlessParameters_PostProcessAbyssEnterIntro_CD_t> BindlessParameters_PostProcessAbyssEnterIntro_CD[] : register(b0, space100);
+
+SamplerState __0__4__0__0__g_staticBilinearClamp : register(s3, space4);
+
+// DXIL FirstbitHi: returns bit position counting from MSB (leading zeros count)
+uint firstbithigh_msb(int value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
+uint firstbithigh_msb(uint value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
+
+float4 main(
+  precise noperspective float4 SV_Position : SV_Position,
+  linear float2 TEXCOORD : TEXCOORD
+) : SV_Target {
+  float4 SV_Target;
+  float _24;
+  float _26;
+  float4 _29;
+  int _42;
+  float _50;
+  int _51;
+  float _59;
+  int _60;
+  float _68;
+  float _80;
+  float _81;
+  float _83;
+  float _85;
+  float _86;
+  float _88;
+  float _93;
+  float _95;
+  float _96;
+  float _99;
+  float _100;
+  float _101;
+  float _104;
+  float _110;
+  float _112;
+  float _113;
+  float _116;
+  float _117;
+  float _119;
+  float _120;
+  float _121;
+  float _122;
+  float _124;
+  float _125;
+  float _126;
+  float _130;
+  float _135;
+  float _136;
+  float _140;
+  float _141;
+  float _142;
+  float _144;
+  float _145;
+  float _146;
+  float _147;
+  float _150;
+  float _151;
+  float _152;
+  float _154;
+  float _157;
+  int _158;
+  float _166;
+  float _167;
+  float _168;
+  float _169;
+  float _170;
+  float _171;
+  float _172;
+  float _173;
+  float _174;
+  float _175;
+  float _191;
+  float _192;
+  float _193;
+  float _194;
+  float _196;
+  float _197;
+  float _198;
+  float _213;
+  float _214;
+  float _215;
+  float _216;
+  float _217;
+  float _218;
+  float _219;
+  float _220;
+  float _221;
+  float _222;
+  float _223;
+  float _224;
+  float _225;
+  int _226;
+  float _323;
+  float _324;
+  float _325;
+  float _326;
+  float _327;
+  float _328;
+  float _329;
+  float _361;
+  float _362;
+  float _363;
+  float _365;
+  float _366;
+  float _367;
+  float _420;
+  float _421;
+  float _422;
+  float _423;
+  float _424;
+  float _425;
+  int _426;
+  float _501;
+  float _833;
+  float _834;
+  float _835;
+  float _836;
+  float _837;
+  float _838;
+  int _839;
+  float _914;
+  float _1016;
+  float _1225;
+  float _1226;
+  float _1227;
+  float _1228;
+  float _1351;
+  float _1412;
+  float _1413;
+  float _1414;
+  float _2085;
+  float _2290;
+  float _2291;
+  float _2292;
+  float _2385;
+  float _2386;
+  float _2387;
+  float _2441;
+  float _2442;
+  float _2443;
+  float _2462;
+  float _2463;
+  float _2464;
+  float _2494;
+  float _2495;
+  float _2496;
+  float _2510;
+  float _2511;
+  float _2512;
+  float _236;
+  float _237;
+  float _238;
+  float _241;
+  float _261;
+  float _263;
+  float _265;
+  float _266;
+  float _270;
+  float _271;
+  float _272;
+  float _292;
+  float _297;
+  float _301;
+  float _306;
+  float _308;
+  float _309;
+  float _310;
+  float _311;
+  float _312;
+  float _317;
+  float _318;
+  float _319;
+  float _320;
+  float _343;
+  float _345;
+  float _347;
+  float _351;
+  float _352;
+  float _353;
+  float _354;
+  float _355;
+  float _356;
+  int _357;
+  int _368;
+  float _376;
+  int _377;
+  float _385;
+  int _386;
+  float _394;
+  int _395;
+  float _403;
+  float _404;
+  float _405;
+  float _406;
+  float _427;
+  float _428;
+  float _429;
+  float _443;
+  float _445;
+  float _447;
+  float _451;
+  float _452;
+  float _453;
+  float _457;
+  float _463;
+  float _464;
+  float _467;
+  float _472;
+  float _473;
+  bool _494;
+  float _504;
+  float _505;
+  float _508;
+  float _510;
+  float _512;
+  float _514;
+  float _515;
+  float _516;
+  float _518;
+  float _523;
+  float _526;
+  float _527;
+  float _528;
+  float _535;
+  float _538;
+  float _539;
+  float _540;
+  float _541;
+  float _542;
+  float _543;
+  float _544;
+  float _548;
+  float _549;
+  float _550;
+  float _554;
+  float _555;
+  float _556;
+  float _561;
+  float _563;
+  float _596;
+  float _598;
+  float _599;
+  float _600;
+  float _601;
+  float _602;
+  float _604;
+  float _605;
+  float _607;
+  float _609;
+  float _611;
+  float _612;
+  float _613;
+  float _614;
+  float _616;
+  float _619;
+  float _621;
+  float _624;
+  float _628;
+  float _644;
+  float _646;
+  float _648;
+  float _652;
+  float _653;
+  float _654;
+  float _655;
+  float _656;
+  float _657;
+  int _658;
+  float _664;
+  float _665;
+  float _666;
+  int _667;
+  float _677;
+  float _678;
+  float _679;
+  float _681;
+  float _687;
+  int _688;
+  float _698;
+  float _699;
+  float _700;
+  float _725;
+  float _729;
+  float _730;
+  float _731;
+  float _733;
+  float _734;
+  float _735;
+  float _736;
+  float _742;
+  float _743;
+  float _750;
+  float _751;
+  float _752;
+  float _754;
+  float _779;
+  float _783;
+  float _790;
+  float _791;
+  float _792;
+  float _793;
+  float _794;
+  float _795;
+  float _796;
+  float _797;
+  float _798;
+  float _814;
+  float _815;
+  float _816;
+  float _840;
+  float _841;
+  float _842;
+  float _856;
+  float _858;
+  float _860;
+  float _864;
+  float _865;
+  float _866;
+  float _870;
+  float _876;
+  float _877;
+  float _880;
+  float _885;
+  float _886;
+  bool _907;
+  float _917;
+  float _920;
+  float _922;
+  float _924;
+  float _926;
+  float _927;
+  float _928;
+  float _930;
+  float _935;
+  float _939;
+  float _940;
+  float _951;
+  float _952;
+  float _953;
+  float _954;
+  float _955;
+  float _956;
+  float _960;
+  float _961;
+  float _962;
+  float _973;
+  float _975;
+  float _979;
+  float _995;
+  float _997;
+  float _999;
+  float _1003;
+  float _1004;
+  float _1005;
+  float _1006;
+  float _1007;
+  float _1008;
+  int _1009;
+  int _1017;
+  float _1027;
+  float _1028;
+  float _1029;
+  float _1054;
+  float _1056;
+  float _1062;
+  int _1063;
+  float _1073;
+  float _1074;
+  float _1075;
+  float _1100;
+  float _1101;
+  int _1111;
+  float _1121;
+  float _1122;
+  float _1123;
+  float _1148;
+  int _1152;
+  float _1162;
+  float _1163;
+  float _1164;
+  float _1190;
+  float _1197;
+  float _1202;
+  float _1207;
+  int _1229;
+  float _1239;
+  float _1240;
+  float _1241;
+  float _1269;
+  float _1279;
+  float _1280;
+  float _1281;
+  int _1282;
+  float _1292;
+  float _1293;
+  float _1294;
+  int _1325;
+  float _1333;
+  float _1334;
+  float _1336;
+  float _1337;
+  float _1338;
+  float _1339;
+  float _1344;
+  float _1356;
+  float _1357;
+  float _1358;
+  float _1359;
+  float _1360;
+  float _1362;
+  float _1364;
+  float _1367;
+  float _1369;
+  float _1370;
+  float _1375;
+  float _1376;
+  float _1389;
+  float _1390;
+  float _1393;
+  float _1395;
+  float _1396;
+  float _1398;
+  float _1402;
+  float _1404;
+  int _1418;
+  float _1426;
+  float _1430;
+  float _1465;
+  float _1466;
+  float _1467;
+  float _1468;
+  float _1472;
+  float _1484;
+  float _1489;
+  float _1490;
+  float _1491;
+  float _1492;
+  float _1493;
+  float _1494;
+  float _1495;
+  float _1496;
+  float _1497;
+  float _1501;
+  float _1507;
+  float _1508;
+  float _1509;
+  float _1518;
+  float _1519;
+  float _1520;
+  float _1524;
+  float _1546;
+  float _1558;
+  int _1559;
+  float _1567;
+  float _1569;
+  float _1573;
+  float _1579;
+  float _1583;
+  float _1591;
+  float _1594;
+  float _1597;
+  float _1599;
+  float _1600;
+  float _1601;
+  float _1609;
+  float _1615;
+  float _1619;
+  float _1627;
+  float _1630;
+  float _1633;
+  float _1635;
+  float _1636;
+  float _1637;
+  float _1645;
+  float _1651;
+  float _1655;
+  float _1663;
+  float _1666;
+  float _1670;
+  float _1671;
+  float _1674;
+  float _1678;
+  float _1682;
+  float _1685;
+  float _1701;
+  float _1706;
+  float _1717;
+  float _1721;
+  float _1727;
+  float _1731;
+  float _1732;
+  float _1733;
+  float _1737;
+  float _1740;
+  float _1748;
+  float _1751;
+  float _1753;
+  bool _1756;
+  bool _1757;
+  bool _1758;
+  bool _1759;
+  float _1772;
+  float _1774;
+  bool _1777;
+  bool _1778;
+  float _1794;
+  int _1799;
+  float _1807;
+  int _1820;
+  float _1828;
+  float _1831;
+  int _1853;
+  float _1861;
+  int _1862;
+  float _1870;
+  float _1871;
+  float _1874;
+  float _1880;
+  float _1885;
+  float _1895;
+  float _1897;
+  float _1903;
+  int _1925;
+  float _1933;
+  float _1943;
+  float _1947;
+  float _1948;
+  float _1949;
+  int _1950;
+  float _1958;
+  int _1959;
+  float _1967;
+  float _1973;
+  float _1976;
+  float _1977;
+  int _1984;
+  int _1992;
+  float _1995;
+  float _1998;
+  float _2000;
+  float _2030;
+  int _2034;
+  float _2042;
+  float _2043;
+  float _2050;
+  float _2051;
+  float _2052;
+  int _2053;
+  float _2061;
+  float _2062;
+  float _2069;
+  float _2070;
+  float _2071;
+  uint _2072;
+  bool _2088;
+  float _2094;
+  float _2143;
+  float _2144;
+  float _2145;
+  float _2147;
+  float _2154;
+  float _2155;
+  float _2156;
+  float _2175;
+  float _2176;
+  float _2177;
+  float _2178;
+  float _2179;
+  float _2180;
+  float _2181;
+  float _2182;
+  float _2183;
+  float _2229;
+  float _2230;
+  float _2231;
+  float _2232;
+  float _2233;
+  float _2234;
+  float _2235;
+  float _2252;
+  float _2253;
+  float _2254;
+  float _2255;
+  float _2261;
+  float _2264;
+  float _2271;
+  float _2272;
+  float _2273;
+  float _2302;
+  float _2327;
+  float _2328;
+  float _2329;
+  float _2348;
+  float _2349;
+  float _2350;
+  float _2356;
+  float _2360;
+  float _2361;
+  float _2362;
+  float _2363;
+  float _2368;
+  float _2393;
+  float _2397;
+  float _2398;
+  float _2399;
+  float _2400;
+  float _2430;
+  float _2452;
+  float _2453;
+  float _2457;
+  float _2501;
+  int __loop_jump_target = -1;
+  _24 = _srcTargetSizeAndInv.x * TEXCOORD.x;
+  _26 = _srcTargetSizeAndInv.y * TEXCOORD.y;
+  _29 = __3__36__0__0__g_sceneColor.Sample(__0__4__0__0__g_staticBilinearClamp, float2(TEXCOORD.x, TEXCOORD.y));  // [sem: _3__36__0__0__g_sceneColor_sample]
+  _42 = WaveReadLaneFirst(_materialIndex);
+  _50 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_42 < (uint)170000), _42, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._cameraSpeed);
+  _51 = WaveReadLaneFirst(_materialIndex);
+  _59 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_51 < (uint)170000), _51, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._cameraSinIntensity);
+  _60 = WaveReadLaneFirst(_materialIndex);
+  _68 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_60 < (uint)170000), _60, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._cameraFov);
+  _80 = _time.x * _50;
+  _81 = _80 + -1.0f;
+  _83 = sin(_time.x * 0.10000000149011612f);
+  _85 = (_83 + 3.0f) + _80;
+  _86 = _80 * 0.13089969754219055f;
+  _88 = sin(_86 + 1.7000000476837158f);
+  _93 = _81 * 0.13089969754219055f;
+  _95 = sin(_93 + 1.7000000476837158f);
+  _96 = _95 * _59;
+  _99 = _96 * 2.0f;
+  _100 = (cos(_93) * _59) * _96;
+  _101 = _85 * 0.13089969754219055f;
+  _104 = sin(_101 + 1.7000000476837158f) * _59;
+  _110 = _104 - sin(_time.x * 0.0010000000474974513f);
+  _112 = ((cos(_101) * _59) * _104) + -1.0f;
+  _113 = 3.1415927410125732f / _68;
+  _116 = (_59 * 2.0f) * (_88 - _95);
+  _117 = (((_59 * _59) * _88) * cos(_86)) - _100;
+  _119 = rsqrt(dot(float3(_116, _117, 1.0f), float3(_116, _117, 1.0f)));  // [sem: invLength]
+  _120 = _119 * _116;
+  _121 = _119 * _117;
+  _122 = -0.0f - _120;
+  _124 = rsqrt(dot(float3(_119, 0.0f, _122), float3(_119, 0.0f, _122)));  // [sem: invLength]
+  _125 = _124 * _119;
+  _126 = _124 * _122;
+  _130 = _113 * ((_24 - (_srcTargetSizeAndInv.x * 0.5f)) / _srcTargetSizeAndInv.y);
+  _135 = _113 * ((_26 - (_srcTargetSizeAndInv.y * 0.5f)) / _srcTargetSizeAndInv.y);
+  _136 = _121 * _135;
+  _140 = ((_125 * _130) + _120) + (_126 * _136);
+  _141 = (((_125 * _119) - (_126 * _120)) * _135) + _121;
+  _142 = ((_126 * _130) + _119) - (_125 * _136);
+  _144 = rsqrt(dot(float3(_140, _141, _142), float3(_140, _141, _142)));  // [sem: invLength]
+  _145 = _140 * _144;
+  _146 = _141 * _144;
+  _147 = _142 * _144;
+  _150 = sin(-0.0f - _96) * 0.4000000059604645f;
+  _151 = cos(_150);
+  _152 = sin(_150);
+  _154 = mad(_152, _146, (_145 * _151));
+  _157 = mad(_151, _146, (-0.0f - (_152 * _145)));
+  _158 = WaveReadLaneFirst(_materialIndex);
+  _166 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_158 < (uint)170000), _158, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._stardustDensity);
+  _167 = _96 * 2.6666667461395264f;
+  _168 = _100 * 1.3333333730697632f;
+  _169 = _81 * 1.3333333730697632f;
+  _170 = floor(_167);
+  _171 = floor(_168);
+  _172 = floor(_169);
+  _173 = 1.0f / _154;
+  _174 = 1.0f / _157;
+  _175 = 1.0f / _147;
+  _191 = float((int)(((int)(uint)((int)(_154 > 0.0f))) - ((int)(uint)((int)(_154 < 0.0f)))));
+  _192 = float((int)(((int)(uint)((int)(_157 > 0.0f))) - ((int)(uint)((int)(_157 < 0.0f)))));
+  _193 = float((int)(((int)(uint)((int)(_147 > 0.0f))) - ((int)(uint)((int)(_147 < 0.0f)))));
+  _194 = _166 * 30.0f;
+  _196 = _191 * 0.5f;
+  _197 = _192 * 0.5f;
+  _198 = _193 * 0.5f;
+  if (_194 > 0.0f) {
+    _213 = _170;
+    _214 = _171;
+    _215 = _172;
+    _216 = (_173 * (((0.5f - _167) + _196) + _170));
+    _217 = (_174 * (((0.5f - _168) + _197) + _171));
+    _218 = (_175 * (((0.5f - _169) + _198) + _172));
+    _219 = 0.0f;
+    _220 = 0.0f;
+    _221 = 0.0f;
+    _222 = 0.0f;
+    _223 = 0.0f;
+    _224 = 0.0f;
+    _225 = 0.0f;
+    _226 = 0;
+    while(true) {
+      _323 = _219;
+      _324 = _220;
+      _325 = _221;
+      _326 = _222;
+      _327 = _223;
+      _328 = _224;
+      _329 = _225;
+      _236 = frac(sin(dot(float3(_213, _214, _215), float3(127.0999984741211f, 311.70001220703125f, 74.69999694824219f))) * 43758.546875f);
+      _237 = frac(sin(dot(float3(_213, _214, _215), float3(269.5f, 183.3000030517578f, 246.10000610351562f))) * 43758.546875f);
+      _238 = frac(sin(dot(float3(_213, _214, _215), float3(113.5f, 271.8999938964844f, 124.5999984741211f))) * 43758.546875f);
+      _241 = _time.x * _236;
+      _261 = (_213 - _167) + min(max(((cos(_241 + _236) * 0.10000000149011612f) + _236), 0.014999999664723873f), 0.9850000143051147f);
+      _263 = (_214 - _168) + min(max(((cos(_241 + _237) * 0.10000000149011612f) + _237), 0.014999999664723873f), 0.9850000143051147f);
+      _265 = (_215 - _169) + min(max(((cos(_241 + _238) * 0.10000000149011612f) + _238), 0.014999999664723873f), 0.9850000143051147f);
+      _266 = dot(float3(_261, _263, _265), float3(_154, _157, _147));
+      _270 = _261 - (_266 * _154);
+      _271 = _263 - (_266 * _157);
+      _272 = _265 - (_266 * _147);
+      bool __branch_chain_212;
+      if (!((_266 > 0.0f) && ((_266 * 0.75f) < 50.0f))) {
+        _323 = _219;
+        _324 = _220;
+        _325 = _221;
+        _326 = _222;
+        _327 = _223;
+        _328 = _224;
+        _329 = _225;
+        __branch_chain_212 = true;
+      } else {
+  // [sem: expr_sat]
+        _292 = saturate((sqrt(((_270 * _270) + (_271 * _271)) + (_272 * _272)) + -0.007499999832361937f) * 133.33334350585938f);
+        _297 = 1.0f - ((_292 * _292) * (3.0f - (_292 * 2.0f)));
+        _301 = saturate((_266 - _194) / (-0.0f - _194));  // [sem: expr_sat]
+        _306 = ((_301 * _301) * (3.0f - (_301 * 2.0f))) * _297;
+        _308 = _297 * (_306 / _266);
+        _309 = _308 * ((_219 * 0.4000000059604645f) + 0.6000000238418579f);
+        _310 = _308 * ((_220 * 0.4000000059604645f) + 0.6000000238418579f);
+        _311 = _308 * ((_221 * 0.4000000059604645f) + 0.6000000238418579f);
+        _312 = 1.0f - _225;
+        _317 = (_309 * _312) + _222;
+        _318 = (_310 * _312) + _223;
+        _319 = (_311 * _312) + _224;
+        _320 = (_306 * _312) + _225;
+        if (!(_320 > 0.9900000095367432f)) {
+          _323 = _309;
+          _324 = _310;
+          _325 = _311;
+          _326 = _317;
+          _327 = _318;
+          _328 = _319;
+          _329 = _320;
+          __branch_chain_212 = true;
+        } else {
+          _361 = _317;
+          _362 = _318;
+          _363 = _319;
+          __branch_chain_212 = false;
+        }
+      }
+      if (__branch_chain_212) {
+        _343 = (select((_217 < _216), 0.0f, 1.0f) * _191) * select((_218 < _216), 0.0f, 1.0f);
+        _345 = (select((_216 < _217), 0.0f, 1.0f) * _192) * select((_218 < _217), 0.0f, 1.0f);
+        _347 = (select((_216 < _218), 0.0f, 1.0f) * _193) * select((_217 < _218), 0.0f, 1.0f);
+        _351 = (_343 * _173) + _216;
+        _352 = (_345 * _174) + _217;
+        _353 = (_347 * _175) + _218;
+        _354 = _343 + _213;
+        _355 = _345 + _214;
+        _356 = _347 + _215;
+        _357 = _226 + 1;
+        if (float((int)(_357)) < _194) {
+          _213 = _354;
+          _214 = _355;
+          _215 = _356;
+          _216 = _351;
+          _217 = _352;
+          _218 = _353;
+          _219 = _323;
+          _220 = _324;
+          _221 = _325;
+          _222 = _326;
+          _223 = _327;
+          _224 = _328;
+          _225 = _329;
+          _226 = _357;
+          continue;
+        } else {
+          _361 = _326;
+          _362 = _327;
+          _363 = _328;
+        }
+      }
+      _365 = _361;
+      _366 = _362;
+      _367 = _363;
+      break;
+    }
+  } else {
+    _365 = 0.0f;
+    _366 = 0.0f;
+    _367 = 0.0f;
+  }
+  _368 = WaveReadLaneFirst(_materialIndex);
+  _376 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_368 < (uint)170000), _368, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._stardustIntensity);
+  _377 = WaveReadLaneFirst(_materialIndex);
+  _385 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_377 < (uint)170000), _377, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._cubeScale);
+  _386 = WaveReadLaneFirst(_materialIndex);
+  _394 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_386 < (uint)170000), _386, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._cubeDistance);
+  _395 = WaveReadLaneFirst(_materialIndex);
+  _403 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_395 < (uint)170000), _395, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._cubeMinScale);
+  _404 = floor(_99);
+  _405 = floor(_100);
+  _406 = floor(_81);
+  _420 = _404;
+  _421 = _405;
+  _422 = _406;
+  _423 = ((((0.5f - _99) + _196) + _404) * _173);
+  _424 = ((((0.5f - _100) + _197) + _405) * _174);
+  _425 = ((((1.5f - _80) + _198) + _406) * _175);
+  _426 = 0;
+  while(true) {
+    _427 = _420 * 0.3499999940395355f;
+    _428 = _421 * 0.3499999940395355f;
+    _429 = _422 * 0.3499999940395355f;
+    _443 = (_420 + -0.5f) + frac(sin(dot(float3(_427, _428, _429), float3(127.0999984741211f, 311.70001220703125f, 74.69999694824219f))) * 43758.546875f);
+    _445 = (_421 + -0.5f) + frac(sin(dot(float3(_427, _428, _429), float3(269.5f, 183.3000030517578f, 246.10000610351562f))) * 43758.546875f);
+    _447 = (_422 + -0.5f) + frac(sin(dot(float3(_427, _428, _429), float3(113.5f, 271.8999938964844f, 124.5999984741211f))) * 43758.546875f);
+    _451 = frac(_443 * 0.1031000018119812f);
+    _452 = frac(_445 * 0.1031000018119812f);
+    _453 = frac(_447 * 0.1031000018119812f);
+    _457 = dot(float3(_451, _452, _453), float3((_452 + 19.190000534057617f), (_453 + 19.190000534057617f), (_451 + 19.190000534057617f)));
+    _463 = frac(((_452 + _451) + (_457 * 2.0f)) * (_457 + _453));
+    _464 = _447 * 0.13089969754219055f;
+    _467 = sin(_464 + 1.7000000476837158f) * _59;
+    _472 = _443 - (_467 * 2.0f);
+    _473 = _445 - ((cos(_464) * _59) * _467);
+    if (!(abs(select((_473 < 0.0f), 0.5f, 0.0f) + _473) > 0.3499999940395355f) || ((abs(select((_473 < 0.0f), 0.5f, 0.0f) + _473) > 0.3499999940395355f) && (!(sqrt((_473 * _473) + (_472 * _472)) > (_394 - ((_463 * 6.0f) * exp2(log2(saturate(_425 * 0.015625f)) * 2.200000047683716f))))))) {
+      _644 = (select((_424 < _423), 0.0f, 1.0f) * _191) * select((_425 < _423), 0.0f, 1.0f);
+      _646 = (select((_423 < _424), 0.0f, 1.0f) * _192) * select((_425 < _424), 0.0f, 1.0f);
+      _648 = (select((_423 < _425), 0.0f, 1.0f) * _193) * select((_424 < _425), 0.0f, 1.0f);
+      _652 = (_644 * _173) + _423;
+      _653 = (_646 * _174) + _424;
+      _654 = (_648 * _175) + _425;
+      _655 = _644 + _420;
+      _656 = _646 + _421;
+      _657 = _648 + _422;
+      _658 = _426 + 1;
+      if ((int)_658 < (int)64) {
+        _420 = _655;
+        _421 = _656;
+        _422 = _657;
+        _423 = _652;
+        _424 = _653;
+        _425 = _654;
+        _426 = _658;
+        continue;
+      } else {
+        _1225 = 0.0f;
+        _1226 = 0.0f;
+        _1227 = 0.0f;
+        _1228 = 50.0f;
+      }
+    } else {
+      _494 = (_463 < 0.3499999940395355f);
+      if (!_494) {
+        _501 = ((_463 + _422) + _time.x);
+      } else {
+        _501 = 0.0f;
+      }
+      _504 = select(_494, 0.0f, ((_501 * 2.0f) + _421));
+      _505 = _403 * 0.25f;
+      _508 = min(max((_463 * 0.4000000059604645f), _505), _385);
+      _510 = (_99 + -0.5f) - _443;
+      _512 = (_100 + -0.5f) - _445;
+      _514 = (_80 + -1.5f) - _447;
+      _515 = cos(_501);
+      _516 = sin(_501);
+      _518 = mad(_516, _512, (_515 * _514));
+      _523 = mad(_516, _157, (_515 * _147));
+      _526 = mad(_515, _157, (-0.0f - (_147 * _516)));
+      _527 = cos(_504);
+      _528 = sin(_504);
+      _535 = mad(_528, _523, (_527 * _154));
+      _538 = mad(_527, _523, (-0.0f - (_154 * _528)));
+      _539 = 1.0f / _535;
+      _540 = 1.0f / _526;
+      _541 = 1.0f / _538;
+      _542 = _539 * mad(_528, _518, (_527 * _510));
+      _543 = _540 * mad(_515, _512, (-0.0f - (_514 * _516)));
+      _544 = _541 * mad(_527, _518, (-0.0f - (_510 * _528)));
+      _548 = abs(_539) * _508;
+      _549 = abs(_540) * _508;
+      _550 = abs(_541) * _508;
+      _554 = (-0.0f - _542) - _548;
+      _555 = (-0.0f - _543) - _549;
+      _556 = (-0.0f - _544) - _550;
+      _561 = max(max(_554, _555), _556);
+      _563 = min(min((_548 - _542), (_549 - _543)), (_550 - _544));
+      _596 = (select((_554 < _555), 0.0f, 1.0f) * float((int)(((int)(uint)((int)(_535 < 0.0f))) - ((int)(uint)((int)(_535 > 0.0f)))))) * select((_554 < _556), 0.0f, 1.0f);
+      _598 = (select((_555 < _554), 0.0f, 1.0f) * float((int)(((int)(uint)((int)(_526 < 0.0f))) - ((int)(uint)((int)(_526 > 0.0f)))))) * select((_555 < _556), 0.0f, 1.0f);
+      _599 = (select((_556 < _554), 0.0f, 1.0f) * float((int)(((int)(uint)((int)(_538 < 0.0f))) - ((int)(uint)((int)(_538 > 0.0f)))))) * select((_556 < _555), 0.0f, 1.0f);
+      _600 = -0.0f - _501;
+      _601 = cos(_600);
+      _602 = sin(_600);
+      _604 = mad(_602, _598, (_599 * _601));
+      _605 = -0.0f - _602;
+      _607 = mad(_601, _598, (_599 * _605));
+      _609 = mad(_602, _607, (_604 * _601));
+      _611 = mad(_601, _607, (_604 * _605));
+      _612 = -0.0f - _504;
+      _613 = cos(_612);
+      _614 = sin(_612);
+      _616 = mad(_614, _609, (_613 * _596));
+      _619 = mad(_613, _609, (-0.0f - (_596 * _614)));
+      _621 = mad(_614, _619, (_616 * _613));
+      _624 = mad(_613, _619, (-0.0f - (_614 * _616)));
+      _628 = select(((_561 > _563) || (_563 < 0.0f)), 0.0f, _561);
+      if (_628 > 0.0f) {
+        _664 = (_628 * _154) + _99;
+        _665 = (_628 * _157) + _100;
+        _666 = (_628 * _147) + _81;
+        _667 = WaveReadLaneFirst(_materialIndex);
+        _677 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_667 < (uint)170000), _667, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._lightColor.x);
+        _678 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_667 < (uint)170000), _667, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._lightColor.y);
+        _679 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_667 < (uint)170000), _667, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._lightColor.z);
+        _681 = rsqrt(dot(float3(_677, _678, _679), float3(_677, _678, _679)));  // [sem: invLength]
+        _687 = max(dot(float3((_681 * _677), (_681 * _678), (_681 * _679)), float3(_621, _611, _624)), 0.05000000074505806f) * 0.009999999776482582f;
+        _688 = WaveReadLaneFirst(_materialIndex);
+        _698 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_688 < (uint)170000), _688, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._ambientColor.x);
+        _699 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_688 < (uint)170000), _688, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._ambientColor.y);
+        _700 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_688 < (uint)170000), _688, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._ambientColor.z);
+        _725 = max(0.0f, _611);
+        _729 = (_110 * 2.0f) - _664;
+        _730 = _112 - _665;
+        _731 = _85 - _666;
+        _733 = rsqrt(dot(float3(_729, _730, _731), float3(_729, _730, _731)));  // [sem: invLength]
+        _734 = _733 * _729;
+        _735 = _733 * _730;
+        _736 = _733 * _731;
+        _742 = sqrt(((_729 * _729) + (_730 * _730)) + (_731 * _731));
+        _743 = _742 * _742;
+        _750 = -0.0f - _734;
+        _751 = -0.0f - _735;
+        _752 = -0.0f - _736;
+        _754 = dot(float3(_750, _751, _752), float3(_621, _611, _624)) * 2.0f;
+        _779 = ((_time.x * 8.0f) + _666) * 0.02500000037252903f;
+        _783 = frac(abs(_779));
+        _790 = _664 - (_154 * 0.009999999776482582f);
+        _791 = _665 - (_157 * 0.009999999776482582f);
+        _792 = _666 - (_147 * 0.009999999776482582f);
+        _793 = floor(_790);
+        _794 = floor(_791);
+        _795 = floor(_792);
+        _796 = 1.0f / _734;
+        _797 = 1.0f / _735;
+        _798 = 1.0f / _736;
+        _814 = float((int)(((int)(uint)((int)(_734 > 0.0f))) - ((int)(uint)((int)(_734 < 0.0f)))));
+        _815 = float((int)(((int)(uint)((int)(_735 > 0.0f))) - ((int)(uint)((int)(_735 < 0.0f)))));
+        _816 = float((int)(((int)(uint)((int)(_736 > 0.0f))) - ((int)(uint)((int)(_736 < 0.0f)))));
+        _833 = _793;
+        _834 = _794;
+        _835 = _795;
+        _836 = (_796 * (((0.5f - _790) + (_814 * 0.5f)) + _793));
+        _837 = (_797 * (((0.5f - _791) + (_815 * 0.5f)) + _794));
+        _838 = (_798 * (((0.5f - _792) + (_816 * 0.5f)) + _795));
+        _839 = 0;
+        while(true) {
+          _840 = _833 * 0.3499999940395355f;
+          _841 = _834 * 0.3499999940395355f;
+          _842 = _835 * 0.3499999940395355f;
+          _856 = (_833 + -0.5f) + frac(sin(dot(float3(_840, _841, _842), float3(127.0999984741211f, 311.70001220703125f, 74.69999694824219f))) * 43758.546875f);
+          _858 = (_834 + -0.5f) + frac(sin(dot(float3(_840, _841, _842), float3(269.5f, 183.3000030517578f, 246.10000610351562f))) * 43758.546875f);
+          _860 = (_835 + -0.5f) + frac(sin(dot(float3(_840, _841, _842), float3(113.5f, 271.8999938964844f, 124.5999984741211f))) * 43758.546875f);
+          _864 = frac(_856 * 0.1031000018119812f);
+          _865 = frac(_858 * 0.1031000018119812f);
+          _866 = frac(_860 * 0.1031000018119812f);
+          _870 = dot(float3(_864, _865, _866), float3((_865 + 19.190000534057617f), (_866 + 19.190000534057617f), (_864 + 19.190000534057617f)));
+          _876 = frac(((_865 + _864) + (_870 * 2.0f)) * (_870 + _866));
+          _877 = _860 * 0.13089969754219055f;
+          _880 = sin(_877 + 1.7000000476837158f) * _59;
+          _885 = _856 - (_880 * 2.0f);
+          _886 = _858 - ((cos(_877) * _59) * _880);
+          if (!(abs(select((_886 < 0.0f), 0.5f, 0.0f) + _886) > 0.3499999940395355f) || ((abs(select((_886 < 0.0f), 0.5f, 0.0f) + _886) > 0.3499999940395355f) && (!(sqrt((_886 * _886) + (_885 * _885)) > (_394 - ((_876 * 6.0f) * exp2(log2(saturate(_838 * 0.015625f)) * 2.200000047683716f))))))) {
+            _995 = (select((_837 < _836), 0.0f, 1.0f) * _814) * select((_838 < _836), 0.0f, 1.0f);
+            _997 = (select((_836 < _837), 0.0f, 1.0f) * _815) * select((_838 < _837), 0.0f, 1.0f);
+            _999 = (select((_836 < _838), 0.0f, 1.0f) * _816) * select((_837 < _838), 0.0f, 1.0f);
+            _1003 = (_995 * _796) + _836;
+            _1004 = (_997 * _797) + _837;
+            _1005 = (_999 * _798) + _838;
+            _1006 = _995 + _833;
+            _1007 = _997 + _834;
+            _1008 = _999 + _835;
+            _1009 = _839 + 1;
+            if ((int)_1009 < (int)64) {
+              _833 = _1006;
+              _834 = _1007;
+              _835 = _1008;
+              _836 = _1003;
+              _837 = _1004;
+              _838 = _1005;
+              _839 = _1009;
+              continue;
+            } else {
+              _1016 = 1.0f;
+            }
+          } else {
+            _907 = (_876 < 0.3499999940395355f);
+            if (!_907) {
+              _914 = ((_876 + _835) + _time.x);
+            } else {
+              _914 = 0.0f;
+            }
+            _917 = select(_907, 0.0f, ((_914 * 2.0f) + _834));
+            _920 = min(max((_876 * 0.4000000059604645f), _505), _385);
+            _922 = (_790 + -0.5f) - _856;
+            _924 = (_791 + -0.5f) - _858;
+            _926 = (_792 + -0.5f) - _860;
+            _927 = cos(_914);
+            _928 = sin(_914);
+            _930 = mad(_928, _924, (_927 * _926));
+            _935 = mad(_928, _735, (_927 * _736));
+            _939 = cos(_917);
+            _940 = sin(_917);
+            _951 = 1.0f / mad(_940, _935, (_939 * _734));
+            _952 = 1.0f / mad(_927, _735, (-0.0f - (_736 * _928)));
+            _953 = 1.0f / mad(_939, _935, (-0.0f - (_734 * _940)));
+            _954 = _951 * mad(_940, _930, (_939 * _922));
+            _955 = _952 * mad(_927, _924, (-0.0f - (_926 * _928)));
+            _956 = _953 * mad(_939, _930, (-0.0f - (_922 * _940)));
+            _960 = abs(_951) * _920;
+            _961 = abs(_952) * _920;
+            _962 = abs(_953) * _920;
+            _973 = max(max(((-0.0f - _954) - _960), ((-0.0f - _955) - _961)), ((-0.0f - _956) - _962));
+            _975 = min(min((_960 - _954), (_961 - _955)), (_962 - _956));
+            _979 = select(((_973 > _975) || (_975 < 0.0f)), 0.0f, _973);
+            if (_979 > 0.0f) {
+              _1016 = select((_979 < _742), 0.0f, 1.0f);
+            } else {
+              _995 = (select((_837 < _836), 0.0f, 1.0f) * _814) * select((_838 < _836), 0.0f, 1.0f);
+              _997 = (select((_836 < _837), 0.0f, 1.0f) * _815) * select((_838 < _837), 0.0f, 1.0f);
+              _999 = (select((_836 < _838), 0.0f, 1.0f) * _816) * select((_837 < _838), 0.0f, 1.0f);
+              _1003 = (_995 * _796) + _836;
+              _1004 = (_997 * _797) + _837;
+              _1005 = (_999 * _798) + _838;
+              _1006 = _995 + _833;
+              _1007 = _997 + _834;
+              _1008 = _999 + _835;
+              _1009 = _839 + 1;
+              if ((int)_1009 < (int)64) {
+                _833 = _1006;
+                _834 = _1007;
+                _835 = _1008;
+                _836 = _1003;
+                _837 = _1004;
+                _838 = _1005;
+                _839 = _1009;
+                continue;
+              } else {
+                _1016 = 1.0f;
+              }
+            }
+          }
+          _1017 = WaveReadLaneFirst(_materialIndex);
+          _1027 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1017 < (uint)170000), _1017, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._globalColor.x);
+          _1028 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1017 < (uint)170000), _1017, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._globalColor.y);
+          _1029 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1017 < (uint)170000), _1017, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._globalColor.z);
+          _1054 = dot(float3(_734, _735, _736), float3(_621, _611, _624));
+          _1056 = max(_1054, 0.05000000074505806f) * (1.0f / ((_743 * 0.05000000074505806f) + 1.0f));
+          _1062 = 1.0f / ((_743 * 0.10000000149011612f) + 1.0f);
+          _1063 = WaveReadLaneFirst(_materialIndex);
+          _1073 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1063 < (uint)170000), _1063, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._mainTintColor.x);
+          _1074 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1063 < (uint)170000), _1063, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._mainTintColor.y);
+          _1075 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1063 < (uint)170000), _1063, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._mainTintColor.z);
+          _1100 = max(_1054, 0.009999999776482582f);
+          _1101 = _1100 * _1062;
+          _1111 = WaveReadLaneFirst(_materialIndex);
+          _1121 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1111 < (uint)170000), _1111, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._mainTintColor.x);
+          _1122 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1111 < (uint)170000), _1111, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._mainTintColor.y);
+          _1123 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1111 < (uint)170000), _1111, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._mainTintColor.z);
+          _1148 = _1062 * exp2(log2(max(dot(float3((_750 - (_754 * _621)), (_751 - (_754 * _611)), (_752 - (_754 * _624))), float3((-0.0f - _154), (-0.0f - _157), (-0.0f - _147))), 0.0f)) * 100.0f);
+          _1152 = WaveReadLaneFirst(_materialIndex);
+          _1162 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1152 < (uint)170000), _1152, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._waveColor.x);
+          _1163 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1152 < (uint)170000), _1152, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._waveColor.y);
+          _1164 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1152 < (uint)170000), _1152, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._waveColor.z);
+          _1190 = _1100 * (_1062 * 2.0f);
+          _1197 = exp2(log2(_1148 * 0.3185468018054962f) * 0.8333333134651184f);
+          _1202 = select(((select((_779 >= (-0.0f - _779)), _783, (-0.0f - _783)) * 40.0f) > 4.0f), 0.0f, 1.0f);
+          _1207 = (_628 * 0.10000000149011612f) + 1.0f;
+          _1225 = (((((_725 * select((_698 < 0.040449999272823334f), (_698 * 0.07739938050508499f), exp2(log2((_698 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + _687) + (((_1101 * select((_1073 < 0.040449999272823334f), (_1073 * 0.07739938050508499f), exp2(log2((_1073 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + (_1056 * select((_1027 < 0.040449999272823334f), (_1027 * 0.07739938050508499f), exp2(log2((_1027 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)))) * _1016)) + (select((_1121 < 0.040449999272823334f), (_1121 * 0.07739938050508499f), exp2(log2((_1121 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)) * _1148)) + (((_1197 + (_1190 * select((_1162 < 0.040449999272823334f), (_1162 * 0.07739938050508499f), exp2(log2((_1162 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)))) * _1202) / _1207));
+          _1226 = (((((_725 * select((_699 < 0.040449999272823334f), (_699 * 0.07739938050508499f), exp2(log2((_699 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + _687) + (((_1101 * select((_1074 < 0.040449999272823334f), (_1074 * 0.07739938050508499f), exp2(log2((_1074 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + (_1056 * select((_1028 < 0.040449999272823334f), (_1028 * 0.07739938050508499f), exp2(log2((_1028 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)))) * _1016)) + (select((_1122 < 0.040449999272823334f), (_1122 * 0.07739938050508499f), exp2(log2((_1122 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)) * _1148)) + (((_1197 + (_1190 * select((_1163 < 0.040449999272823334f), (_1163 * 0.07739938050508499f), exp2(log2((_1163 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)))) * _1202) / _1207));
+          _1227 = (((((select((_700 < 0.040449999272823334f), (_700 * 0.07739938050508499f), exp2(log2((_700 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)) * _725) + _687) + (((_1101 * select((_1075 < 0.040449999272823334f), (_1075 * 0.07739938050508499f), exp2(log2((_1075 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + (_1056 * select((_1029 < 0.040449999272823334f), (_1029 * 0.07739938050508499f), exp2(log2((_1029 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)))) * _1016)) + (select((_1123 < 0.040449999272823334f), (_1123 * 0.07739938050508499f), exp2(log2((_1123 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)) * _1148)) + ((((_1190 * select((_1164 < 0.040449999272823334f), (_1164 * 0.07739938050508499f), exp2(log2((_1164 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + _1197) * _1202) / _1207));
+          _1228 = _628;
+          break;
+        }
+      } else {
+        _644 = (select((_424 < _423), 0.0f, 1.0f) * _191) * select((_425 < _423), 0.0f, 1.0f);
+        _646 = (select((_423 < _424), 0.0f, 1.0f) * _192) * select((_425 < _424), 0.0f, 1.0f);
+        _648 = (select((_423 < _425), 0.0f, 1.0f) * _193) * select((_424 < _425), 0.0f, 1.0f);
+        _652 = (_644 * _173) + _423;
+        _653 = (_646 * _174) + _424;
+        _654 = (_648 * _175) + _425;
+        _655 = _644 + _420;
+        _656 = _646 + _421;
+        _657 = _648 + _422;
+        _658 = _426 + 1;
+        if ((int)_658 < (int)64) {
+          _420 = _655;
+          _421 = _656;
+          _422 = _657;
+          _423 = _652;
+          _424 = _653;
+          _425 = _654;
+          _426 = _658;
+          continue;
+        } else {
+          _1225 = 0.0f;
+          _1226 = 0.0f;
+          _1227 = 0.0f;
+          _1228 = 50.0f;
+        }
+      }
+    }
+    _1229 = WaveReadLaneFirst(_materialIndex);
+    _1239 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1229 < (uint)170000), _1229, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._fogColor.x);
+    _1240 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1229 < (uint)170000), _1229, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._fogColor.y);
+    _1241 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1229 < (uint)170000), _1229, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._fogColor.z);
+    _1269 = exp2(log2(_1228 * 0.019999999552965164f) * 6.0f);
+    _1279 = ((_1269 * (select((_1239 < 0.040449999272823334f), (_1239 * 0.07739938050508499f), exp2(log2((_1239 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)) - _1225)) + _1225) * 1.2000000476837158f;
+    _1280 = ((_1269 * (select((_1240 < 0.040449999272823334f), (_1240 * 0.07739938050508499f), exp2(log2((_1240 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)) - _1226)) + _1226) * 1.2000000476837158f;
+    _1281 = ((_1269 * (select((_1241 < 0.040449999272823334f), (_1241 * 0.07739938050508499f), exp2(log2((_1241 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f)) - _1227)) + _1227) * 1.2000000476837158f;
+    _1282 = WaveReadLaneFirst(_materialIndex);
+    _1292 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1282 < (uint)170000), _1282, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._centerGlowColor.x);
+    _1293 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1282 < (uint)170000), _1282, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._centerGlowColor.y);
+    _1294 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1282 < (uint)170000), _1282, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._centerGlowColor.z);
+    _1325 = WaveReadLaneFirst(_materialIndex);
+    _1333 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1325 < (uint)170000), _1325, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._centerGlowRadius);
+    _1334 = _1333 * ((sin(_time.x * 5.0f) * 0.050000011920928955f) + 0.949999988079071f);
+    _1336 = (_96 - _110) * 2.0f;
+    _1337 = _100 - _112;
+    _1338 = -4.0f - _83;
+    _1339 = dot(float3(_1336, _1337, _1338), float3(_154, _157, _147));
+    _1344 = (_1339 * _1339) - (dot(float3(_1336, _1337, _1338), float3(_1336, _1337, _1338)) - (_1334 * _1334));
+    if (!(_1344 < 0.0f)) {
+      _1351 = ((-0.0f - _1339) - sqrt(_1344));
+    } else {
+      _1351 = 0.0f;
+    }
+    if ((_1351 > 0.0f) && (_1351 < _1228)) {
+      _1356 = 50.0f / _1334;
+      _1357 = _1336 / _1334;
+      _1358 = _1337 / _1334;
+      _1359 = _1338 / _1334;
+      _1360 = dot(float3(_154, _157, _147), float3(_1357, _1358, _1359));
+      _1362 = dot(float3(_1357, _1358, _1359), float3(_1357, _1358, _1359)) + -1.0f;
+      _1364 = (_1360 * _1360) - _1362;
+      if (!(_1364 < 0.0f)) {
+        _1367 = sqrt(_1364);
+        _1369 = (-0.0f - _1360) - _1367;
+        _1370 = _1367 - _1360;
+        if (!((_1370 < 0.0f) || (_1369 > _1356))) {
+          _1375 = max(_1369, 0.0f);
+          _1376 = min(_1370, _1356);
+          _1389 = ((((-0.0f - _1362) - (_1376 * _1360)) + ((_1376 * _1376) * -0.3333333432674408f)) * _1376) + (((((_1375 * 0.3333333432674408f) + _1360) * _1375) + _1362) * _1375);
+          _1390 = _1389 * 0.75f;
+          if (_1390 > 0.0f) {
+            _1393 = _1390 * _1390;
+            _1395 = _1390 * (_1393 * _1393);
+            _1396 = _1395 * _1395;
+            _1398 = (_1396 * _1396) * 5.0f;
+            _1402 = _1390 * _1389;
+            _1404 = _1402 * 0.22500000894069672f;
+            _1412 = (((_1398 * select((_1292 < 0.040449999272823334f), (_1292 * 0.07739938050508499f), exp2(log2((_1292 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + _1279) + (_1402 * 0.07500000298023224f));
+            _1413 = (((_1398 * select((_1293 < 0.040449999272823334f), (_1293 * 0.07739938050508499f), exp2(log2((_1293 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + _1280) + _1404);
+            _1414 = (((_1398 * select((_1294 < 0.040449999272823334f), (_1294 * 0.07739938050508499f), exp2(log2((_1294 + 0.054999999701976776f) * 0.9478673338890076f) * 2.4000000953674316f))) + _1281) + _1404);
+          } else {
+            _1412 = _1279;
+            _1413 = _1280;
+            _1414 = _1281;
+          }
+        } else {
+          _1412 = _1279;
+          _1413 = _1280;
+          _1414 = _1281;
+        }
+      } else {
+        _1412 = _1279;
+        _1413 = _1280;
+        _1414 = _1281;
+      }
+    } else {
+      _1412 = _1279;
+      _1413 = _1280;
+      _1414 = _1281;
+    }
+    _1418 = WaveReadLaneFirst(_materialIndex);
+    _1426 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1418 < (uint)170000), _1418, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._tunnelTotal);
+    _1430 = _376 * _166;
+    _1465 = (_24 - (_srcTargetSizeAndInv.x * 0.5f)) / _srcTargetSizeAndInv.y;
+    _1466 = (_26 - (_srcTargetSizeAndInv.y * 0.5f)) / _srcTargetSizeAndInv.y;
+    _1467 = _1465 * 1.5f;
+    _1468 = _1466 * 1.5f;
+    _1472 = sqrt((_1468 * _1468) + (_1467 * _1467));
+    _1484 = frac((sin((_1466 * 0.15000000596046448f) + (_1465 * 25.5f)) * 10000.0f) * (abs(sin((_1466 * 19.5f) + _1467)) + 0.10000000149011612f));
+    _1489 = _time.x * 0.5f;
+    _1490 = _1489 + (_1465 * 22.5f);
+    _1491 = _1489 + (_1466 * 22.5f);
+    _1492 = floor(_1490);
+    _1493 = floor(_1491);
+    _1494 = frac(_1490);
+    _1495 = frac(_1491);
+    _1496 = _1492 * 17.0f;
+    _1497 = _1493 * 0.10000000149011612f;
+    _1501 = _1493 * 13.0f;
+    _1507 = frac((sin(_1497 + _1496) * 10000.0f) * (abs(sin(_1501 + _1492)) + 0.10000000149011612f));
+    _1508 = _1492 + 1.0f;
+    _1509 = _1508 * 17.0f;
+    _1518 = frac((sin(_1509 + _1497) * 10000.0f) * (abs(sin(_1501 + _1508)) + 0.10000000149011612f));
+    _1519 = _1493 + 1.0f;
+    _1520 = _1519 * 0.10000000149011612f;
+    _1524 = _1519 * 13.0f;
+    _1546 = (_1494 * _1494) * (3.0f - (_1494 * 2.0f));
+  // [sem: blended]
+    _1558 = (lerp(_1507, _1518, _1546)) + (((_1495 * _1495) * (3.0f - (_1495 * 2.0f))) * (((frac((sin(_1520 + _1509) * 10000.0f) * (abs(sin(_1524 + _1508)) + 0.10000000149011612f)) - _1518) * _1546) + ((frac((sin(_1520 + _1496) * 10000.0f) * (abs(sin(_1524 + _1492)) + 0.10000000149011612f)) - _1507) * (1.0f - _1546))));
+    _1559 = WaveReadLaneFirst(_materialIndex);
+    _1567 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1559 < (uint)170000), _1559, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._anamorphicWidth);
+    _1569 = (_1567 * 0.8999999761581421f) + 0.10999999940395355f;
+    _1573 = saturate((_1472 - _1569) / (-0.0f - _1569));  // [sem: expr_sat]
+    _1579 = saturate((cos(_1467) * 0.4000000059604645f) + -1.0f);  // [sem: expr_sat]
+    _1583 = (_1579 * _1579) * (3.0f - (_1579 * 2.0f));
+    _1591 = saturate(((abs(_1583 + _1468) + -0.03999999910593033f) + abs(_1468 - _1583)) * -25.0f);  // [sem: expr_sat]
+    _1594 = _1573 * _1591;
+    _1597 = ((3.0f - (_1591 * 2.0f)) * (3.0f - (_1573 * 2.0f))) * (_1594 * _1594);
+    _1599 = (_1567 * 0.5f) + 0.11999999731779099f;
+    _1600 = _1467 + -0.07999999821186066f;
+    _1601 = _1468 + 0.004999999888241291f;
+    _1609 = saturate((sqrt((_1601 * _1601) + (_1600 * _1600)) - _1599) / (-0.0f - _1599));  // [sem: expr_sat]
+    _1615 = saturate((cos(_1600) * 0.4000000059604645f) + -1.0f);  // [sem: expr_sat]
+    _1619 = (_1615 * _1615) * (3.0f - (_1615 * 2.0f));
+    _1627 = saturate(((abs(_1619 + _1601) + -0.017999999225139618f) + abs(_1601 - _1619)) * -55.55555725097656f);  // [sem: expr_sat]
+    _1630 = _1609 * _1627;
+    _1633 = ((3.0f - (_1627 * 2.0f)) * (3.0f - (_1609 * 2.0f))) * (_1630 * _1630);
+    _1635 = (_1567 * 0.699999988079071f) + 0.12999999523162842f;
+    _1636 = _1467 + 0.09000000357627869f;
+    _1637 = _1468 + -0.004999999888241291f;
+    _1645 = saturate((sqrt((_1637 * _1637) + (_1636 * _1636)) - _1635) / (-0.0f - _1635));  // [sem: expr_sat]
+    _1651 = saturate((cos(_1636) * 0.4000000059604645f) + -1.0f);  // [sem: expr_sat]
+    _1655 = (_1651 * _1651) * (3.0f - (_1651 * 2.0f));
+    _1663 = saturate(((abs(_1655 + _1637) + -0.014299999922513962f) + abs(_1637 - _1655)) * -69.93006896972656f);  // [sem: expr_sat]
+    _1666 = _1645 * _1663;
+    _1670 = _1465 * 2.25f;
+    _1671 = _1466 * 2.25f;
+    _1674 = (_1558 * 0.07999999821186066f) + 0.15000000596046448f;
+    _1678 = saturate((abs(_1671) - _1674) / (-0.0f - _1674));  // [sem: expr_sat]
+    _1682 = sqrt((_1671 * _1671) + (_1670 * _1670));
+    _1685 = saturate((_1682 + -0.800000011920929f) * -0.7692307829856873f);  // [sem: expr_sat]
+    _1701 = max(0.8999999761581421f, frac(frac((sin(_time.x * 8.550000190734863f) * 10000.0f) * (abs(sin(_time.x * 7.0f)) + 0.10000000149011612f)))) * 0.07999999821186066f;
+    _1706 = saturate(((_1682 + -0.10000000149011612f) - _1701) / (-0.12000000476837158f - _1701));  // [sem: expr_sat]
+    _1717 = saturate(((abs(_1670) * abs(_1466 * 1.6875f)) + -0.07000000029802322f) * -5.882352828979492f);  // [sem: expr_sat]
+    _1721 = (_1678 * _1685) * _1717;
+    _1727 = (((3.0f - (_1685 * 2.0f)) * (15.0f - (_1678 * 10.0f))) * (3.0f - (_1717 * 2.0f))) * (_1721 * _1721);
+    _1731 = _1558 * -0.014999999664723873f;
+    _1732 = _1731 + (_1465 * 2.8499999046325684f);
+    _1733 = _1731 + (_1466 * 2.8499999046325684f);
+    _1737 = sqrt((_1732 * _1732) + (_1733 * _1733));
+    _1740 = saturate((_1737 + -1.0f) * -1.4285714626312256f);  // [sem: expr_sat]
+    _1748 = saturate(((((_1740 * _1740) * _1737) * (3.0f - (_1740 * 2.0f))) + -0.10000000149011612f) * 2.5f);  // [sem: expr_sat]
+    _1751 = abs(_1467);
+    _1753 = atan(_1468 / _1751);
+    _1756 = (_1751 < 0.0f);
+    _1757 = (_1751 == 0.0f);
+    _1758 = (_1468 >= 0.0f);
+    _1759 = (_1468 < 0.0f);
+    _1772 = abs(-0.0f - _1467);
+    _1774 = atan(_1468 / _1772);
+    _1777 = (_1772 < 0.0f);
+    _1778 = (_1772 == 0.0f);
+    _1794 = saturate(-0.0f - (_1472 + -1.0f));  // [sem: expr_sat]
+    _1799 = WaveReadLaneFirst(_materialIndex);
+    _1807 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1799 < (uint)170000), _1799, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._blubIntensity);
+    _1820 = WaveReadLaneFirst(_materialIndex);
+    _1828 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1820 < (uint)170000), _1820, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._middleHaloIntensity);
+    _1831 = (((lerp(_1484, 1.0f, 0.9700000286102295f)) * 0.8999999761581421f) * exp2(log2(((abs(sin(select((_1758 && _1778), 1.2566370964050293f, select((_1759 && _1778), -1.2566370964050293f, (select((_1759 && _1777), (_1774 + -3.1415927410125732f), select((_1758 && _1777), (_1774 + 3.1415927410125732f), _1774)) * 0.800000011920929f))))) + abs(sin(select((_1758 && _1757), 1.0995573997497559f, select((_1759 && _1757), -1.0995573997497559f, (select((_1759 && _1756), (_1753 + -3.1415927410125732f), select((_1758 && _1756), (_1753 + 3.1415927410125732f), _1753)) * 0.699999988079071f)))))) * 0.5f) * (((_1794 * _1794) * (3.0f - (_1794 * 2.0f))) - ((((_1748 * _1748) * 0.4000000059604645f) * (3.0f - (_1748 * 2.0f))) * _1807))) * 2.5f)) * _1828;
+    _1853 = WaveReadLaneFirst(_materialIndex);
+    _1861 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1853 < (uint)170000), _1853, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._centerpoint);
+    _1862 = WaveReadLaneFirst(_materialIndex);
+    _1870 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1862 < (uint)170000), _1862, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._streakGlowIntensity);
+    _1871 = (_1727 * _1727) * _1870;
+    _1874 = ((_1706 * _1706) * (3.0f - (_1706 * 2.0f))) * _1861;
+    _1880 = exp2(log2(_1874 * 1.2000000476837158f) * 5.0f);
+    _1885 = exp2(log2(_1874 * 1.100000023841858f) * 24.0f);
+    _1895 = _1880 + (_1874 * 0.20000000298023224f);
+    _1897 = (_1871 * 0.04965713247656822f) + (_1597 * 0.010022826492786407f);
+    _1903 = (((3.0f - (_1663 * 2.0f)) * (3.0f - (_1645 * 2.0f))) * (_1666 * _1666)) + _1633;
+    _1925 = WaveReadLaneFirst(_materialIndex);
+    _1933 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1925 < (uint)170000), _1925, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._anamorphicIntensity);
+    _1943 = 1.0f / max(0.0010000000474974513f, _exposure0.x);
+    _1947 = max(0.0f, (_1943 * (((_1426 * saturate(_1412)) + ((_365 * 5.0f) * _1430)) + (_1933 * exp2(log2(((((_1897 + (_1633 * 0.033104754984378815f)) + (((_1831 * 0.16689524054527283f) + 0.033104754984378815f) * _1831)) + _1885) + (_1895 * 0.07323896884918213f)) * 2.0f))))));
+    _1948 = max(0.0f, (_1943 * (((_1426 * saturate(_1413)) + ((_366 * 7.0f) * _1430)) + (_1933 * exp2(log2(((((_1897 + (_1903 * 0.033104754984378815f)) + ((0.07323896884918213f - (_1831 * 0.02323896810412407f)) * _1831)) + _1885) + (_1895 * 0.21404112875461578f)) * 2.0f))))));
+    _1949 = max(0.0f, (_1943 * (((_1426 * saturate(_1414)) + ((_367 * 9.0f) * _1430)) + (_1933 * exp2(log2((((((((_1903 * 0.07323896884918213f) + (_1597 * 0.033104754984378815f)) + ((0.13286834955215454f - (_1831 * 0.08286835253238678f)) * _1831)) + (_1874 * 0.06370936334133148f)) + (_1871 * 0.1098584532737732f)) + (_1880 * 0.6038274168968201f)) + _1885) * 2.0f))))));
+    _1950 = WaveReadLaneFirst(_materialIndex);
+    _1958 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1950 < (uint)170000), _1950, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._borderSmoothness);
+    _1959 = WaveReadLaneFirst(_materialIndex);
+    _1967 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1959 < (uint)170000), _1959, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._borderWidth);
+    _1973 = (1.0f - _1967) * 0.5f;
+    _1976 = max((abs(TEXCOORD.x + -0.5f) - _1973), 0.0f);
+    _1977 = max((abs(TEXCOORD.y + -0.5f) - _1973), 0.0f);
+    _1984 = WaveReadLaneFirst(_materialIndex);
+    _1992 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_1984 < (uint)170000), _1984, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._borderColor);
+    _1995 = (float)((uint)((uint)(((uint)(_1992) >> 16) & 255)));
+    _1998 = (float)((uint)((uint)(((uint)(_1992) >> 8) & 255)));
+    _2000 = (float)((uint)((uint)(_1992 & 255)));
+    _2030 = max(0.0010000000474974513f, _exposure0.x);
+    _2034 = WaveReadLaneFirst(_materialIndex);
+    _2042 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_2034 < (uint)170000), _2034, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._borderRatio);
+    _2043 = _2042 * saturate(sqrt((_1977 * _1977) + (_1976 * _1976)) / _1958);
+    _2050 = (_2043 * ((select(((_1995 * 0.003921568859368563f) < 0.040449999272823334f), (_1995 * 0.0003035269910469651f), exp2(log2((_1995 * 0.0037171270232647657f) + 0.052132703363895416f) * 2.4000000953674316f)) / _2030) - _1947)) + _1947;
+    _2051 = (_2043 * ((select(((_1998 * 0.003921568859368563f) < 0.040449999272823334f), (_1998 * 0.0003035269910469651f), exp2(log2((_1998 * 0.0037171270232647657f) + 0.052132703363895416f) * 2.4000000953674316f)) / _2030) - _1948)) + _1948;
+    _2052 = (_2043 * ((select(((_2000 * 0.003921568859368563f) < 0.040449999272823334f), (_2000 * 0.0003035269910469651f), exp2(log2((_2000 * 0.0037171270232647657f) + 0.052132703363895416f) * 2.4000000953674316f)) / _2030) - _1949)) + _1949;
+    _2053 = WaveReadLaneFirst(_materialIndex);
+    _2061 = WaveReadLaneFirst(BindlessParameters_PostProcessAbyssEnterIntro_CD[((int)((uint)(select(((uint)_2053 < (uint)170000), _2053, 0)) + 0u))].BindlessParameters_PostProcessAbyssEnterIntro_CD._fadeRatio);
+    _2062 = saturate(_2061);  // [sem: _2061_sat]
+    _2069 = (_2062 * (_29.x - _2050)) + _2050;
+    _2070 = (_2062 * (_29.y - _2051)) + _2051;
+    _2071 = (_2062 * (_29.z - _2052)) + _2052;
+    _2072 = uint(SV_Position.y);
+    if (_etcParams.y == 1.0f) {
+      _2085 = (((float)((uint)((uint)((((uint2)(__3__36__0__0__g_stencil.Load(int3((int)(uint(SV_Position.x)), _2072, 0)))).x) & 127)))) + 0.5f);
+    } else {
+      _2085 = 1.0f;
+    }
+    _2088 = (_localToneMappingParams.w > 0.0f);
+    if (_2088) {
+      // RenoDX: >>> [Patch: PostProcessMaterialTonemapReplace] [Version: 1.13.00]
+      // Description: Every PostProcessMaterial permutation statically inlines the full vanilla tonemap pipeline and can own the visible final output while its effect draws: the game skips this shader's manual sRGB encode and writes the display target directly when _etcParams.z == 0. An unreplaced curve renders the whole screen with the vanilla look for the duration of that effect. This block replaces the vanilla slope/offset/power grade, log-space tone curve, night tone adjustment, and output matrix with the shared TonemapReplacer while preserving the vanilla _etcParams.z == 0 final-output suite below (screen fade, fade-to-inverse wash, user brightness/contrast, user gamma, color-blind matrix), which must keep running when this draw is the visible final.
+      float3 _rndx_tonemapped_color = TonemapReplacer(float3(_2069, _2070, _2071));
+      _2348 = _rndx_tonemapped_color.x;
+      _2349 = _rndx_tonemapped_color.y;
+      _2350 = _rndx_tonemapped_color.z;
+      // RenoDX: <<< [Patch: PostProcessMaterialTonemapReplace]
+      if (_etcParams.z == 0.0f) {
+        _2356 = 1.0f - abs(_etcParams.w);
+        _2360 = saturate(_etcParams.w);  // [sem: expr_sat]
+        _2361 = (_2356 * _2348) + _2360;
+        _2362 = (_2356 * _2349) + _2360;
+        _2363 = (_2356 * _2350) + _2360;
+        if (_colorGradingParams.w > 0.0f) {
+          _2368 = saturate(_colorGradingParams.w);  // [sem: expr_sat]
+          _2385 = (((max(0.0f, (1.0f - _2361)) - _2361) * _2368) + _2361);
+          _2386 = (((max(0.0f, (1.0f - _2362)) - _2362) * _2368) + _2362);
+          _2387 = (((max(0.0f, (1.0f - _2363)) - _2363) * _2368) + _2363);
+        } else {
+          _2385 = _2361;
+          _2386 = _2362;
+          _2387 = _2363;
+        }
+        _2393 = _userImageAdjust.y + 1.0f;
+        _2397 = _userImageAdjust.x + 0.5f;
+        _2398 = ((_2385 + -0.5f) * _2393) + _2397;
+        _2399 = ((_2386 + -0.5f) * _2393) + _2397;
+        _2400 = ((_2387 + -0.5f) * _2393) + _2397;
+        _2430 = 2.200000047683716f / ((min(max(_userImageAdjust.w, -1.0f), 1.0f) * 0.800000011920929f) + 2.200000047683716f);
+        _2441 = exp2(log2(saturate(mad(_colorBlind0.z, _2400, mad(_colorBlind0.y, _2399, (_colorBlind0.x * _2398))))) * _2430);
+        _2442 = exp2(log2(saturate(mad(_colorBlind1.z, _2400, mad(_colorBlind1.y, _2399, (_colorBlind1.x * _2398))))) * _2430);
+        _2443 = exp2(log2(saturate(mad(_colorBlind2.z, _2400, mad(_colorBlind2.y, _2399, (_colorBlind2.x * _2398))))) * _2430);
+      } else {
+        _2441 = _2348;
+        _2442 = _2349;
+        _2443 = _2350;
+      }
+    } else {
+      _2441 = _2069;
+      _2442 = _2070;
+      _2443 = _2071;
+    }
+    if (_etcParams.y > 1.0f) {
+      _2452 = abs((TEXCOORD.x * 2.0f) + -1.0f);
+      _2453 = abs((TEXCOORD.y * 2.0f) + -1.0f);
+      // RenoDX: >>> [Patch: PostProcessMaterialVignette] [Version: 1.13.00]
+      // Description: When this SDR PostProcessMaterial permutation is the visible final output (_etcParams.z == 0, the display target's sRGB view encodes in hardware), scale the shader's native vignette strength by the RenoDX Vignette setting so vignette intensity matches the standalone-final arrangement instead of snapping to full native strength while the effect draws. Intermediate draws (_etcParams.z > 0) keep the native strength.
+      float _rndx_vignette_strength = saturate(_etcParams.y + -1.0f);
+      if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
+        _rndx_vignette_strength *= CUSTOM_VIGNETTE;
+      }
+      _2457 = saturate(1.0f - (dot(float2(_2452, _2453), float2(_2452, _2453)) * _rndx_vignette_strength));  // [sem: expr_sat]
+      // RenoDX: <<< [Patch: PostProcessMaterialVignette]
+      _2462 = (_2457 * _2441);
+      _2463 = (_2457 * _2442);
+      _2464 = (_2457 * _2443);
+    } else {
+      _2462 = _2441;
+      _2463 = _2442;
+      _2464 = _2443;
+    }
+    if (_2088 && (_etcParams.z > 0.0f)) {
+      _2494 = select((_2462 <= 0.0031308000907301903f), (_2462 * 12.920000076293945f), (((pow(_2462, 0.4166666567325592f)) * 1.0549999475479126f) + -0.054999999701976776f));
+      _2495 = select((_2463 <= 0.0031308000907301903f), (_2463 * 12.920000076293945f), (((pow(_2463, 0.4166666567325592f)) * 1.0549999475479126f) + -0.054999999701976776f));
+      _2496 = select((_2464 <= 0.0031308000907301903f), (_2464 * 12.920000076293945f), (((pow(_2464, 0.4166666567325592f)) * 1.0549999475479126f) + -0.054999999701976776f));
+    } else {
+      _2494 = _2462;
+      _2495 = _2463;
+      _2496 = _2464;
+    }
+    if (!(!(_etcParams.y >= 1.0f))) {
+      _2501 = (float)((uint)_2072);
+      if (!(_2501 < _viewDir.w)) {
+        if (!(_2501 >= (_screenSizeAndInvSize.y - _viewDir.w))) {
+          _2510 = _2494;
+          _2511 = _2495;
+          _2512 = _2496;
+        } else {
+          _2510 = 0.0f;
+          _2511 = 0.0f;
+          _2512 = 0.0f;
+        }
+      } else {
+        _2510 = 0.0f;
+        _2511 = 0.0f;
+        _2512 = 0.0f;
+      }
+    } else {
+      _2510 = _2494;
+      _2511 = _2495;
+      _2512 = _2496;
+    }
+    // RenoDX: >>> [Patch: PostProcessMaterialFinalizeSDR] [Version: 1.13.00]
+    // Description: For SDR output, this PostProcessMaterial permutation can be the visible final output while its effect draws: it writes the display target directly when _etcParams.z == 0 and no standalone SDR final pass draws after it. Without this block, the RenoDX white point/color-temperature adjustment, Purkinje night handling, and SDR gamma finalization are skipped for the duration of the effect and return when it stops drawing. Applies FinalizeSDR to the post-letterbox color in the same pipeline position where the standalone SDR final pass finalizes.
+    if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
+      float3 _rndx_final_color = FinalizeSDR(float3(_2510, _2511, _2512), _sunDirection.y, _moonDirection.y);
+      _2510 = _rndx_final_color.x;
+      _2511 = _rndx_final_color.y;
+      _2512 = _rndx_final_color.z;
+    }
+    // RenoDX: <<< [Patch: PostProcessMaterialFinalizeSDR]
+    SV_Target.x = _2510;
+    SV_Target.y = _2511;
+    SV_Target.z = _2512;
+    SV_Target.w = _2085;
+    break;
+  }
+  return SV_Target;
+}

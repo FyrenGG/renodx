@@ -1330,9 +1330,34 @@ float4 main(
     }
   }
   // RenoDX: <<< [Patch: BasicPostProcessSharpening]
+  // RenoDX: >>> [Patch: BasicPostProcessVanillaFinalSuite] [Version: 1.12.02]
+  // Description: When this composite material shader is the visible final output (the game skips its manual sRGB encode because _etcParams.z == 0 and the display target's sRGB view encodes in hardware), the vanilla shader applies the final-pass color suite inline after tonemapping: the screen fade (_etcParams.w), the fade-to-inverse wash used by loading fades and location-discovery flashes (_colorGradingParams.w), the game's user brightness/contrast options (_userImageAdjust.xy), the user gamma option (_userImageAdjust.w), and the color-blind accessibility matrix (_colorBlind0/1/2). The RenoDX tonemap replacement had replaced the whole tonemap branch without this suite, so on the composite-final path these game-driven effects and settings silently did nothing, and any handoff to the standalone-final arrangement (which still applies them) showed an abrupt color shift mid-fade or during a location-discovery flash. This block transplants the vanilla suite math verbatim after the replaced tonemap, in the same relative position and under the same conditions as the vanilla shader (decompiled 1.12.02 vanilla lines 1892-1921).
+  if (_2920 && !(_etcParams.z > 0.0f)) {
+    float _rndx_fade_keep = 1.0f - abs(_etcParams.w);
+    float _rndx_fade_add = saturate(_etcParams.w);
+    float _rndx_suite_r = (_rndx_fade_keep * _3273) + _rndx_fade_add;
+    float _rndx_suite_g = (_rndx_fade_keep * _3274) + _rndx_fade_add;
+    float _rndx_suite_b = (_rndx_fade_keep * _3275) + _rndx_fade_add;
+    if (_colorGradingParams.w > 0.0f) {
+      float _rndx_wash = saturate(_colorGradingParams.w);
+      _rndx_suite_r = (((max(0.0f, (1.0f - _rndx_suite_r)) - _rndx_suite_r) * _rndx_wash) + _rndx_suite_r);
+      _rndx_suite_g = (((max(0.0f, (1.0f - _rndx_suite_g)) - _rndx_suite_g) * _rndx_wash) + _rndx_suite_g);
+      _rndx_suite_b = (((max(0.0f, (1.0f - _rndx_suite_b)) - _rndx_suite_b) * _rndx_wash) + _rndx_suite_b);
+    }
+    float _rndx_contrast = _userImageAdjust.y + 1.0f;
+    float _rndx_brightness = _userImageAdjust.x + 0.5f;
+    _rndx_suite_r = ((_rndx_suite_r + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    _rndx_suite_g = ((_rndx_suite_g + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    _rndx_suite_b = ((_rndx_suite_b + -0.5f) * _rndx_contrast) + _rndx_brightness;
+    float _rndx_user_gamma = 2.200000047683716f / ((min(max(_userImageAdjust.w, -1.0f), 1.0f) * 0.800000011920929f) + 2.200000047683716f);
+    _3273 = exp2(log2(saturate(mad(_colorBlind0.z, _rndx_suite_b, mad(_colorBlind0.y, _rndx_suite_g, (_colorBlind0.x * _rndx_suite_r))))) * _rndx_user_gamma);
+    _3274 = exp2(log2(saturate(mad(_colorBlind1.z, _rndx_suite_b, mad(_colorBlind1.y, _rndx_suite_g, (_colorBlind1.x * _rndx_suite_r))))) * _rndx_user_gamma);
+    _3275 = exp2(log2(saturate(mad(_colorBlind2.z, _rndx_suite_b, mad(_colorBlind2.y, _rndx_suite_g, (_colorBlind2.x * _rndx_suite_r))))) * _rndx_user_gamma);
+  }
+  // RenoDX: <<< [Patch: BasicPostProcessVanillaFinalSuite]
   // RenoDX: >>> [Patch: BasicPostProcessFilmGrain] [Version: 1.12.02]
   // Description: SDR DLAA can use this composite material shader as the final visible output and skip the standalone SDR final shader. When the runtime marks this draw as the basic postprocess final path, apply RenoDX custom film grain directly to the local output color. This preserves the older direct-output material fallback without sampling neighboring final-pass textures from a different source stage.
-  if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && CUSTOM_FILM_GRAIN_TYPE != 0) {
+  if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f) && CUSTOM_FILM_GRAIN_TYPE != 0) {
     float3 _rndx_postprocess_color = renodx::effects::ApplyFilmGrain(float3(_3273, _3274, _3275), TEXCOORD, CUSTOM_RANDOM, CUSTOM_FILM_GRAIN_STRENGTH * 0.03f);
     _3273 = _rndx_postprocess_color.x;
     _3274 = _rndx_postprocess_color.y;
@@ -1345,7 +1370,7 @@ float4 main(
     // RenoDX: >>> [Patch: BasicPostProcessVignette] [Version: 1.12.02]
     // Description: The SDR DLAA material-final path uses this shader's native output vignette instead of the standalone SDR final shader's different final-pass vignette. When this shader is the selected basic postprocess final path, scale the native material vignette by the RenoDX Vignette setting while leaving HDR and DLSS intermediate uses untouched.
     float _rndx_vignette_strength = saturate(_etcParams.y + -1.0f);
-    if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f) {
+    if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
       _rndx_vignette_strength *= CUSTOM_VIGNETTE;
     }
     float _3289 = saturate(1.0f - (dot(float2(_3284, _3285), float2(_3284, _3285)) * _rndx_vignette_strength));
@@ -1390,8 +1415,8 @@ float4 main(
     _3344 = _3328;
   }
   // RenoDX: >>> [Patch: BasicPostProcessFinalizeSDR] [Version: 1.12.02]
-  // Description: SDR DLAA can bypass the standalone SDR final shader and output this composite material directly to the fake swapchain. When the addon marks this shader as the basic postprocess final path, run only the shared SDR finalization step here so white point/color-temperature, Purkinje, and the SDR Gamma setting are not skipped. This intentionally avoids standalone-final sharpening, RCAS, and late final color-transfer math because this material shader does not have the same final-source texture semantics.
-  if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f) {
+  // Description: SDR DLAA can bypass the standalone SDR final shader and output this composite material directly to the fake swapchain. When this shader is the visible final on the SDR material lane (the game skips its manual sRGB encode because the display target's sRGB view encodes in hardware, _etcParams.z == 0), run the shared SDR finalization step here so white point/color-temperature, Purkinje, and the SDR Gamma setting are not skipped. The vanilla final-output color suite is restored separately by the BasicPostProcessVanillaFinalSuite patch, and RCAS sharpening for this path is handled at the tonemap stage by the BasicPostProcessSharpening patch.
+  if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
     float3 _rndx_final_color = FinalizeSDR(float3(_3342, _3343, _3344), _sunDirection.y, _moonDirection.y);
     _3342 = _rndx_final_color.x;
     _3343 = _rndx_final_color.y;

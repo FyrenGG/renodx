@@ -218,7 +218,8 @@ const std::unordered_map<std::string, float> HDR_LOOK_VALUES = {
 };
 
 bool rr_draw = false;
-int rr_draw_counter = 0;
+// Presents since the last Ray Reconstruction detector dispatch (see OnPresent).
+int presents_since_rr_draw = 1000;
 bool is_nvidia = true;
 
 // --- Aurora night detection ---
@@ -233,6 +234,10 @@ std::chrono::steady_clock::time_point dawn_dusk_blend_start{};
 float dawn_dusk_blend_duration = 60.f;  // seconds to crossfade between presets
 bool postprocess_material_draw = false;
 bool final_sdr_draw = false;
+// Presents-since-last-sighting counters for basic postprocess final detection (see
+// OnPresent). Initialized high so the flag starts disengaged until each path is seen.
+int presents_since_material_draw = 1000;
+int presents_since_final_sdr_draw = 1000;
 
 renodx::mods::shader::CustomShader CreateDetectionShader(
     uint32_t crc32,
@@ -1844,22 +1849,67 @@ void OnPresent(reshade::api::command_queue* /*queue*/,
                const reshade::api::rect* /*dest_rect*/,
                uint32_t /*dirty_rect_count*/,
                const reshade::api::rect* /*dirty_rects*/) {
-  rr_draw_counter++;
-  if (rr_draw_counter >= 30) {
-    uint32_t custom_flags = CUSTOM_FLAGS_AS_UINT & ~CUSTOM_FLAGS__RR_ENABLED & ~CUSTOM_FLAGS__BASIC_POSTPROCESS_FINAL;
-    if (rr_draw) {
-      custom_flags |= CUSTOM_FLAGS__RR_ENABLED;
-    }
-    if (!last_is_hdr && postprocess_material_draw && !final_sdr_draw) {
-      custom_flags |= CUSTOM_FLAGS__BASIC_POSTPROCESS_FINAL;
-    }
-
-    shader_injection.custom_flags = std::bit_cast<float>(custom_flags);
-    rr_draw = false;
-    postprocess_material_draw = false;
-    final_sdr_draw = false;
-    rr_draw_counter = 0;
+  // Basic postprocess final-output detector. The flag marks that the SDR material
+  // composite render path is active; the final-vs-intermediate decision happens per draw
+  // inside PostProcessMaterial_0x21212A93 via the game's own _etcParams.z constant
+  // (the composite manually sRGB-encodes only when feeding a standalone SDR final;
+  // when it writes the display target directly the sRGB view encodes in hardware and
+  // _etcParams.z is 0). The in-shader test has zero latency; a CPU-side windowed
+  // detector cannot keep up with transitions while gliding or loading, when the game
+  // swaps between composite-final and standalone-final arrangements. Those delayed
+  // detections leave a few wrong-state frames, visible as gamma/vignette flashes.
+  // The standalone-final draw counter exists for diagnostics only.
+  constexpr int kBasicPostprocessLookback = 4;
+  if (presents_since_material_draw < 1000) {
+    presents_since_material_draw++;
   }
+  if (presents_since_final_sdr_draw < 1000) {
+    presents_since_final_sdr_draw++;
+  }
+  if (postprocess_material_draw) {
+    presents_since_material_draw = 0;
+  }
+  if (final_sdr_draw) {
+    presents_since_final_sdr_draw = 0;
+  }
+  postprocess_material_draw = false;
+  final_sdr_draw = false;
+
+  uint32_t custom_flags = CUSTOM_FLAGS_AS_UINT;
+  const bool basic_postprocess_now = !last_is_hdr
+                                     && presents_since_material_draw <= kBasicPostprocessLookback;
+  if (basic_postprocess_now) {
+    custom_flags |= CUSTOM_FLAGS__BASIC_POSTPROCESS_FINAL;
+  } else {
+    custom_flags &= ~CUSTOM_FLAGS__BASIC_POSTPROCESS_FINAL;
+  }
+
+  // Ray Reconstruction detection uses a long grace period after the last detector dispatch.
+  // The RR detector dispatches (PrepareDlssRRCS / EvaluateSpecularRadianceCS) can stop
+  // running while OnPresent continues during loading screens, location discovery, or menus.
+  // A short grace period (on the order of 30 presents) reads those pauses as "RR turned off",
+  // making every RR_ENABLED
+  // consumer (MATERIAL_IMPROVEMENTS, RT_QUALITY, PURKINJE_EFFECT,
+  // AURORA_BOREALIS_ENABLED, CUSTOM_WEATHER_EDITING) snap off and back on across
+  // the whole scene as an abrupt color/lighting shift. Real RR settings changes go
+  // through the game menu, so reflecting them within the grace period is not visible
+  // during gameplay, and after a pause the flag turns on again as soon as an RR detector
+  // dispatch is seen.
+  constexpr int kRRDropoutLookback = 240;
+  if (presents_since_rr_draw < 10000) {
+    presents_since_rr_draw++;
+  }
+  if (rr_draw) {
+    presents_since_rr_draw = 0;
+  }
+  rr_draw = false;
+  if (presents_since_rr_draw <= kRRDropoutLookback) {
+    custom_flags |= CUSTOM_FLAGS__RR_ENABLED;
+  } else {
+    custom_flags &= ~CUSTOM_FLAGS__RR_ENABLED;
+  }
+
+  shader_injection.custom_flags = std::bit_cast<float>(custom_flags);
 
   // --- Aurora night seed: detect night transitions via SceneShadowTiledNight ---
   // SceneShadowTiledNight shaders only run during night, this allows us to use

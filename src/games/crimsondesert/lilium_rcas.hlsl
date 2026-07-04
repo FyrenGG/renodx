@@ -36,35 +36,20 @@ float3 CustomDecode(float3 color, int decode_type, float pq_scaling) {
 
 // from Lilium
 // RCAS - Robust Contrast Adaptive Sharpening
-// decode_type: 0 = PQ, 1 = sRGB, 2 = Gamma 2.2, 3 = Linear
-float3 ApplyRCAS(
-    float3 center_color, float2 tex_coord,
-    Texture2D<float4> SamplerFrameBuffer_TEX, SamplerState SamplerFrameBuffer_SMP_s, int decode_type = 3, float pq_scaling = 100.f) {
-  if (CUSTOM_SHARPENING == 0.f) return center_color;  // Skip sharpening if amount is zero
 
 #define ENABLE_NOISE_REMOVAL           1u // Always good to be enabled
 #define ENABLE_NORMALIZATION           1u
 //#define SHARPENING_NORMALIZATION_POINT RENODX_PEAK_WHITE_NITS / RENODX_DIFFUSE_WHITE_NITS
 #define SHARPENING_NORMALIZATION_POINT 125
 
-  uint width, height;
-  SamplerFrameBuffer_TEX.GetDimensions(width, height);
-  float2 texel_size = 1.0 / float2(width, height);
-
-  // Algorithm uses minimal 3x3 pixel neighborhood.
-  //    b
-  //  d e f
-  //    h
-  float3 b =
-      CustomDecode(SamplerFrameBuffer_TEX.SampleLevel(SamplerFrameBuffer_SMP_s, tex_coord + float2(0, -1) * texel_size, 0).rgb, decode_type, pq_scaling);
-  float3 d =
-      CustomDecode(SamplerFrameBuffer_TEX.SampleLevel(SamplerFrameBuffer_SMP_s, tex_coord + float2(-1, 0) * texel_size, 0).rgb, decode_type, pq_scaling);
-  float3 e =
-      center_color;
-  float3 f =
-      CustomDecode(SamplerFrameBuffer_TEX.SampleLevel(SamplerFrameBuffer_SMP_s, tex_coord + float2(1, 0) * texel_size, 0).rgb, decode_type, pq_scaling);
-  float3 h =
-      CustomDecode(SamplerFrameBuffer_TEX.SampleLevel(SamplerFrameBuffer_SMP_s, tex_coord + float2(0, 1) * texel_size, 0).rgb, decode_type, pq_scaling);
+// Shared RCAS resolve for callers that must supply their own neighbor taps because no
+// completed final-color texture exists to sample at their pipeline position (e.g. the
+// SDR DLAA basic postprocess composite path, which reconstructs its taps through the
+// tonemapper). All five taps must already be in the same working space as `e`. The
+// texture-based ApplyRCAS wrapper below samples and decodes its own taps, then
+// resolves through this function; the sharpening math matches Lilium's original RCAS.
+float3 ApplyRCASTaps(float3 e, float3 b, float3 d, float3 f, float3 h) {
+  if (CUSTOM_SHARPENING == 0.f) return e;  // Skip sharpening if amount is zero
 
 #if ENABLE_NORMALIZATION
   b /= SHARPENING_NORMALIZATION_POINT;
@@ -142,4 +127,30 @@ float3 ApplyRCAS(
 #endif
 
   return pix;
+}
+
+// decode_type: 0 = PQ, 1 = sRGB, 2 = Gamma 2.2, 3 = Linear
+float3 ApplyRCAS(
+    float3 center_color, float2 tex_coord,
+    Texture2D<float4> SamplerFrameBuffer_TEX, SamplerState SamplerFrameBuffer_SMP_s, int decode_type = 3, float pq_scaling = 100.f) {
+  if (CUSTOM_SHARPENING == 0.f) return center_color;  // Skip sharpening if amount is zero
+
+  uint width, height;
+  SamplerFrameBuffer_TEX.GetDimensions(width, height);
+  float2 texel_size = 1.0 / float2(width, height);
+
+  // Algorithm uses minimal 3x3 pixel neighborhood.
+  //    b
+  //  d e f
+  //    h
+  float3 b =
+      CustomDecode(SamplerFrameBuffer_TEX.SampleLevel(SamplerFrameBuffer_SMP_s, tex_coord + float2(0, -1) * texel_size, 0).rgb, decode_type, pq_scaling);
+  float3 d =
+      CustomDecode(SamplerFrameBuffer_TEX.SampleLevel(SamplerFrameBuffer_SMP_s, tex_coord + float2(-1, 0) * texel_size, 0).rgb, decode_type, pq_scaling);
+  float3 f =
+      CustomDecode(SamplerFrameBuffer_TEX.SampleLevel(SamplerFrameBuffer_SMP_s, tex_coord + float2(1, 0) * texel_size, 0).rgb, decode_type, pq_scaling);
+  float3 h =
+      CustomDecode(SamplerFrameBuffer_TEX.SampleLevel(SamplerFrameBuffer_SMP_s, tex_coord + float2(0, 1) * texel_size, 0).rgb, decode_type, pq_scaling);
+
+  return ApplyRCASTaps(center_color, b, d, f, h);
 }

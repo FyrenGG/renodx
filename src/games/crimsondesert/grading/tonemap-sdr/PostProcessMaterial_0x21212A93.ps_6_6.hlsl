@@ -1289,6 +1289,47 @@ float4 main(
     _3274 = _2902;
     _3275 = _2903;
   }
+  // RenoDX: >>> [Patch: BasicPostProcessSharpening] [Version: 1.12.02]
+  // Description: SDR DLAA can use this composite material shader as the final visible output and skip the standalone SDR final shader, which is where RenoDX RCAS sharpening normally runs. This fused composite never exposes a completed final-color texture, so neighbor pixels cannot be sampled directly for sharpening. When the addon marks this shader as the basic postprocess final path, reconstruct the four RCAS neighbor taps by sampling g_sceneColor one texel away in each direction and passing each tap through the same TonemapReplacer applied to the center pixel, then run the shared RCAS resolve on the tonemapped center. This runs at the same pipeline position as the standalone final path applies RCAS (after tonemapping; before film grain, vignette, sRGB encode, and SDR finalization). The taps intentionally skip the material effect chain, which is an identity passthrough of g_sceneColor during plain gameplay; sharpening is skipped entirely while UV-warping or color-restructuring screen effects are active (fisheye/follow-learning warp, quickslot or main-menu effects, status/generic chromatic aberration, flee darkening, detect mode) because reconstructed taps would not match the transformed center there.
+  // The material composite is the visible final only when the game skips its manual
+  // sRGB encode (_etcParams.z == 0): the display target's sRGB view encodes in hardware.
+  // When feeding the standalone final pass it encodes manually (_etcParams.z > 0), so
+  // that constant is a per-draw final-vs-intermediate signal with no addon-side latency.
+  if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f) && CUSTOM_SHARPENING_TYPE == 1 && CUSTOM_SHARPENING > 0.f) {
+    int _rndx_mi = WaveReadLaneFirst(_materialIndex);
+    float _rndx_menu_effect = WaveReadLaneFirst(BindlessParameters_PostProcessUber_CD[((int)((uint)(select(((uint)_rndx_mi < (uint)170000), _rndx_mi, 0)) + 0u))]._uiMainMenuEffect);
+    bool _rndx_uv_warped = (_239 != TEXCOORD.x) || (_240 != TEXCOORD.y);
+    bool _rndx_status_ca = ((_50 >= 0.0010000000474974513f) && (_81 >= 0.0010000000474974513f)) || ((_59 >= 0.0010000000474974513f) && (_94 >= 0.0010000000474974513f)) || ((_68 >= 0.0010000000474974513f) && (_107 >= 0.0010000000474974513f));
+    bool _rndx_generic_ca = (_120 >= 0.0010000000474974513f) && (_129 >= 0.0010000000474974513f);
+    bool _rndx_detect_mode = (_539 >= 0.0010000000474974513f) || (_548 >= 0.0010000000474974513f) || (_557 >= 0.0010000000474974513f) || (_566 >= 0.0010000000474974513f) || (_575 >= 0.0010000000474974513f);
+    bool _rndx_effect_active = _rndx_uv_warped
+                               || (_227 >= 0.0010000000474974513f)
+                               || (_rndx_menu_effect >= 0.0010000000474974513f)
+                               || (_fleeCount >= 0.0010000000474974513f)
+                               || _rndx_status_ca
+                               || _rndx_generic_ca
+                               || _rndx_detect_mode;
+    if (!_rndx_effect_active) {
+      uint _rndx_scene_w, _rndx_scene_h;
+      __3__36__0__0__g_sceneColor.GetDimensions(_rndx_scene_w, _rndx_scene_h);
+      float2 _rndx_texel = 1.0f / float2(_rndx_scene_w, _rndx_scene_h);
+      float3 _rndx_tap_b = __3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(0.0f, -_rndx_texel.y), 0).rgb;
+      float3 _rndx_tap_d = __3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(-_rndx_texel.x, 0.0f), 0).rgb;
+      float3 _rndx_tap_f = __3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(_rndx_texel.x, 0.0f), 0).rgb;
+      float3 _rndx_tap_h = __3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(0.0f, _rndx_texel.y), 0).rgb;
+      if (_2920) {
+        _rndx_tap_b = TonemapReplacer(_rndx_tap_b);
+        _rndx_tap_d = TonemapReplacer(_rndx_tap_d);
+        _rndx_tap_f = TonemapReplacer(_rndx_tap_f);
+        _rndx_tap_h = TonemapReplacer(_rndx_tap_h);
+      }
+      float3 _rndx_sharpened_color = ApplyRCASTaps(float3(_3273, _3274, _3275), _rndx_tap_b, _rndx_tap_d, _rndx_tap_f, _rndx_tap_h);
+      _3273 = _rndx_sharpened_color.x;
+      _3274 = _rndx_sharpened_color.y;
+      _3275 = _rndx_sharpened_color.z;
+    }
+  }
+  // RenoDX: <<< [Patch: BasicPostProcessSharpening]
   // RenoDX: >>> [Patch: BasicPostProcessFilmGrain] [Version: 1.12.02]
   // Description: SDR DLAA can use this composite material shader as the final visible output and skip the standalone SDR final shader. When the runtime marks this draw as the basic postprocess final path, apply RenoDX custom film grain directly to the local output color. This preserves the older direct-output material fallback without sampling neighboring final-pass textures from a different source stage.
   if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && CUSTOM_FILM_GRAIN_TYPE != 0) {

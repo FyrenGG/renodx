@@ -4638,9 +4638,12 @@ void main(
     }
     _3975 = _viewPos.y + _1010;
     _3976 = _3975 + _earthRadius;
+    // Sky-visibility earth-radial distance is world-space (_viewPos.x/z offsets); _3980 stays camera-relative for the cloud math below.
+    float _rndx_skyVisX = _viewPos.x + _1009;
+    float _rndx_skyVisZ = _viewPos.z + _1011;
     _3980 = (_1011 * _1011) + (_1009 * _1009);
-    _3982 = sqrt((_3976 * _3976) + _3980);
-    _3987 = dot(float3((_1009 / _3982), (_3976 / _3982), (_1011 / _3982)), float3(_3948, _3949, _3950));
+    _3982 = sqrt(((_rndx_skyVisX * _rndx_skyVisX) + (_3976 * _3976)) + (_rndx_skyVisZ * _rndx_skyVisZ));
+    _3987 = dot(float3((_rndx_skyVisX / _3982), (_3976 / _3982), (_rndx_skyVisZ / _3982)), float3(_3948, _3949, _3950));
     _3992 = min(max(((_3982 - _earthRadius) / _atmosphereThickness), 16.0f), (_atmosphereThickness + -16.0f));
     _4000 = max(_3992, 0.0f);
     _4007 = (-0.0f - sqrt((_4000 + (_earthRadius * 2.0f)) * _4000)) / (_4000 + _earthRadius);

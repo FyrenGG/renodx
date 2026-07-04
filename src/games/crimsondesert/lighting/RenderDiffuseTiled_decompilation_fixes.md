@@ -70,6 +70,20 @@ if (_3636) {
 
 ---
 
+## Fix 3: Sky-visibility horizon math missing `_viewPos.x/z` offsets (stale carryforward)
+
+**Symptom:** Subtle — ambient sky-visibility (g_texNetDensity atmosphere transmittance lookup) uses the wrong earth-radial position when the camera is far from world origin, shifting horizon-adjacent ambient lighting.
+
+**Root cause:** Not a decompiler control-flow bug — the override bodies were carried forward from an older game version's decompile. Both the 1.12.02 and 1.13.00 natives compute the sky-visibility earth-radial distance from the world-space position (`_viewPos.x + x`, `_viewPos.z + z`) while the carried-forward overrides used only the camera-relative x/z. The camera-relative squared sum is still correct for the cloud-shadow math directly below (the native keeps both quantities separate), so only the sky-visibility length and direction dot were wrong.
+
+**Fix:** Introduce `_rndx_skyVisX`/`_rndx_skyVisZ` (`_viewPos.x/z + reconstructed x/z`) and use them in the 3D length and the sun/moon direction dot; leave the camera-relative squared sum untouched for the cloud math.
+
+**Affected shaders:** `0x8B9F5388`, `0x0C821D42`, `0x81D524C2`, `0xDD923B19` (all fixed). `0xAEE29629` and `0xF070010A` do not contain the sky-visibility block.
+
+**How to verify:** Compare ambient/sky lighting near the horizon against vanilla at a location far from world origin; near origin the difference is negligible.
+
+---
+
 ## General notes
 
 - Always keep the disassembly (`_disasm.txt`) alongside decompiled shaders

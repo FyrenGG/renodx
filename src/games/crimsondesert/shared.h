@@ -193,6 +193,7 @@
 #define MOON_LIMB_DARKENING                    1.00f
 #define SKY_SCATTERING                         ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__SKY_SCATTERING) != 0u ? 1.f : 0.f)
 #define DAWN_DUSK_IMPROVEMENTS                 ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__DAWN_DUSK_IMPROVEMENTS) != 0u ? 1.f : 0.f)
+// Snow / Fog Lighting Fixes is default-on; Off preserves vanilla snow/fog scattering and surfel voxel quantization.
 #define SNOW_FOG_FIX                           ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__SNOW_FOG_FIX) != 0u ? 1.f : 0.f)
 #define DAWN_DUSK_GI_ENERGY                    0.7f
 #define DAWN_DUSK_WEATHER_SEED                 shader_injection.dawn_dusk_weather_seed
@@ -243,7 +244,7 @@
 // Should be 4x32
 //
 //// GAME BLOWS UP ONCE THERE'S MORE THAN 45 FLOATS ////
-// 
+//
 //// AMD BLOWS UP AT 43-44 FLOATS BECASUE OF FSR    ////
 //
 struct ShaderInjectData {

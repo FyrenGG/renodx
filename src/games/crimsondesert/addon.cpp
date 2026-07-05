@@ -1584,9 +1584,11 @@ renodx::utils::settings::Settings settings = {
         .default_value = 1.f,
         .packed_values = {0u, CUSTOM_FLAGS__SNOW_FOG_FIX},
         .can_reset = true,
-        .label = "Snow Fog Scattering Fix (WIP)",
+        .label = "Snow / Fog Lighting Fixes (WIP)",
         .section = "Atmosphere / Weather",
-        .tooltip = "Fixes massive brightness swings for both the sky and GI in snowy regions with heavy fog especially.\n",
+        .tooltip = "Fixes snow-region lighting artifacts.\n"
+                   "Off = vanilla snow/fog scattering and surfel voxel GI.\n"
+                   "On = clamps heavy snow-fog brightness swings and breaks up blocky surfel voxel GI patches.",
         .labels = {"Off", "On"},
         .tint = rendering,
         .is_visible = []() { return current_settings_mode == rendering_group; },

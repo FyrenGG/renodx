@@ -312,11 +312,8 @@ void main(
     float _173 = _rndx_milkyWayRatio * _159.y;
     float _174 = _rndx_milkyWayRatio * _159.z;
 
-    // --- Aurora borealis (sky probe variant) ---
-    // This shader feeds the environment probe at night for specular/GI. We add aurora here
-    // so the scene at night gets some aurora tinting but heavily modulate so metals/specular
-    // get a subtle tint. The visible aurora comes from SkyMaterial_0xF8D46E3A at
-    // full strength.
+    // RenoDX: >>> [Patch: AuroraProbeLighting] [Version: 1.13.00]
+    // Description: Adds a dampened aurora contribution to the simple sky material used by environment probe paths. This lets night lighting, metals, and specular reflections receive a subtle tint that matches the visible aurora while preserving the probe view-axis transmittance so terrain and reflections do not become over-bright or green-shifted.
     [branch]
     if (AURORA_BOREALIS_ENABLED) {
       float nightGate = ComputeNightGate(_sunDirection.y);
@@ -324,7 +321,7 @@ void main(
         float3(_111, _112, _113), _time.x, nightGate, _frameNumber.x,
         uint2(SV_DispatchThreadID.x, SV_DispatchThreadID.y), _ssaoRandomDirection
       );
-      float transmittance = ChapmanTransmittance(0.f, _113, _rayleighScaledHeight, _earthRadius);
+      float transmittance = AuroraAtmosphereTransmittance(_113, _rayleighScaledHeight, _earthRadius);
       aurora = clamp(aurora, 0.f, 10.f) * transmittance;
       aurora *= AuroraBrightnessDampening(AE_DYNAMISM_HIGH);
 
@@ -334,6 +331,7 @@ void main(
       _173 += aurora.g;
       _174 += aurora.b;
     }
+    // RenoDX: <<< [Patch: AuroraProbeLighting]
 
     float _175 = _172 * 0.6131200194358826f;
     float _176 = _172 * 0.07020000368356705f;

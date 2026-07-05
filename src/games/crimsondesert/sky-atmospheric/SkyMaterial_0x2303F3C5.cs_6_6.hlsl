@@ -704,7 +704,8 @@ void main(
     float _finalG = (((_945 * _801) + select(_941, 0.0f, _892.y)) + ((_804 * (((_591 * 0.9163600206375122f) + (_590 * 0.07020000368356705f)) + (_592 * 0.013450000435113907f))) * _952));
     float _finalB = (((_945 * _802) + select(_941, 0.0f, _892.z)) + ((_805 * (((_591 * 0.10958000272512436f) + (_590 * 0.02061999961733818f)) + (_592 * 0.8697999715805054f))) * _952));
 
-    // Aurora Borealis: injected only at night and only when the RR-gated feature is enabled.
+    // RenoDX: >>> [Patch: AuroraVisibleSky] [Version: 1.13.00]
+    // Description: Adds a Ray Reconstruction / Ray Regeneration-gated aurora emission pass to the visible night sky. The injected pass uses the shared aurora raymarch, applies the game sky tint and material fade, then blends in atmospheric transmittance, moon/sun suppression, and auto-exposure dampening so the aurora fades naturally in hazy or bright sky regions.
     [branch]
     if (AURORA_BOREALIS_ENABLED) {
       float3 aurora = ComputeAurora(
@@ -717,14 +718,24 @@ void main(
       );
       aurora *= float3(_803, _804, _805);
       aurora *= _945;
+      float auroraTransmittance = AuroraAtmosphereTransmittance(_138, _rayleighScaledHeight, _earthRadius);
+      aurora *= lerp(1.f, auroraTransmittance, 0.72f);
       float moonWashout = 1.f - saturate(_precomputedAmbient7.z * 0.0005f);
       aurora *= lerp(1.f, moonWashout, 0.3f);
+      aurora *= AuroraCelestialSuppression(
+        float3(_137, _138, _139),
+        float3(_sunDirection.x, _sunDirection.y, _sunDirection.z),
+        float3(_moonDirection.x, _moonDirection.y, _moonDirection.z),
+        _precomputedAmbient7.z,
+        1.f
+      );
       aurora *= AuroraBrightnessDampening(AE_DYNAMISM_HIGH);
 
       _finalR += mad(aurora.r, 0.6131200194358826f, mad(aurora.g, 0.3395099937915802f, aurora.b * 0.047370001673698425f));
       _finalG += mad(aurora.r, 0.07020000368356705f, mad(aurora.g, 0.9163600206375122f, aurora.b * 0.013450000435113907f));
       _finalB += mad(aurora.r, 0.02061999961733818f, mad(aurora.g, 0.10958000272512436f, aurora.b * 0.8697999715805054f));
     }
+    // RenoDX: <<< [Patch: AuroraVisibleSky]
 
     __3__38__0__1__g_postProcessUAV[int2(((int)((((uint)((_27 - (_28 << 2)) << 3)) + SV_GroupThreadID.x) + ((uint)(((int)((uint)(_50) << 5)) & 8160)))), ((int)((((uint)(_28 << 3)) + SV_GroupThreadID.y) + ((uint)(((uint)((uint)(_50)) >> 3) & 8160)))))] = float4(_finalR, _finalG, _finalB, ((_937 + _934) - (_937 * _934)));
   }

@@ -227,8 +227,10 @@ bool is_nvidia = true;
 // We track when they start/stop firing to detect night transitions.
 bool night_shader_active = false;
 bool night_shader_was_active = false;
+bool night_shader_state_initialized = false;
 int night_check_counter = 0;
-uint32_t aurora_night_counter = 0;
+bool aurora_seed_initialized = false;
+bool aurora_effective_was_enabled = false;
 uint32_t dawn_dusk_day_counter = 0;
 std::chrono::steady_clock::time_point dawn_dusk_blend_start{};
 float dawn_dusk_blend_duration = 60.f;  // seconds to crossfade between presets
@@ -238,6 +240,30 @@ bool final_sdr_draw = false;
 // OnPresent). Initialized high so the flag starts disengaged until each path is seen.
 int presents_since_material_draw = 1000;
 int presents_since_final_sdr_draw = 1000;
+
+constexpr uint32_t kAuroraSessionSeedMask = 0x00ffffffu;
+constexpr float kAuroraSessionSeedScale = 1.f / 16777215.f;
+
+uint32_t MixAuroraSeedBits(uint32_t value) {
+  value ^= value >> 16u;
+  value *= 0x7feb352du;
+  value ^= value >> 15u;
+  value *= 0x846ca68bu;
+  value ^= value >> 16u;
+  return value;
+}
+
+void RerollAuroraSessionSeed() {
+  const auto now = static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+  const auto frame_random = static_cast<uint32_t>(shader_injection.custom_random * static_cast<float>(kAuroraSessionSeedMask));
+  uint32_t seed_bits = MixAuroraSeedBits(
+      static_cast<uint32_t>(now)
+      ^ static_cast<uint32_t>(now >> 32u)
+      ^ frame_random)
+      & kAuroraSessionSeedMask;
+  if (seed_bits == 0u) seed_bits = 1u;
+  shader_injection.aurora_night_seed = static_cast<float>(seed_bits) * kAuroraSessionSeedScale;
+}
 
 renodx::mods::shader::CustomShader CreateDetectionShader(
     uint32_t crc32,
@@ -1785,7 +1811,7 @@ renodx::utils::settings::Settings settings = {
     },
     new renodx::utils::settings::Setting{
         .value_type = renodx::utils::settings::SettingValueType::TEXT,
-        .label = "Aurora now work using in game time + has randomisation, however lack per region gating\n",
+        .label = "Aurora uses in-game time, nightly variation, and expanded color presets. Region gating is not implemented yet.\n",
         .section = "Aurora",
         .is_visible = []() { return current_settings_mode == experimental_group; },
     },
@@ -1811,7 +1837,7 @@ renodx::utils::settings::Settings settings = {
         .can_reset = true,
         .label = "Aurora Borealis",
         .section = "Aurora",
-        .tooltip = "Adds a aurora borealis effect to the night sky.\n"
+        .tooltip = "Adds an aurora borealis effect to the night sky.\n"
                    "Off = no aurora. On = aurora enabled.\n"
                    "Disabled until Ray Reconstruction / Ray Regeneration is detected.",
         .labels = {"Off", "On"},
@@ -2126,19 +2152,38 @@ void OnPresent(reshade::api::command_queue* /*queue*/,
 
   shader_injection.custom_flags = std::bit_cast<float>(custom_flags);
 
-  // --- Aurora night seed: detect night transitions via SceneShadowTiledNight ---
-  // SceneShadowTiledNight shaders only run during night, this allows us to use
-  // them as a proxy to re roll the aurora seed
+  // --- Aurora session seed: detect night transitions via SceneShadowTiledNight ---
+  const bool aurora_effective_enabled = (custom_flags & CUSTOM_FLAGS__RR_ENABLED) != 0u
+                                        && (custom_flags & CUSTOM_FLAGS__AURORA_BOREALIS) != 0u;
+
+  // Seed once on startup so an already-night save does not begin from the same
+  // zero session every time.
+  if (!aurora_seed_initialized) {
+    RerollAuroraSessionSeed();
+    aurora_seed_initialized = true;
+    aurora_effective_was_enabled = aurora_effective_enabled;
+  } else if (aurora_effective_enabled && !aurora_effective_was_enabled) {
+    // Reroll whenever aurora becomes effectively active, regardless of what
+    // caused that transition: the UI toggle, a preset, or the Ray
+    // Reconstruction / Ray Regeneration gate becoming available.
+    RerollAuroraSessionSeed();
+  }
+  aurora_effective_was_enabled = aurora_effective_enabled;
+
+  // SceneShadowTiledNight shaders only run during night, so they provide a
+  // low-cost proxy for night transitions.
   night_check_counter++;
   if (night_check_counter >= 30) {
-    // Rising edge: night just started → re-roll aurora seed
-    if (night_shader_active && !night_shader_was_active) {
-      aurora_night_counter++;
-      uint32_t seed_bits = aurora_night_counter * 2654435761u;
-      shader_injection.aurora_night_seed = static_cast<float>(seed_bits & 0xFFFFu) / 65535.f;
+    if (!night_shader_state_initialized) {
+      // Establish the first sampled state without treating an already-night
+      // save as a new dusk transition.
+      night_shader_state_initialized = true;
+    } else if (night_shader_active && !night_shader_was_active) {
+      // Rising edge: night just started, so reroll the aurora seed.
+      RerollAuroraSessionSeed();
 
       // Re-roll dawn/dusk weather seed at dusk (rising edge of night).
-      // Start a blend from old preset → new preset so there's no hard pop.
+      // Start a blend from old preset to new preset so there's no hard pop.
       // Pass the raw counter as the seed (not hashed) so the shader can
       // derive the previous preset via sessionIndex - 1.
       dawn_dusk_day_counter++;
@@ -2151,7 +2196,7 @@ void OnPresent(reshade::api::command_queue* /*queue*/,
   }
 
   // --- Dawn/dusk weather blend ramp ---
-  // After a seed re-roll, ramp blend from 0→1 over dawn_dusk_blend_duration seconds.
+  // After a seed re-roll, ramp blend from 0 to 1 over dawn_dusk_blend_duration seconds.
   // The shader lerps between previous and current preset using this value.
   {
     auto elapsed = std::chrono::steady_clock::now() - dawn_dusk_blend_start;

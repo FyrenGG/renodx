@@ -1,15 +1,22 @@
 // A combo of "Volumetric Aurora Borealis with Polar Reflection" by gerardo-lcdf
 // from Godot & KnighTec's work on W3 Blitz-FX. TY to both
 //
-// v2: Fixed top splotches (removed avgCol running average) and horizontal
-//     gaps (removed fracLayer oscillation). Added analytical height envelope
-//     to control vertical extent without artifacts.
+// Uses a fixed-detail volumetric raymarch with session-seeded color and shape
+// variation. The addon refreshes the session seed when aurora starts or a new
+// night begins.
 
 #ifndef SRC_CRIMSONDESERT_SKY_ATMOSPHERIC_AURORA_COMMON_HLSLI_
 #define SRC_CRIMSONDESERT_SKY_ATMOSPHERIC_AURORA_COMMON_HLSLI_
 
-static const float AURORA_TIME_SCALE = 0.0035f; // For global motion amount
+static const float AURORA_TIME_SCALE = 0.012f; // For global motion amount
 static const int   AURORA_STEP_COUNT = 50;
+static const uint  AURORA_PALETTE_COUNT = 16u;
+static const uint  AURORA_PRESET_COUNT = 10u;
+static const uint  AURORA_HASH24_MASK = 0x00ffffffu;
+static const float AURORA_HASH24_SCALE = 1.f / 16777216.f;
+static const float AURORA_SESSION_SEED_MAX = 16777215.f;
+static const uint  AURORA_PALETTE_SALT = 0x9e3779b9u;
+static const uint  AURORA_PRESET_SALT = 0xbb67ae85u;
 
 float ComputeNightGate(float sunDirY) {
   return 1.f - smoothstep(-0.15f, 0.f, sunDirY);
@@ -22,15 +29,29 @@ float ChapmanTransmittance(float altitude, float cosViewZenith,
   return exp(-5.8e-6f * H * exp(-altitude / H) / max(cosViewZenith, 0.01f));
 }
 
-float AuroraHash21(float2 n) {
-  return frac(sin(dot(n, float2(12.9898f, 4.1414f))) * 43758.5453f);
+float AuroraAtmosphereTransmittance(float cosViewZenith, float rayleighScaleHeight, float earthRadius) {
+  return ChapmanTransmittance(0.f, cosViewZenith, rayleighScaleHeight, earthRadius);
+}
+
+float3 AuroraSafeNormalize(float3 v) {
+  return v * rsqrt(max(dot(v, v), 1e-6f));
+}
+
+float AuroraCelestialSuppression(float3 viewDir, float3 sunDir, float3 moonDir,
+                                 float moonAmbient, float angularStrength) {
+  float3 v = AuroraSafeNormalize(viewDir);
+  float moonGlow = smoothstep(0.78f, 0.97f, dot(v, AuroraSafeNormalize(moonDir)));
+  float sunGlow = smoothstep(0.65f, 0.95f, dot(v, AuroraSafeNormalize(sunDir)));
+  float moonBrightness = saturate(moonAmbient * 0.0008f + 0.25f);
+  float suppression = moonGlow * moonBrightness * 0.35f + sunGlow * 0.45f;
+  return 1.f - saturate(suppression * angularStrength);
 }
 
 // ============================================================================
 // Improved per pixel hash seeded by _ssaoRandomDirection[16]
 // ============================================================================
 
-float2 AuroraImprovedHash(uint2 pixelCoord, float frameJitter, float4 ssaoDirections[16]) {
+float2 AuroraImprovedHash(uint2 pixelCoord, float2 frameJitter, float4 ssaoDirections[16]) {
   uint idx = (pixelCoord.x & 3u) + (pixelCoord.y & 3u) * 4u;
   float2 tileSeed = ssaoDirections[idx].xy;
 
@@ -45,30 +66,66 @@ float2 AuroraImprovedHash(uint2 pixelCoord, float frameJitter, float4 ssaoDirect
   return frac(perPixel + tileSeed * 0.5f + frameJitter);
 }
 
-float AuroraHashInt(uint n) {
-  return frac((float)n * 0.6180339887f);
+uint AuroraHashUint(uint n) {
+  n ^= n >> 16u;
+  n *= 0x7feb352du;
+  n ^= n >> 15u;
+  n *= 0x846ca68bu;
+  n ^= n >> 16u;
+  return n;
+}
+
+float AuroraHash01(uint n) {
+  return (float)(AuroraHashUint(n) & AURORA_HASH24_MASK) * AURORA_HASH24_SCALE;
+}
+
+uint AuroraPickIndex(uint sessionIndex, uint salt, uint count) {
+  uint hash = AuroraHashUint(sessionIndex ^ salt) & AURORA_HASH24_MASK;
+  return min((hash * count) >> 24u, count - 1u);
+}
+
+float2 AuroraFrameJitter16(uint frameNumber) {
+  static const float2 sequence[16] = {
+    float2(0.5000f, 0.5000f), float2(0.1250f, 0.6250f), float2(0.7500f, 0.2500f), float2(0.3750f, 0.8750f),
+    float2(0.6250f, 0.1250f), float2(0.2500f, 0.7500f), float2(0.8750f, 0.3750f), float2(0.0625f, 0.9375f),
+    float2(0.5625f, 0.3125f), float2(0.1875f, 0.4375f), float2(0.8125f, 0.0625f), float2(0.4375f, 0.6875f),
+    float2(0.6875f, 0.8125f), float2(0.3125f, 0.1875f), float2(0.9375f, 0.5625f), float2(0.03125f, 0.28125f)
+  };
+  return sequence[frameNumber & 15u];
+}
+
+float AuroraSampleHash(uint2 pixelCoord, int2 sampleCell, uint stepIndex, uint sessionIndex, uint framePhase) {
+  uint n = ((uint)sampleCell.x * 0x8da6b343u)
+         ^ ((uint)sampleCell.y * 0xd8163841u)
+         ^ (pixelCoord.x * 0x9e3779b9u)
+         ^ (pixelCoord.y * 0x85ebca6bu)
+         ^ (stepIndex * 0xcb1ab31fu)
+         ^ (sessionIndex * 0x165667b1u)
+         ^ (framePhase * 0x27d4eb2du);
+  return (float)(AuroraHashUint(n) & AURORA_HASH24_MASK) * AURORA_HASH24_SCALE;
 }
 
 // ============================================================================
 // Night seed session system
 //
-// Use AURORA_NIGHT_SEED for each night and re rolls
-// The CPU detects transitions by tracking SceneShadowTiledNight
+// AURORA_NIGHT_SEED is a 24-bit normalized session seed supplied by the addon.
+// The shader derives chance, palette, brightness, and shape rolls from it.
 // ============================================================================
 
 uint AuroraNightSessionIndex(float nightSeed) {
-  return (uint)(nightSeed * 65535.f);
+  return (uint)(saturate(nightSeed) * AURORA_SESSION_SEED_MAX + 0.5f);
 }
 
 float AuroraNightVisibility(float nightSeed, float chance) {
   uint sessionIndex = AuroraNightSessionIndex(nightSeed);
-  float roll = AuroraHashInt(sessionIndex);
+  float roll = AuroraHash01(sessionIndex);
   return renodx::math::Select(roll < chance, 1.f, 0.f);
 }
 
-// --- AE compensated aurora dampening ---
-// Inverse of moon compensation. Aurora tuned at ae_dynamism_high = 0.5 (slider 25).
-// Stops nukes at higher AE values
+// --- Auto-exposure compensated aurora dampening ---
+// Inverse of moon compensation. Aurora tuned around auto-exposure high dynamism
+// value 0.5, which corresponds to slider 25.
+// Prevents over-bright aurora output at higher auto-exposure dynamism values.
 float AuroraBrightnessDampening(float aeDynamismHigh) {
   static const float tuningBaseline = 0.5f;
   float ratio = min(renodx::math::DivideSafe(tuningBaseline, aeDynamismHigh, 1.f), 1.f);
@@ -264,26 +321,25 @@ float AuroraGlowDensity(float3 position, float gameTime, float animSpeed, float 
 // Aurora volumetric raymarch
 // ============================================================================
 //
-// v2 changes from original:
-//   1. Removed avgCol running average — was accumulating stale bright values
-//      at high step indices, causing disconnected splotches at the top.
-//   2. Removed fracLayer oscillation — was creating periodic weight dips
-//      that produced horizontal gap banding.
-//   3. Added smooth height envelope that multiplies the layer weight to
-//      give clean vertical falloff without the splotch/gap artifacts.
-//
-// Everything else is identical to the original working code.
+// Implementation notes:
+// - Keep a fixed 50-step detail path; broad step-count reduction caused banding.
+// - Use low-horizon fade and far-distance thinning only where atmospheric haze
+//   already hides detail.
+// - Drive nightly color/preset variation from the CPU session seed.
+// - Use frame-number jitter instead of random per-frame jitter to reduce crawl.
 
 float3 ComputeAurora(float3 viewDir, float realTime, float nightGate, uint frameNumber,
                      uint2 pixelCoord, float4 ssaoDirections[16]) {
 
-  // So the code doesnt run during day time
+  // Skip all aurora work outside the night window.
   if (nightGate <= 0.f) return 0.f;
 
   float3 rd = viewDir;
 
-  float horizonFade = smoothstep(-0.05f, 0.15f, rd.y);
-  if (horizonFade <= 0.f) return 0.f;
+  float horizonDistance = 1.f / max(rd.y, 0.001f);
+  float horizonFade = smoothstep(0.06f, 0.24f, rd.y)
+                    * (1.f - smoothstep(10.f, 24.f, horizonDistance));
+  if (horizonFade <= 0.001f) return 0.f;
 
   float visibilityFade = AuroraNightVisibility(AURORA_NIGHT_SEED, AURORA_CHANCE / 100.f);
   if (visibilityFade <= 0.f) return 0.f;
@@ -291,32 +347,16 @@ float3 ComputeAurora(float3 viewDir, float realTime, float nightGate, uint frame
   uint sessionIndex = AuroraNightSessionIndex(AURORA_NIGHT_SEED);
   float animTime = realTime * AURORA_TIME_SCALE;
 
-  // --- Palette selection with pity system ---
-  uint paletteIndex;
-  {
-    uint raw = min((uint)(AuroraHashInt(sessionIndex + 12345u) * 12.f), 11u);
-    uint prev1 = min((uint)(AuroraHashInt(renodx::math::Select(sessionIndex > 0u, sessionIndex - 1u, 0u) + 12345u) * 12.f), 11u);
-    uint prev2 = min((uint)(AuroraHashInt(renodx::math::Select(sessionIndex > 1u, sessionIndex - 2u, 0u) + 12345u) * 12.f), 11u);
-    paletteIndex = renodx::math::Select(
-      raw == prev1 && raw == prev2 && sessionIndex > 1u,
-      (raw + 1u) % 12u, raw);
-  }
+  // Derive independent nightly rolls from the session seed so already-night
+  // saves and later night transitions do not bias toward the same first color.
+  uint paletteIndex = AuroraPickIndex(sessionIndex, AURORA_PALETTE_SALT, AURORA_PALETTE_COUNT);
 
-  float brightnessVar = mad(AuroraHashInt(sessionIndex + 23456u), 0.7f, 0.3f);
+  float brightnessVar = mad(AuroraHash01(sessionIndex + 23456u), 0.45f, 0.55f);
 
-  // --- Preset selection with pity system ---
-  uint presetIndex;
-  {
-    uint raw = min((uint)(AuroraHashInt(sessionIndex + 34567u) * 10.f), 9u);
-    uint prev1 = min((uint)(AuroraHashInt(renodx::math::Select(sessionIndex > 0u, sessionIndex - 1u, 0u) + 34567u) * 10.f), 9u);
-    uint prev2 = min((uint)(AuroraHashInt(renodx::math::Select(sessionIndex > 1u, sessionIndex - 2u, 0u) + 34567u) * 10.f), 9u);
-    presetIndex = renodx::math::Select(
-      raw == prev1 && raw == prev2 && sessionIndex > 1u,
-      (raw + 1u) % 10u, raw);
-  }
+  uint presetIndex = AuroraPickIndex(sessionIndex, AURORA_PRESET_SALT, AURORA_PRESET_COUNT);
 
   // --- Presets: [mode, blend, sharpness, speed, sparsityLow, sparsityHigh, verticalScale, animSpeed, driftSpeed, pulseSpeed, waveSpeed] ---
-  static const float presets[10][11] = {
+  static const float presets[AURORA_PRESET_COUNT][11] = {
     {2.f, 100.f, 100.f, 50.f, 0.f, 100.f, 300.f, 100.f, 100.f, 100.f, 100.f},
     {2.f, 100.f, 100.f, 75.f, 0.f, 100.f, 250.f, 100.f, 100.f, 100.f, 100.f},
     {2.f, 100.f, 100.f, 75.f, 0.f, 100.f, 100.f, 50.f, 100.f, 100.f, 100.f},
@@ -352,29 +392,39 @@ float3 ComputeAurora(float3 viewDir, float realTime, float nightGate, uint frame
   float waveSpeedPct = presetWaveSpeed / 100.f;
 
   // --- Palettes ---
-  static const float3 paletteBottoms[12] = {
-    float3(0.1f, 1.0f, 0.2f), float3(0.1f, 0.5f, 1.0f), float3(1.0f, 0.2f, 0.5f),
-    float3(0.0f, 1.0f, 0.8f), float3(0.2f, 1.0f, 0.3f), float3(0.3f, 1.0f, 0.1f),
-    float3(0.0f, 0.9f, 1.0f), float3(1.0f, 0.5f, 0.0f), float3(0.0f, 1.0f, 0.5f),
-    float3(0.4f, 0.1f, 1.0f), float3(1.0f, 0.1f, 0.2f), float3(0.0f, 0.9f, 0.7f)
+  // Balanced fantasy-night palette families with restrained green, cleaner warm
+  // crowns, and teal, blue, rose, and violet variation.
+  static const float3 paletteBottoms[AURORA_PALETTE_COUNT] = {
+    float3(0.10f, 0.92f, 0.48f), float3(0.05f, 0.78f, 0.84f), float3(0.10f, 0.76f, 0.72f),
+    float3(0.24f, 0.76f, 0.58f), float3(0.06f, 0.58f, 0.98f), float3(0.10f, 0.62f, 0.82f),
+    float3(0.34f, 0.78f, 0.66f), float3(0.18f, 0.70f, 0.64f), float3(0.06f, 0.82f, 0.86f),
+    float3(0.12f, 0.68f, 0.56f), float3(0.08f, 0.64f, 0.94f), float3(0.20f, 0.76f, 0.68f),
+    float3(0.14f, 0.86f, 0.44f), float3(0.08f, 0.76f, 0.76f), float3(0.30f, 0.82f, 0.64f),
+    float3(0.08f, 0.56f, 0.96f)
   };
-  static const float3 paletteLowerMids[12] = {
-    float3(0.0f, 0.8f, 0.4f), float3(0.3f, 0.3f, 1.0f), float3(0.9f, 0.1f, 0.6f),
-    float3(0.1f, 0.7f, 1.0f), float3(0.6f, 0.9f, 0.2f), float3(0.6f, 1.0f, 0.0f),
-    float3(0.2f, 0.5f, 1.0f), float3(1.0f, 0.7f, 0.0f), float3(0.2f, 0.8f, 0.6f),
-    float3(0.6f, 0.0f, 1.0f), float3(1.0f, 0.4f, 0.1f), float3(0.3f, 0.7f, 0.7f)
+  static const float3 paletteLowerMids[AURORA_PALETTE_COUNT] = {
+    float3(0.06f, 0.72f, 0.56f), float3(0.07f, 0.58f, 0.92f), float3(0.16f, 0.58f, 0.78f),
+    float3(0.42f, 0.64f, 0.50f), float3(0.10f, 0.44f, 0.96f), float3(0.18f, 0.44f, 0.90f),
+    float3(0.34f, 0.62f, 0.70f), float3(0.34f, 0.58f, 0.68f), float3(0.10f, 0.62f, 0.88f),
+    float3(0.18f, 0.50f, 0.58f), float3(0.10f, 0.48f, 0.90f), float3(0.30f, 0.62f, 0.70f),
+    float3(0.16f, 0.68f, 0.54f), float3(0.12f, 0.58f, 0.82f), float3(0.54f, 0.72f, 0.58f),
+    float3(0.14f, 0.42f, 0.96f)
   };
-  static const float3 paletteUpperMids[12] = {
-    float3(0.2f, 0.5f, 0.3f), float3(0.5f, 0.1f, 0.9f), float3(0.7f, 0.0f, 0.5f),
-    float3(0.3f, 0.4f, 0.9f), float3(0.9f, 0.5f, 0.2f), float3(0.9f, 0.9f, 0.0f),
-    float3(0.6f, 0.2f, 0.9f), float3(1.0f, 0.9f, 0.2f), float3(0.5f, 0.4f, 0.9f),
-    float3(0.9f, 0.0f, 0.7f), float3(1.0f, 0.7f, 0.0f), float3(0.8f, 0.3f, 0.5f)
+  static const float3 paletteUpperMids[AURORA_PALETTE_COUNT] = {
+    float3(0.12f, 0.38f, 0.60f), float3(0.32f, 0.28f, 0.88f), float3(0.72f, 0.32f, 0.62f),
+    float3(0.98f, 0.58f, 0.24f), float3(0.28f, 0.24f, 0.90f), float3(0.62f, 0.26f, 0.90f),
+    float3(0.56f, 0.52f, 0.72f), float3(0.92f, 0.44f, 0.32f), float3(0.50f, 0.34f, 0.88f),
+    float3(0.82f, 0.26f, 0.30f), float3(0.18f, 0.36f, 0.74f), float3(0.86f, 0.38f, 0.62f),
+    float3(0.26f, 0.34f, 0.86f), float3(0.78f, 0.30f, 0.46f), float3(0.92f, 0.68f, 0.42f),
+    float3(0.60f, 0.26f, 0.92f)
   };
-  static const float3 paletteTops[12] = {
-    float3(0.1f, 0.2f, 0.1f), float3(0.4f, 0.0f, 0.5f), float3(0.3f, 0.0f, 0.2f),
-    float3(0.1f, 0.1f, 0.4f), float3(0.8f, 0.1f, 0.2f), float3(1.0f, 0.6f, 0.0f),
-    float3(0.5f, 0.0f, 0.6f), float3(1.0f, 1.0f, 0.5f), float3(0.4f, 0.0f, 0.6f),
-    float3(0.6f, 0.0f, 0.3f), float3(1.0f, 0.85f, 0.3f), float3(0.9f, 0.2f, 0.4f)
+  static const float3 paletteTops[AURORA_PALETTE_COUNT] = {
+    float3(0.08f, 0.14f, 0.30f), float3(0.22f, 0.10f, 0.46f), float3(0.50f, 0.14f, 0.38f),
+    float3(0.64f, 0.22f, 0.12f), float3(0.16f, 0.10f, 0.50f), float3(0.44f, 0.12f, 0.58f),
+    float3(0.32f, 0.24f, 0.44f), float3(0.58f, 0.18f, 0.14f), float3(0.34f, 0.16f, 0.50f),
+    float3(0.68f, 0.10f, 0.14f), float3(0.10f, 0.18f, 0.44f), float3(0.52f, 0.16f, 0.40f),
+    float3(0.18f, 0.12f, 0.48f), float3(0.60f, 0.12f, 0.28f), float3(0.42f, 0.28f, 0.26f),
+    float3(0.38f, 0.12f, 0.56f)
   };
 
   float3 colorBottom = paletteBottoms[paletteIndex];
@@ -397,15 +447,18 @@ float3 ComputeAurora(float3 viewDir, float realTime, float nightGate, uint frame
   float3 col = 0.f;
   float rdUp = max(rd.y, 0.001f);
 
-  float frameJitter = CUSTOM_RANDOM;
+  uint framePhase = frameNumber & 15u;
+  float2 frameJitter = AuroraFrameJitter16(frameNumber);
   float2 pixelHash = AuroraImprovedHash(pixelCoord, frameJitter, ssaoDirections);
-  float temporalLayerOffset = (frameJitter - 0.5f) * 1.5f;
+  float temporalLayerOffset = (frameJitter.x - 0.5f) * 1.5f;
 
   uint vh = pixelCoord.x * 3u + pixelCoord.y * 7919u;
   vh = vh ^ (vh >> 13u);
   vh = vh * 0x45d9f3bu;
   vh = vh ^ (vh >> 16u);
-  float verticalNoise = frac(float(vh & 0xFFFFu) * (1.f / 65535.f) + frameJitter * 3.f) - 0.5f;
+  float verticalNoise = frac(float(vh & 0xFFFFu) * (1.f / 65535.f) + frameJitter.y * 3.f) - 0.5f;
+  float farBand = saturate((horizonDistance - 14.f) / 10.f);
+  float farThinStart = lerp(0.85f, 0.45f, farBand);
 
   [loop]
   for (int i = 0; i < AURORA_STEP_COUNT; i++) {
@@ -415,6 +468,12 @@ float3 ComputeAurora(float3 viewDir, float realTime, float nightGate, uint frame
     layerJitter += verticalNoise * 0.3f * smoothstep(0.f, 15.f, fi);
 
     float t = saturate(fi / (float)(AURORA_STEP_COUNT - 1));
+    // Only thin high layers in the distant, already-faded horizon band so the
+    // nearby and overhead aurora keep full 50-step detail.
+    if (farBand > 0.f && t > farThinStart && ((i & 1) != 0)) {
+      continue;
+    }
+
     float stepCurve = t * t * (3.f - 2.f * t);
     float planeHeight = 0.8f + sin(mad(fi, 0.06f, animTime * waveSpeed)) * 0.012f
                       + mad(stepCurve, 0.25f * verticalScale, layerJitter * 0.02f);
@@ -430,8 +489,9 @@ float3 ComputeAurora(float3 viewDir, float realTime, float nightGate, uint frame
     rzt *= lerp(0.7f, 1.3f, saturate(AuroraGlowDensity(samplePos, animTime, animSpeed, rzt) * 2.f));
     rzt = smoothstep(sparsityLow, sparsityHigh, rzt) * pulse;
 
+    int2 sparkleCell = (int2)floor(p * 50.f);
     float sparkle = smoothstep(mad(pixelHash.y, 0.06f, 0.92f), 1.0f,
-                               AuroraHash21(p * 50.f + float2(frameJitter * 100.f, fi))) * rzt * 2.0f;
+                               AuroraSampleHash(pixelCoord, sparkleCell, (uint)i, sessionIndex, framePhase)) * rzt * 2.0f;
 
     float heightBlend = saturate(mad(sin(-1.15f + fi * 0.043f), 0.5f, 0.5f));
     float3 c01 = lerp(colorBottom, colorLowerMid, saturate(heightBlend * 3.f));

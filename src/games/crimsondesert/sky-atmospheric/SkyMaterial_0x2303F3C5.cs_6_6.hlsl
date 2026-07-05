@@ -463,10 +463,13 @@ void main(
         _moonShading = (_eonShading * _limbDark + _innerGlow) * _brightMul;
         float _moonDiskLight = _moonShading * _moonLum * 0.35f;
         float _moonFullReferenceLight = _moonLum * _brightMul * 0.35f;
-        float3 _moonRightDir = normalize(float3(_moonRight.x, _moonRight.y, _moonRight.z));
-        float3 _moonUpDir = normalize(float3(_moonUp.x, _moonUp.y, _moonUp.z));
-        float _moonPhaseSide = (dot(_sunDir, _moonRightDir) < 0.0f) ? -1.0f : 1.0f;
-        float2 _moonLocalPhase = float2(dot(_sphereN, _moonRightDir) * _moonPhaseSide, dot(_sphereN, _moonUpDir));
+        // RenoDX: >>> [Patch: StableMoonPhaseFrame] [Version: 1.13.00]
+        // Description: Builds the art-directed moon phase mask from a stable world-up tangent frame instead of flipping the local x axis from dot(_sunDir, _moonRight). Near the horizon that dot product can hover around zero and make partial phases swap sides from frame to frame; this keeps the crescent coordinates continuous while leaving the moon texture UVs on the game's original right/up axes.
+        float3 _phaseWorldUp = abs(_moonFwd.y) < 0.98f ? float3(0.0f, 1.0f, 0.0f) : float3(1.0f, 0.0f, 0.0f);
+        float3 _phaseRightDir = normalize(cross(_phaseWorldUp, _moonFwd));
+        float3 _phaseUpDir = normalize(cross(_moonFwd, _phaseRightDir));
+        float2 _moonLocalPhase = float2(dot(_sphereN, _phaseRightDir), dot(_sphereN, _phaseUpDir));
+        // RenoDX: <<< [Patch: StableMoonPhaseFrame]
         // RenoDX: >>> [Patch: StylizedMoonPhase] [Version: 1.10-family]
         // Description: Uses the existing sun/moon directions plus the moon's local right/up axes to render soft, stylized moon phase/eclipsing. If Crimson Desert's lighting vectors collapse to an always-full moon, the helper falls back to an art-directed crescent mask so the visible disk still reads as a stylized moon phase instead of a uniformly lit texture.
         _rndx_moonDiskRgb = RenoDXApplyStylizedMoonPhase(_sunDir, _moonFwd, _moonLocalPhase, _moonNdotLRaw, _phaseViewNdot, _moonDiskLight, _moonFullReferenceLight, STYLIZED_LUNAR_PHASE);

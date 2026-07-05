@@ -2,6 +2,8 @@
 
 #define ImTextureID ImU64
 
+#include <algorithm>
+#include <array>
 #include <functional>
 #include <optional>
 #include <string>
@@ -30,6 +32,8 @@ static std::vector<std::string> preset_strings = {
     "Profile #1",
     "Profile #2",
     "Profile #3",
+    "Profile #4",
+    "Profile #5",
 };
 
 static std::vector<std::function<void()>> on_preset_off_callbacks;
@@ -54,7 +58,14 @@ enum class SettingValueType : uint8_t {
   TEXT = 6,
   TEXT_NOWRAP = 7,
   CUSTOM = 8,
+  HOTKEY = 9,
 };
+
+static constexpr uint32_t HOTKEY_KEY_MASK = 0xFFu;
+static constexpr uint32_t HOTKEY_CTRL_FLAG = 1u << 8u;
+static constexpr uint32_t HOTKEY_SHIFT_FLAG = 1u << 9u;
+static constexpr uint32_t HOTKEY_ALT_FLAG = 1u << 10u;
+static constexpr uint32_t HOTKEY_VALUE_MASK = HOTKEY_KEY_MASK | HOTKEY_CTRL_FLAG | HOTKEY_SHIFT_FLAG | HOTKEY_ALT_FLAG;
 
 struct Setting {
   std::string key;
@@ -110,6 +121,8 @@ struct Setting {
     switch (this->value_type) {
       case SettingValueType::BOOLEAN:
         return 1.f;
+      case SettingValueType::HOTKEY:
+        return HOTKEY_VALUE_MASK;
       case SettingValueType::INTEGER:
         return this->labels.empty()
                    ? this->max
@@ -128,6 +141,7 @@ struct Setting {
         return this->value;
         break;
       case SettingValueType::INTEGER:
+      case SettingValueType::HOTKEY:
         return static_cast<float>(this->value_as_int);
         break;
       case SettingValueType::BOOLEAN:
@@ -176,6 +190,104 @@ struct Setting {
 
 using Settings = std::vector<Setting*>;
 static Settings* settings = nullptr;
+static constexpr size_t PRESET_HOTKEY_COUNT = 6;
+
+static bool IsBasicSettingsMode() {
+  if (settings == nullptr) return true;
+
+  for (const auto* setting : *settings) {
+    if (setting == nullptr || setting->key != "SettingsMode") continue;
+    return setting->GetValue() == 0.f;
+  }
+
+  return true;
+}
+
+static bool is_capturing_hotkey = false;
+static std::array<Setting, PRESET_HOTKEY_COUNT> preset_hotkey_settings = {
+    Setting{
+        .key = "OffHotkey",
+        .value_type = SettingValueType::HOTKEY,
+        .default_value = 0.f,
+        .can_reset = false,
+        .label = "Off Hotkey",
+        .section = "Profile Hotkeys",
+        .tooltip = "Switches RenoDX to Off. Hold Ctrl, Shift, or Alt while pressing a key to assign a shortcut chord.",
+        .is_global = true,
+        .is_visible = IsBasicSettingsMode,
+    },
+    Setting{
+        .key = "Profile1Hotkey",
+        .value_type = SettingValueType::HOTKEY,
+        .default_value = 0.f,
+        .can_reset = false,
+        .label = "Profile #1 Hotkey",
+        .section = "Profile Hotkeys",
+        .tooltip = "Switches to RenoDX Profile #1. Hold Ctrl, Shift, or Alt while pressing a key to assign a shortcut chord.",
+        .is_global = true,
+        .is_visible = IsBasicSettingsMode,
+    },
+    Setting{
+        .key = "Profile2Hotkey",
+        .value_type = SettingValueType::HOTKEY,
+        .default_value = 0.f,
+        .can_reset = false,
+        .label = "Profile #2 Hotkey",
+        .section = "Profile Hotkeys",
+        .tooltip = "Switches to RenoDX Profile #2. Hold Ctrl, Shift, or Alt while pressing a key to assign a shortcut chord.",
+        .is_global = true,
+        .is_visible = IsBasicSettingsMode,
+    },
+    Setting{
+        .key = "Profile3Hotkey",
+        .value_type = SettingValueType::HOTKEY,
+        .default_value = 0.f,
+        .can_reset = false,
+        .label = "Profile #3 Hotkey",
+        .section = "Profile Hotkeys",
+        .tooltip = "Switches to RenoDX Profile #3. Hold Ctrl, Shift, or Alt while pressing a key to assign a shortcut chord.",
+        .is_global = true,
+        .is_visible = IsBasicSettingsMode,
+    },
+    Setting{
+        .key = "Profile4Hotkey",
+        .value_type = SettingValueType::HOTKEY,
+        .default_value = 0.f,
+        .can_reset = false,
+        .label = "Profile #4 Hotkey",
+        .section = "Profile Hotkeys",
+        .tooltip = "Switches to RenoDX Profile #4. Hold Ctrl, Shift, or Alt while pressing a key to assign a shortcut chord.",
+        .is_global = true,
+        .is_visible = IsBasicSettingsMode,
+    },
+    Setting{
+        .key = "Profile5Hotkey",
+        .value_type = SettingValueType::HOTKEY,
+        .default_value = 0.f,
+        .can_reset = false,
+        .label = "Profile #5 Hotkey",
+        .section = "Profile Hotkeys",
+        .tooltip = "Switches to RenoDX Profile #5. Hold Ctrl, Shift, or Alt while pressing a key to assign a shortcut chord.",
+        .is_global = true,
+        .is_visible = IsBasicSettingsMode,
+    },
+};
+static std::array<Setting*, PRESET_HOTKEY_COUNT> active_preset_hotkey_settings = {
+    &preset_hotkey_settings[0],
+    &preset_hotkey_settings[1],
+    &preset_hotkey_settings[2],
+    &preset_hotkey_settings[3],
+    &preset_hotkey_settings[4],
+    &preset_hotkey_settings[5],
+};
+static constexpr std::array<int, PRESET_HOTKEY_COUNT> preset_hotkey_indices = {
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+};
 
 #define RENODX_JOIN_MACRO(x, y) x##y
 
@@ -197,6 +309,26 @@ static Setting* FindSetting(const std::string& key) {
     }
   }
   return nullptr;
+}
+
+static void EnsurePresetHotkeySettings() {
+  for (size_t i = 0; i < PRESET_HOTKEY_COUNT; i++) {
+    auto* preset_hotkey_setting = &preset_hotkey_settings[i];
+    auto existing_setting = std::find_if(settings->begin(), settings->end(), [&](const Setting* setting) {
+      return setting != nullptr && setting->key == preset_hotkey_setting->key;
+    });
+
+    if (existing_setting != settings->end()) {
+      active_preset_hotkey_settings[i] = *existing_setting;
+      continue;
+    }
+
+    active_preset_hotkey_settings[i] = preset_hotkey_setting;
+    const auto tips_setting = std::find_if(settings->begin(), settings->end(), [](const Setting* setting) {
+      return setting != nullptr && setting->section == "Tips";
+    });
+    settings->insert(tips_setting, preset_hotkey_setting);
+  }
 }
 
 static bool UpdateSetting(const std::string& key, float value) {
@@ -245,6 +377,7 @@ static void LoadSetting(const std::string& section, Setting* setting) {
       break;
     case SettingValueType::BOOLEAN:
     case SettingValueType::INTEGER:
+    case SettingValueType::HOTKEY:
       if (!reshade::get_config_value(nullptr, section.c_str(), setting->key.c_str(), setting->value_as_int)) {
         setting->value_as_int = static_cast<int>(setting->default_value);
       }
@@ -284,6 +417,7 @@ static void LoadGlobalSettings() {
         break;
       case SettingValueType::BOOLEAN:
       case SettingValueType::INTEGER:
+      case SettingValueType::HOTKEY:
         if (!reshade::get_config_value(nullptr, global_name.c_str(), setting->key.c_str(), setting->value_as_int)) {
           setting->value_as_int = static_cast<int>(setting->default_value);
         }
@@ -312,24 +446,19 @@ static void ClampPresetIndex() {
   }
 }
 
+static std::string GetPresetName(int index) {
+  return global_name + "-preset" + std::to_string(index);
+}
+
 static void LoadCurrentPreset(bool trigger_callbacks = true) {
   ClampPresetIndex();
 
-  switch (preset_index) {
-    case 0:
-      for (auto& callback : on_preset_off_callbacks) {
-        callback();
-      }
-      break;
-    case 1:
-      LoadSettings(global_name + "-preset1");
-      break;
-    case 2:
-      LoadSettings(global_name + "-preset2");
-      break;
-    case 3:
-      LoadSettings(global_name + "-preset3");
-      break;
+  if (preset_index == 0) {
+    for (auto& callback : on_preset_off_callbacks) {
+      callback();
+    }
+  } else {
+    LoadSettings(GetPresetName(preset_index));
   }
 
   if (trigger_callbacks) {
@@ -355,16 +484,8 @@ static void LoadSelectedPreset() {
 static std::string GetCurrentPresetName() {
   ClampPresetIndex();
 
-  switch (preset_index) {
-    case 1:
-      return global_name + "-preset1";
-      break;
-    case 2:
-      return global_name + "-preset2";
-      break;
-    case 3:
-      return global_name + "-preset3";
-      break;
+  if (preset_index > 0) {
+    return GetPresetName(preset_index);
   }
   return "";
 }
@@ -379,6 +500,7 @@ static void SaveSettings(const std::string& section = GetCurrentPresetName()) {
         break;
       case SettingValueType::INTEGER:
       case SettingValueType::BOOLEAN:
+      case SettingValueType::HOTKEY:
         reshade::set_config_value(nullptr, section.c_str(), setting->key.c_str(), setting->value_as_int);
         break;
       default:
@@ -397,6 +519,7 @@ static void SaveGlobalSettings() {
         break;
       case SettingValueType::INTEGER:
       case SettingValueType::BOOLEAN:
+      case SettingValueType::HOTKEY:
         reshade::set_config_value(nullptr, global_name.c_str(), setting->key.c_str(), setting->value_as_int);
         break;
       default:
@@ -426,9 +549,145 @@ static void WriteGlobalString(const std::string& key, const std::string& value) 
   reshade::set_config_value(nullptr, global_name.c_str(), key.c_str(), value.c_str());
 }
 
+static uint32_t GetHotkeyKey(int hotkey) {
+  return static_cast<uint32_t>(hotkey) & HOTKEY_KEY_MASK;
+}
+
+static bool HasHotkeyCtrl(int hotkey) {
+  return (static_cast<uint32_t>(hotkey) & HOTKEY_CTRL_FLAG) != 0;
+}
+
+static bool HasHotkeyShift(int hotkey) {
+  return (static_cast<uint32_t>(hotkey) & HOTKEY_SHIFT_FLAG) != 0;
+}
+
+static bool HasHotkeyAlt(int hotkey) {
+  return (static_cast<uint32_t>(hotkey) & HOTKEY_ALT_FLAG) != 0;
+}
+
+static int EncodeHotkey(uint32_t keycode, bool ctrl, bool shift, bool alt) {
+  auto hotkey = keycode & HOTKEY_KEY_MASK;
+  if (ctrl) hotkey |= HOTKEY_CTRL_FLAG;
+  if (shift) hotkey |= HOTKEY_SHIFT_FLAG;
+  if (alt) hotkey |= HOTKEY_ALT_FLAG;
+  return static_cast<int>(hotkey);
+}
+
+static bool IsHotkeyModifier(uint32_t keycode) {
+  switch (keycode) {
+    case VK_SHIFT:
+    case VK_LSHIFT:
+    case VK_RSHIFT:
+    case VK_CONTROL:
+    case VK_LCONTROL:
+    case VK_RCONTROL:
+    case VK_MENU:
+    case VK_LMENU:
+    case VK_RMENU:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool IsCtrlDown(reshade::api::effect_runtime* runtime) {
+  return runtime->is_key_down(VK_CONTROL)
+         || runtime->is_key_down(VK_LCONTROL)
+         || runtime->is_key_down(VK_RCONTROL);
+}
+
+static bool IsShiftDown(reshade::api::effect_runtime* runtime) {
+  return runtime->is_key_down(VK_SHIFT)
+         || runtime->is_key_down(VK_LSHIFT)
+         || runtime->is_key_down(VK_RSHIFT);
+}
+
+static bool IsAltDown(reshade::api::effect_runtime* runtime) {
+  return runtime->is_key_down(VK_MENU)
+         || runtime->is_key_down(VK_LMENU)
+         || runtime->is_key_down(VK_RMENU);
+}
+
+static std::string GetVirtualKeyName(uint32_t keycode) {
+  if (keycode == 0) return "";
+
+  switch (keycode) {
+    case VK_LBUTTON:
+      return "Left Mouse";
+    case VK_RBUTTON:
+      return "Right Mouse";
+    case VK_MBUTTON:
+      return "Middle Mouse";
+    case VK_XBUTTON1:
+      return "X1 Mouse";
+    case VK_XBUTTON2:
+      return "X2 Mouse";
+    default:
+      break;
+  }
+
+  if (keycode >= '0' && keycode <= '9') return std::string(1, static_cast<char>(keycode));
+  if (keycode >= 'A' && keycode <= 'Z') return std::string(1, static_cast<char>(keycode));
+
+  UINT scan_code = MapVirtualKeyA(keycode, MAPVK_VK_TO_VSC);
+  if (scan_code != 0) {
+    switch (keycode) {
+      case VK_INSERT:
+      case VK_DELETE:
+      case VK_HOME:
+      case VK_END:
+      case VK_PRIOR:
+      case VK_NEXT:
+      case VK_LEFT:
+      case VK_RIGHT:
+      case VK_UP:
+      case VK_DOWN:
+      case VK_DIVIDE:
+      case VK_NUMLOCK:
+        scan_code |= 0x100u;
+        break;
+      default:
+        break;
+    }
+
+    char name[64] = "";
+    if (GetKeyNameTextA(static_cast<LONG>(scan_code << 16), name, static_cast<int>(sizeof(name))) > 0) {
+      return name;
+    }
+  }
+
+  return "VK " + std::to_string(keycode);
+}
+
+static std::string GetHotkeyName(int hotkey) {
+  const auto keycode = GetHotkeyKey(hotkey);
+  if (keycode == 0) return "";
+
+  std::string name;
+  if (HasHotkeyCtrl(hotkey)) name += "Ctrl+";
+  if (HasHotkeyShift(hotkey)) name += "Shift+";
+  if (HasHotkeyAlt(hotkey)) name += "Alt+";
+  name += GetVirtualKeyName(keycode);
+  return name;
+}
+
+static bool IsHotkeyPressed(reshade::api::effect_runtime* runtime, int hotkey) {
+  if (hotkey <= 0) return false;
+
+  const auto keycode = GetHotkeyKey(hotkey);
+  if (keycode == 0 || IsHotkeyModifier(keycode)) return false;
+  if (!runtime->is_key_pressed(keycode)) return false;
+
+  return HasHotkeyCtrl(hotkey) == IsCtrlDown(runtime)
+         && HasHotkeyShift(hotkey) == IsShiftDown(runtime)
+         && HasHotkeyAlt(hotkey) == IsAltDown(runtime);
+}
+
 // Runs first
 // https://pthom.github.io/imgui_manual_online/manual/imgui_manual.html
 static void OnRegisterOverlay(reshade::api::effect_runtime* runtime) {
+  is_capturing_hotkey = false;
+
   bool changed_preset = false;
   bool has_drawn_presets = !use_presets;
 
@@ -439,7 +698,7 @@ static void OnRegisterOverlay(reshade::api::effect_runtime* runtime) {
           "Profile",
           &preset_index,
           0,
-          preset_strings.size() - 1,
+          static_cast<int>(preset_strings.size()) - 1,
           preset_strings[preset_index].c_str(),
           ImGuiSliderFlags_NoInput);
     }
@@ -606,6 +865,38 @@ static void OnRegisterOverlay(reshade::api::effect_runtime* runtime) {
         case SettingValueType::CUSTOM:
           changed |= setting->on_draw();
           break;
+        case SettingValueType::HOTKEY: {
+          const auto key_name = GetHotkeyName(setting->value_as_int);
+          std::array<char, 64> buffer = {};
+          key_name.copy(buffer.data(), std::min(key_name.size(), buffer.size() - 1));
+
+          ImGui::InputTextWithHint(
+              setting->label.c_str(),
+              "Click to set shortcut",
+              buffer.data(),
+              buffer.size(),
+              ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo | ImGuiInputTextFlags_NoHorizontalScroll);
+
+          if (ImGui::IsItemActive()) {
+            is_capturing_hotkey = true;
+
+            const uint32_t keycode = runtime->last_key_pressed();
+            if (keycode != 0 && runtime->is_key_pressed(keycode)) {
+              if (keycode == VK_BACK || keycode == VK_DELETE) {
+                setting->Set(0.f);
+                changed = true;
+              } else if (keycode != VK_ESCAPE && !IsHotkeyModifier(keycode)) {
+                setting->Set(static_cast<float>(EncodeHotkey(
+                    keycode,
+                    IsCtrlDown(runtime),
+                    IsShiftDown(runtime),
+                    IsAltDown(runtime))));
+                changed = true;
+              }
+            }
+          }
+          break;
+        }
       }
       ImGui::PopID();
       if (changed) {
@@ -676,22 +967,51 @@ static void OnRegisterOverlay(reshade::api::effect_runtime* runtime) {
     draw_presets();
   }
   if (!changed_preset && any_change) {
-    switch (preset_index) {
-      case 1:
-        SaveSettings(global_name + "-preset1");
-        break;
-      case 2:
-        SaveSettings(global_name + "-preset2");
-        break;
-      case 3:
-        SaveSettings(global_name + "-preset3");
-        break;
+    if (preset_index != 0) {
+      SaveSettings();
     }
     SaveGlobalSettings();
   }
 }
 
 static bool attached = false;
+
+static void SelectPreset(int new_preset_index) {
+  if (!use_presets) return;
+  if (new_preset_index == preset_index) return;
+
+  const int max_index = static_cast<int>(preset_strings.size()) - 1;
+  if (new_preset_index < 0 || new_preset_index > max_index) return;
+
+  preset_index = new_preset_index;
+  LoadCurrentPreset();
+  SaveGlobalSettings();
+}
+
+static void OnReShadePresent(reshade::api::effect_runtime* runtime) {
+  if (runtime == nullptr || is_capturing_hotkey) return;
+
+  for (size_t i = 0; i < active_preset_hotkey_settings.size(); i++) {
+    const auto* preset_hotkey_setting = active_preset_hotkey_settings[i];
+    if (preset_hotkey_setting == nullptr) continue;
+
+    const int hotkey = preset_hotkey_setting->value_as_int;
+    if (!IsHotkeyPressed(runtime, hotkey)) continue;
+
+    SelectPreset(preset_hotkey_indices[i]);
+    break;
+  }
+}
+
+static bool OnReShadeOpenOverlay(
+    reshade::api::effect_runtime* /*runtime*/,
+    bool open,
+    reshade::api::input_source /*source*/) {
+  if (!open) {
+    is_capturing_hotkey = false;
+  }
+  return false;
+}
 
 static void Use(DWORD fdw_reason, Settings* new_settings, void (*new_on_preset_off)() = nullptr) {
   switch (fdw_reason) {
@@ -700,6 +1020,7 @@ static void Use(DWORD fdw_reason, Settings* new_settings, void (*new_on_preset_o
       attached = true;
 
       settings = new_settings;
+      EnsurePresetHotkeySettings();
       if (new_on_preset_off != nullptr) {
         on_preset_off_callbacks.emplace_back(new_on_preset_off);
       }
@@ -707,11 +1028,15 @@ static void Use(DWORD fdw_reason, Settings* new_settings, void (*new_on_preset_o
       LoadSelectedPreset();
       LoadCurrentPreset();
       reshade::register_overlay(overlay_title.c_str(), OnRegisterOverlay);
+      reshade::register_event<reshade::addon_event::reshade_present>(OnReShadePresent);
+      reshade::register_event<reshade::addon_event::reshade_open_overlay>(OnReShadeOpenOverlay);
 
       break;
     case DLL_PROCESS_DETACH:
       if (!attached) return;
       attached = false;
+      reshade::unregister_event<reshade::addon_event::reshade_open_overlay>(OnReShadeOpenOverlay);
+      reshade::unregister_event<reshade::addon_event::reshade_present>(OnReShadePresent);
       reshade::unregister_overlay(overlay_title.c_str(), OnRegisterOverlay);
       break;
   }

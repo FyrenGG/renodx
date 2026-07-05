@@ -1962,7 +1962,8 @@ renodx::utils::settings::Settings settings = {
     },
     new renodx::utils::settings::Setting{
         .value_type = renodx::utils::settings::SettingValueType::TEXT,
-        .label = "Game mod by Forge, Jon (OopyDoopy/Kickfister), and Shortfuse, RenoDX Framework by Shortfuse",
+        .label =
+            "Crimson Desert mod by Forge, Jon (OopyDoopy/Kickfister), FyrenGG, and Shortfuse. Built on Shortfuse's RenoDX framework.",
         .section = "About",
         .is_visible = []() { return current_settings_mode == basic_group; },
     },

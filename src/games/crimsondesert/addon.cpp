@@ -170,7 +170,7 @@ const std::unordered_map<std::string, float> VANILLA_VALUES = {
     {"DawnDuskImprovements", 0.f},
     {"CustomWeatherEditing", 0.f},
     {"SnowFogFix", 0.f},
-    {"RaytracingQuality", 0.f},
+    {"SPMISQuality", 0.f},
     {"AuroraBorealis", 0.f},
     {"AuroraBrightness", 25.f},
     {"AuroraChance", 40.f},
@@ -182,7 +182,7 @@ const std::unordered_map<std::string, float> VANILLA_VALUES = {
 };
 
 const std::unordered_map<std::string, float> EXPERIMENTAL_RECOMMENDED_VALUES = {
-    {"RaytracingQuality", 0.f},
+    {"SPMISQuality", 0.f},
     {"AuroraBorealis", 0.f},
     {"AuroraBrightness", 25.f},
     {"AuroraChance", 40.f},
@@ -1790,23 +1790,41 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == experimental_group; },
     },
     new renodx::utils::settings::Setting{
-        .key = "RaytracingQuality",
+        // Key is intentionally "SPMISQuality" (not the historical "RaytracingQuality" or the
+        // dev-only "RaytracingQualityDev"): dev-test configs may carry a nonzero value under
+        // the old dev key, and reusing it would silently arm a tier once RR is detected. The
+        // new key orphans those stale values and always starts at Off.
+        .key = "SPMISQuality",
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,
         .default_value = 0.f,
-        // SPMIS is disabled until active RT replacement shaders are restored.
-        // Keep this UI breadcrumb visible, but force all choices to Off so saved values do not set RT_QUALITY.
-        .packed_values = {0u, 0u, 0u},
+        // Shipping SPMIS quality ladder (RT_QUALITY, 2 bits). Every active tier runs the
+        // stochastic pairwise MIS wide-pooling resampler (Hedstrom et al., Eurographics 2026)
+        // in the spatial shader; the tiers are incremental left->right:
+        //   RT_QUALITY==0 "Off"            = pure vanilla RT lighting (only the unconditional
+        //                                    F3 reservoir age-mask defect fix runs).
+        //   RT_QUALITY==2 "SPMIS Balanced" = conditioning (wide-kernel pairwise-MIS pooling
+        //                                    with compatibility-guided selection, raygen and
+        //                                    temporal decorrelation) plus the variance-gated
+        //                                    de-clamp knee that restores bright indirect light
+        //                                    the engine's asymmetric resolve saturate clips.
+        //   RT_QUALITY==3 "SPMIS Boosted"  = Balanced + a confidence+variance-gated energy
+        //                                    lift past the vanilla ceiling ([Patch: RRLadderLift]).
+        // RT_QUALITY==1 (conditioning only, no energy change) remains implemented in the
+        // shaders but is not exposed here: it does not beat vanilla noise on its own, and the
+        // pooling brightness bias it revealed is awaiting an unbiasedness audit before that
+        // tier can honestly be offered as a denoise option.
+        .packed_values = {0u, CUSTOM_FLAGS__RT_QUALITY_BIT1, CUSTOM_FLAGS__RT_QUALITY_BIT0 | CUSTOM_FLAGS__RT_QUALITY_BIT1},
         .can_reset = true,
-        .label = "Raytracing Improvements (Temporarily Disabled)",
+        .label = "Ray Reconstruction Improvements",
         .section = "Experimental Raytracing",
-        .tooltip = "Toggles RenoDX raytracing noise improvements.\n"
-                   "Off = vanilla white noise (TEA+MCG) for all RT sampling.\n"
-                   "SPMIS = R2 blue noise + Stochastic Pairwise MIS spatial resampling.\n"
-                   "Debug Noise = visualizes the raw noise texture sample as colour output.",
-        .labels = {"Off", "SPMIS", "Debug Noise"},
+        .tooltip = "Improves RT diffuse lighting with stochastic pairwise MIS resampling (Hedstrom et al., Eurographics 2026). Each option includes the previous ones.\n"
+                   "Off - vanilla RT lighting\n"
+                   "SPMIS Balanced - restores bright indirect light the engine normally clips; fuller sun/sky bounce outdoors - (pairwise MIS resampling + compatibility-guided neighbor selection + variance-gated de-clamp)\n"
+                   "SPMIS Boosted - pushes stable indirect light past neutral for a bolder look; slightly noisier than Off in places - (+ confidence-gated lift)",
+        .labels = {"Off", "SPMIS Balanced", "SPMIS Boosted"},
         .tint = wiprendering,
-        .is_enabled = []() { return false; },
+        .is_enabled = []() { return RR_ENABLED; },
         .is_visible = []() { return current_settings_mode == experimental_group; },
     },
     new renodx::utils::settings::Setting{
@@ -2053,7 +2071,7 @@ void OnPresetOff() {
       {"StylizedLunarPhase", 0.f},
       {"ContactShadowQuality", 0.f},
       {"FoliageImprovements", 0.f},
-      {"RaytracingQuality", 0.f},
+      {"SPMISQuality", 0.f},
       {"MaterialImprovements", 0.f},
       {"FoliageSpeedTreeWindCoherence", 0.f},
       {"ShadowEdgeNoiseFix", 0.f},

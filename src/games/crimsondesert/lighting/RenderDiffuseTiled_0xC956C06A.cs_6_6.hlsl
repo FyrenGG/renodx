@@ -1,3 +1,10 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared option and helper declarations consumed by this shader's annotated RenoDX patches. This dependency-only prefix replaces no native executable statement; removing the block restores successor A byte-for-byte.
+#include "../shared.h"
+#include "diffuse_brdf.hlsli"
+#include "foliage_common.hlsli"
+#include "purkinje_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct anon {
   uint4 g_tileIndex[4096];
 };
@@ -363,6 +370,12 @@ void main(
   uint3 SV_GroupThreadID : SV_GroupThreadID,
   uint SV_GroupIndex : SV_GroupIndex
 ) {
+  // RenoDX: >>> [Patch: FoliageTransmission] [Version: 1.16.00]
+  // Description: Declares per-invocation foliage transmission accumulators at main-function scope before the structurally consolidated lighting branches. The hook leaves them at zero when disabled, making the later add-back exactly neutral.
+  float _rndx_foliageTransR = 0.0f;
+  float _rndx_foliageTransG = 0.0f;
+  float _rndx_foliageTransB = 0.0f;
+  // RenoDX: <<< [Patch: FoliageTransmission]
   int _73;
   int _74;
   int4 _76;
@@ -3521,6 +3534,25 @@ void main(
       _1468 = _177;
       _1469 = (half)(select(_1428, 0.0f, _1391));
     }
+    // RenoDX: >>> [Patch: FoliageColorCorrect] [Version: 1.16.00]
+    // Description: Applies RenoDX foliage color shaping to foliage stencil materials (stencil ids
+    //              12..18) right after the shader has resolved the direct-diffuse base color for the
+    //              pixel. Vanilla foliage albedo reads flat and yellow-green under strong sun, so the
+    //              helper re-balances hue and saturation. The shadow-map visibility term from
+    //              g_sceneShadowColor is passed in so foliage that is shadowed is not pushed through
+    //              the fully sunlit shaping curve, which would otherwise make shaded leaves glow.
+    //              Gated by FOLIAGE_COLOR_CORRECT; at 0 the block does not execute.
+    if (FOLIAGE_COLOR_CORRECT > 0.0f && ((uint)(_120 - 12) < 7u)) {
+      float3 _rndx_fcBaseColor = float3(float(_1467), float(_1466), float(_1465));
+      half4 _rndx_fcShadow = __3__36__0__0__g_sceneShadowColor.Load(int3(_99, _104, 0));
+      float _rndx_fcShadowVis = saturate(dot(float3(_rndx_fcShadow.xyz), float3(0.2126f, 0.7152f, 0.0722f)));
+      float3 _rndx_fcCorrected = FoliageColorCorrect(_rndx_fcBaseColor, _sunDirection.xyz, _rndx_fcShadowVis, float3(1.0f, 1.0f, 1.0f));
+      float3 _rndx_fscColor = FoliageSelectiveColor(_rndx_fcCorrected);
+      _1467 = half(_rndx_fscColor.x);
+      _1466 = half(_rndx_fscColor.y);
+      _1465 = half(_rndx_fscColor.z);
+    }
+    // RenoDX: <<< [Patch: FoliageColorCorrect]
     _1470 = _1387 & -2;
     _1471 = (_1470 == 66);
     _1472 = (_1387 == 53);
@@ -5370,6 +5402,22 @@ void main(
     _4003 = (((_3985 * 0.61312f) + (_3991 * 0.33951f)) + (_3997 * 0.04737f)) * _3800;
     _4009 = (((_3985 * 0.0702f) + (_3991 * 0.91636f)) + (_3997 * 0.01345f)) * _3800;
     _4015 = (((_3985 * 0.02062f) + (_3991 * 0.10958f)) + (_3997 * 0.8698f)) * _3800;
+    // RenoDX: >>> [Patch: PurkinjeDirectLight] [Version: 1.16.00]
+    // Description: Applies the scotopic direct-light shift only after the active sun or moon color has
+    //              passed through the native cloud and atmosphere transforms and before scene shadow or
+    //              ambient-occlusion channels are consumed. The moon predicate reuses the native
+    //              sun-above-horizon selector and the shader's sun-versus-moon elevation rule.
+    //              The explicit feature gate performs no RGB write when disabled; the helper repeats the
+    //              same gate and returns its input for all inactive cases.
+    if (PURKINJE_EFFECT == 1.f) {
+      bool _rndx_purkinje_is_moon = !_3764 && (_sunDirection.y <= _moonDirection.y);
+      float3 _rndx_purkinje_light = ApplyPurkinjeShift(
+          float3(_4003, _4009, _4015), _sunDirection.y, _rndx_purkinje_is_moon);
+      _4003 = _rndx_purkinje_light.x;
+      _4009 = _rndx_purkinje_light.y;
+      _4015 = _rndx_purkinje_light.z;
+    }
+    // RenoDX: <<< [Patch: PurkinjeDirectLight]
     _4016 = float(_1403.x);  // [sem: _3__36__0__0__g_sceneAO_load_derived]
     _4017 = float(_3724.x);  // [sem: _3__36__0__0__g_sceneShadowColor_load_derived]
     _4018 = float(_3724.y);  // [sem: _3__36__0__0__g_sceneShadowColor_load_derived]
@@ -5461,7 +5509,22 @@ void main(
       _4172 = _4141;
       _4173 = _4137;
     }
-    _4174 = _4031 * _4031;
+    // RenoDX: >>> [Patch: MaterialSpecularAA] [Version: 1.16.00]
+    // Description: Squaring the raw material roughness here produces the GGX alpha used by every
+    //              direct-light specular branch below. On surfaces whose shading normal varies rapidly
+    //              within a pixel, a low roughness leaves the specular lobe narrower than the pixel
+    //              footprint, which shimmers and crawls under camera motion. This block widens the
+    //              roughness first using a normal-derivative (NDF) filter driven by the current
+    //              shading normal, so the lobe covers at least the pixel footprint. Gated by
+    //              SPECULAR_AA; at 0 the filtered roughness is the unmodified material roughness and
+    //              the squared value below is unchanged. `_rndx_spec_rough` is also reused by the
+    //              diffraction hook further down.
+    float _rndx_spec_rough = _4031;
+    if (SPECULAR_AA > 0.0f) {
+      _rndx_spec_rough = NDFFilterRoughnessCS(float3(_4112, _4113, _4114), _4031, SPECULAR_AA);
+    }
+    _4174 = _rndx_spec_rough * _rndx_spec_rough;
+    // RenoDX: <<< [Patch: MaterialSpecularAA]
     _4175 = _4174 * _4174;
     _4177 = ((uint)((int)((uint)((uint)(_4080)) + (uint)(-97))) < (uint)2);
     _4179 = select(_4177, 0.5f, (_4031 * 0.60009766f));
@@ -5711,7 +5774,23 @@ void main(
               _4793 = _4792 * _4792;
               _4794 = 1.0f - _4243;
               _4795 = _4794 * _4794;
-              _4826 = (_4785 * 0.31830987f) * ((((_4248 * ((((_4786 * 34.5f) + -59.0f) * _4786) + 24.5f)) * exp2(-0.0f - (max(((_4786 * 73.2f) + -21.2f), 8.9f) * sqrt(_4245)))) + _4791) + ((((1.0f - ((_4793 * _4793) * (_4792 * 0.75f))) * (1.0f - ((_4795 * _4795) * (_4794 * 0.75f)))) - _4791) * saturate((_4786 * 2.2f) + -0.5f)));
+              // RenoDX: >>> [Patch: MaterialDiffuseBRDF] [Version: 1.16.00]
+              // Description: Replaces the vanilla direct-light diffuse scalar with the RenoDX diffuse BRDF
+              //              when a non-default diffuse model is selected. The vanilla expression is a
+              //              Lambert term with a fitted multi-scatter/retro-reflection correction; the
+              //              replacement is an energy-conserving rough-diffuse model that additionally depends
+              //              on the light-view angle, which keeps rough dielectrics from losing energy at
+              //              grazing angles. The shader clones this direct-lighting maths into several
+              //              mutually exclusive material branches, so this block is repeated in each clone and
+              //              at most one copy runs per pixel. With DIFFUSE_BRDF_MODE below 1 the else branch
+              //              runs the vanilla expression unchanged.
+              if (DIFFUSE_BRDF_MODE >= 1.0f) {
+                float _eon_LdotV = dot(float3(_4226, _4225, _4224), float3(_1474, _1475, _1476));
+                _4826 = _4785 * EON_DiffuseScalar(_4785, _4243, _eon_LdotV, _4031);
+              } else {
+                _4826 = (_4785 * 0.31830987f) * ((((_4248 * ((((_4786 * 34.5f) + -59.0f) * _4786) + 24.5f)) * exp2(-0.0f - (max(((_4786 * 73.2f) + -21.2f), 8.9f) * sqrt(_4245)))) + _4791) + ((((1.0f - ((_4793 * _4793) * (_4792 * 0.75f))) * (1.0f - ((_4795 * _4795) * (_4794 * 0.75f)))) - _4791) * saturate((_4786 * 2.2f) + -0.5f)));
+              }
+              // RenoDX: <<< [Patch: MaterialDiffuseBRDF]
               _4829 = saturate(1.0f - saturate(_4246));  // [sem: expr_sat]
               _4830 = _4829 * _4829;
               _4832 = (_4830 * _4830) * _4829;
@@ -5732,6 +5811,64 @@ void main(
                 _4873 = 0.0f;
                 _4874 = 0.0f;
               }
+              // RenoDX: >>> [Patch: MaterialDiffraction] [Version: 1.16.00]
+              // Description: Three optional direct-light hooks share this branch's diffuse scalar and specular
+              //              RGB, so they are kept adjacent in one block per branch clone.
+              //              MaterialDiffraction adds a wavelength-dependent tint and speckle to specular
+              //              highlights on materials with a metal/specular weight, approximating the
+              //              iridescence of finely structured surfaces that a single-lobe GGX cannot produce;
+              //              it is blended by the material weight so dielectrics are unaffected.
+              //              MaterialSmoothTerminator scales both diffuse and specular near the shadow
+              //              terminator to soften the hard band a pure N.L lobe leaves on curved geometry.
+              //              FoliageTransmission adds back-lit leaf transmission for foliage stencil materials
+              //              (ids 12..18), which vanilla renders as opaque and therefore black when lit from
+              //              behind; it stores the transmitted light in the accumulators declared before the
+              //              branch fan-out and replaces the front-facing diffuse lobe with the helper's scale
+              //              (or a wrapped-diffuse fallback) so total energy stays bounded.
+              //              The shader clones this direct-lighting maths into several mutually exclusive
+              //              material branches, so this block is repeated in each clone and at most one copy
+              //              runs per pixel. Each hook has its own gate (DIFFRACTION, SMOOTH_TERMINATOR,
+              //              FOLIAGE_TRANSMISSION); at 0 none of them execute.
+              if (DIFFRACTION > 0.0f && _4119 > 0.0f) {
+                float3 _rndx_dShift = DiffractionShiftAndSpeckleCS(
+                    _4245, _4243, _rndx_spec_rough,
+                    float2(_99, _104), _124,
+                    float3(_4237, _4238, _4239),
+                    float3(_4112, _4113, _4114),
+                    float3(_4020, _4021, _4022));
+                float3 _rndx_dMod = lerp(1.0f, _rndx_dShift, DIFFRACTION * _4119);
+                _4874 *= _rndx_dMod.x;
+                _4873 *= _rndx_dMod.y;
+                _4872 *= _rndx_dMod.z;
+              }
+              if (SMOOTH_TERMINATOR > 0.0f) {
+                float _rndx_c2 = CallistoSmoothTerminator(_4785, _4248, _4245, SMOOTH_TERMINATOR, 0.5f);
+                _4826 *= _rndx_c2;
+                _4874 *= _rndx_c2;
+                _4873 *= _rndx_c2;
+                _4872 *= _rndx_c2;
+              }
+              if (FOLIAGE_TRANSMISSION > 0.0f && (((uint)(_120 - 12) < 7u))) {
+                FoliageTransmissionResult _rndx_ftResult = FoliageTransmission(
+                    float3(_1474, _1475, _1476),
+                    float3(_4226, _4225, _4224),
+                    float3(_4058, _4059, _4060),
+                    _4240,
+                    float3(_4020, _4021, _4022),
+                    float3(_3985, _3991, _3997),
+                    float3(_4229, _4230, _4231),
+                    FOLIAGE_TRANSMISSION_THICKNESS);
+                _rndx_foliageTransR = _rndx_ftResult.transmission.x;
+                _rndx_foliageTransG = _rndx_ftResult.transmission.y;
+                _rndx_foliageTransB = _rndx_ftResult.transmission.z;
+                if (_rndx_ftResult.diffuseScale > 0.0f) {
+                  _4826 *= _rndx_ftResult.diffuseScale;
+                } else {
+                  float _rndx_wrap = 0.25f * (1.0f - FOLIAGE_TRANSMISSION_THICKNESS);
+                  _4826 = max(0.0f, (_4240 + _rndx_wrap) / (1.0f + _rndx_wrap)) * 0.31830987334251404f * 0.75f;
+                }
+              }
+              // RenoDX: <<< [Patch: MaterialDiffraction]
               _4875 = (_4080 == 65);
               if (_4148) {
                 if (_4875) {
@@ -6620,6 +6757,12 @@ void main(
     _6724 = _6723 + _3716;
     _6725 = _6722 + _3715;
     _6726 = _6721 + _3714;
+    // RenoDX: >>> [Patch: FoliageTransmission] [Version: 1.16.00]
+    // Description: Adds the gated foliage transmission accumulated above to the three clean-decompile direct-diffuse outputs after all native component equations have completed. With the feature disabled the accumulators are zero, so this insertion is exactly neutral.
+    _6724 += _rndx_foliageTransR;
+    _6725 += _rndx_foliageTransG;
+    _6726 += _rndx_foliageTransB;
+    // RenoDX: <<< [Patch: FoliageTransmission]
     _6729 = (uint)((uint)(_frameNumber.x)) * (uint)(13);
     [branch]
     if ((((int)((int)((uint)((uint)(_6729)) + (uint)((uint)(_99)))) | (int)((int)((uint)((uint)(_6729)) + (uint)((uint)(_104))))) & 31) == 0) {
@@ -6839,6 +6982,24 @@ void main(
         _7209 = _7188;
         _7210 = _7189;
       }
+      // RenoDX: >>> [Patch: FoliageFinalAO] [Version: 1.16.00]
+      // Description: Applies RenoDX foliage ambient-occlusion darkening to the final direct-lit scene
+      //              color for foliage stencil materials (stencil ids 12..18). Vanilla leaves the
+      //              direct sun contribution on foliage almost entirely unoccluded, so dense canopies
+      //              read flat and over-bright. The screen-space AO term is blended in proportionally
+      //              to how directly lit the pixel is, taken from the shadow-map colour, so already
+      //              shadowed foliage is not darkened twice. Gated by FOLIAGE_AO_STRENGTH; at 0 the
+      //              block does not execute, and the lerp keeps the multiplier at exactly 1.0 for
+      //              fully shadowed pixels.
+      if (FOLIAGE_AO_STRENGTH > 0.0f && ((uint)(_120 - 12) < 7u)) {
+        half4 _rndx_shadow = __3__36__0__0__g_sceneShadowColor.Load(int3(_99, _104, 0));
+        float _rndx_directRatio = saturate(dot(float3(_rndx_shadow.xyz), float3(0.333f, 0.333f, 0.333f)));
+        float _rndx_ao = lerp(1.0f, float(_1403.x), _rndx_directRatio * FOLIAGE_AO_STRENGTH);
+        _7210 *= _rndx_ao;
+        _7209 *= _rndx_ao;
+        _7208 *= _rndx_ao;
+      }
+      // RenoDX: <<< [Patch: FoliageFinalAO]
       __3__38__0__1__g_sceneColorUAV[int2(_99, _104)] = float4(_7210, _7209, _7208, 1.0f);
     }
   }

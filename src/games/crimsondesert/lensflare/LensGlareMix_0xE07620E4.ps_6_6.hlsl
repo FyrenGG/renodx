@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<float3> __3__36__0__0__g_ghostHalo : register(t100, space36);
 
 Texture2D<float3> __3__36__0__0__g_blade : register(t101, space36);
@@ -57,10 +61,18 @@ float3 main(
   _33 = _20 + TEXCOORD.y;
   _34 = __3__36__0__0__g_blade.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_21, _33), 0.0f);  // [sem: _3__36__0__0__g_blade_sampleLod]
   _38 = __3__36__0__0__g_blade.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_28, _33), 0.0f);  // [sem: _3__36__0__0__g_blade_sampleLod]
-  _56 = (_lensFlareColorScale * 8.0f) * select((_lensFlareColorScale < 1.0001f), 1.0f, ((max(0.01f, min(1.0f, _exposure0.y)) * 3.0f) + (1.0f / min(max(0.5f, _exposure0.y), 10.0f))));
+  // RenoDX: >>> [Patch: LensFlareSlowExposure] [Version: 1.16.00]
+  // Description: Perceptual auto exposure routes both flare-normalization reads through the slow exposure value to prevent pumping; vanilla auto exposure keeps both native reads unchanged.
+  float _renodxLensFlareExposure = (IMPROVED_AUTO_EXPOSURE >= 1) ? max(_exposure4.z, 0.001f) : _exposure0.y;
+  _56 = (_lensFlareColorScale * 8.0f) * select((_lensFlareColorScale < 1.0001f), 1.0f, ((max(0.01f, min(1.0f, _renodxLensFlareExposure)) * 3.0f) + (1.0f / min(max(0.5f, _renodxLensFlareExposure), 10.0f))));
+  // RenoDX: <<< [Patch: LensFlareSlowExposure]
   _57 = _lensFlareColorScale * 0.5f;
-  SV_Target.x = exp2(log2((_56 * _12.x) + (_57 * (((_29.x + _24.x) + _34.x) + _38.x))));
-  SV_Target.y = exp2(log2((_56 * _12.y) + (_57 * (((_29.y + _24.y) + _34.y) + _38.y))));
-  SV_Target.z = exp2(log2((_56 * _12.z) + (_57 * (((_29.z + _24.z) + _34.z) + _38.z))));
+  // RenoDX: >>> [Patch: LensFlareStrength] [Version: 1.16.00]
+  // Description: Applies one normalized user strength to the completed RGB flare, preserving the native halo-to-blade balance; a value of 1 leaves every native channel unchanged.
+  float _renodxLensFlareStrength = LENS_FLARE_STRENGTH;
+  SV_Target.x = (exp2(log2((_56 * _12.x) + (_57 * (((_29.x + _24.x) + _34.x) + _38.x))))) * _renodxLensFlareStrength;
+  SV_Target.y = (exp2(log2((_56 * _12.y) + (_57 * (((_29.y + _24.y) + _34.y) + _38.y))))) * _renodxLensFlareStrength;
+  SV_Target.z = (exp2(log2((_56 * _12.z) + (_57 * (((_29.z + _24.z) + _34.z) + _38.z))))) * _renodxLensFlareStrength;
+  // RenoDX: <<< [Patch: LensFlareStrength]
   return SV_Target;
 }

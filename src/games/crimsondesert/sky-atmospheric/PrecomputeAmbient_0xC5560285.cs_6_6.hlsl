@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared spectral and/or Dawn/Dusk helpers required by this shader's owned patch families.
+#include "sky_spectral_common.hlsli"
+#include "sky_dawn_dusk_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<float4> __3__36__0__0__g_climateTex2 : register(t3, space36);
 
 Texture2D<float2> __3__36__0__0__g_texNetDensity : register(t36, space36);
@@ -2404,9 +2409,20 @@ void main(
       }
       _235 = _atmosphereThickness + -32.0f;
       _242 = (exp2(log2(saturate((_212 + -16.0f) / _235)) * 0.5f) * 0.96875f) + 0.015625f;
-      _252 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-      _258 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-      _263 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+      // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
+      // Description: Rebuilds red and green Rayleigh coefficients from the native blue reference only when Sky Scattering is enabled; the disabled path reconstructs the three native packed channels exactly.
+      float _rndx_rayleigh_r = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f);
+      float _rndx_rayleigh_g = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f);
+      float _rndx_rayleigh_b = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f);
+      if (SKY_SCATTERING) {
+        float _rndx_sky_ref = _rndx_rayleigh_b;
+        _rndx_rayleigh_r = _rndx_sky_ref * SKY_RAYLEIGH_CH1;
+        _rndx_rayleigh_g = _rndx_sky_ref * SKY_RAYLEIGH_CH2;
+      }
+      _252 = _rndx_rayleigh_r + (_ozoneRatio * SKY_OZONE_1);
+      _258 = _rndx_rayleigh_g + (_ozoneRatio * SKY_OZONE_2);
+      _263 = _rndx_rayleigh_b + (_ozoneRatio * SKY_OZONE_3);
+      // RenoDX: <<< [Patch: SkySpectralRayleigh]
       _268 = (((float2)(__3__36__0__0__g_texNetDensity.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_242, _233), 0.0f))).x) * -1.442695f;
       _286 = ((1.0f - saturate(_210 / (_170 * 3.1415927f))) * _151) * ((_sunLightIntensity * _sunLightPreset) / (dot(float3(exp2(_268 * _252), exp2(_268 * _258), exp2(_268 * _263)), float3(0.299f, 0.587f, 0.114f)) * _151));
       _287 = dot(float3(_63, _58, _65), float3(_sunDirection.x, _sunDirection.y, _sunDirection.z));
@@ -2831,12 +2847,21 @@ void main(
               _1760 = (_1693.y + _1735) * _1758;
               _1765 = _cloudScatteringCoefficient / _distanceScale;
               _1767 = (_1742 + _1643) * _1765;
-              _1771 = (_1748 * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _1771 = (_1748 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _1772 = _1771 * _1743;
               _1773 = _1767 + _1760;
-              _1776 = (_1751 * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _1776 = (_1751 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _1777 = _1776 * _1743;
-              _1780 = (_ozoneRatio * 2.1360002e-07f) + (_1753 * 1.9607843e-07f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _1780 = (_ozoneRatio * SKY_OZONE_3) + (_1753 * 1.9607843e-07f);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _1781 = _1780 * _1743;
               _1784 = exp2((_1772 + _1773) * -1.442695f);
               _1787 = exp2((_1777 + _1773) * -1.442695f);
@@ -3343,10 +3368,16 @@ void main(
             _3407 = (_mieAerosolAbsorption + 1.0f) * _3404;
             _3412 = _cloudScatteringCoefficient / _distanceScale;
             _3414 = _3412 * (_3299 + _3391);
-            _3418 = (_3397 * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+            // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+            // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+            _3418 = (_3397 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+            // RenoDX: <<< [Patch: SkySpectralOzone]
             _3421 = _3414 + ((_3349.y + _3384) * _3407);
-            _3424 = (_3400 * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-            _3427 = (_ozoneRatio * 2.1360002e-07f) + (_3402 * 1.9607843e-07f);
+            // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+            // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+            _3424 = (_3400 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+            _3427 = (_ozoneRatio * SKY_OZONE_3) + (_3402 * 1.9607843e-07f);
+            // RenoDX: <<< [Patch: SkySpectralOzone]
             _3431 = exp2(((_3418 * _3392) + _3421) * -1.442695f);
             _3435 = exp2(((_3424 * _3392) + _3421) * -1.442695f);
             _3439 = exp2(((_3427 * _3392) + _3421) * -1.442695f);
@@ -3518,9 +3549,12 @@ void main(
             _3994 = (_3972 + _3933) * _3952;
             _4006 = (((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * sqrt(_mieScaledHeight * _3945)) * exp2((_3946 / _mieScaledHeight) * 1.442695f);
             _4008 = _4006 * (_3992 + _3939);
-            _4017 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-            _4023 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-            _4028 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+            // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+            // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+            _4017 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+            _4023 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+            _4028 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
+            // RenoDX: <<< [Patch: SkySpectralOzone]
             _4033 = dot(float3(_63, _58, _65), float3(_moonDirection.x, _moonDirection.y, _moonDirection.z));
             if (_3721) {
               _4055 = ((exp2(log2(saturate((_3699 - _3720) / (1.0f - _3720))) * 0.2f) * 0.4921875f) + 0.50390625f);
@@ -3580,9 +3614,12 @@ void main(
             _4254 = 0.0f;
           }
           _4269 = (((_3659 * 2e-05f) * _mieAerosolDensity) * (_mieAerosolAbsorption + 1.0f)) + ((_cloudScatteringCoefficient / _distanceScale) * (_3658 + _3657));
-          _4282 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f)) * _3660) + _4269) * -1.442695f);
-          _4292 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f)) * _3660) + _4269) * -1.442695f);
-          _4301 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f)) * _3660) + _4269) * -1.442695f);
+          // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+          // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+          _4282 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1)) * _3660) + _4269) * -1.442695f);
+          _4292 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2)) * _3660) + _4269) * -1.442695f);
+          _4301 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3)) * _3660) + _4269) * -1.442695f);
+          // RenoDX: <<< [Patch: SkySpectralOzone]
           _4308 = (((_4254 * _286) * _4282) + _3663) + (((_4282 * _4251) + _3666) * _357);
           _4315 = (((_4253 * _286) * _4292) + _3662) + (((_4292 * _4250) + _3665) * _357);
           _4322 = (((_4252 * _286) * _4301) + _3661) + (((_4301 * _4249) + _3664) * _357);
@@ -3912,9 +3949,12 @@ void main(
           _5129 = 0.99609375f;
         }
         _5138 = (exp2(log2(saturate((_5108 + -16.0f) / (_atmosphereThickness + -32.0f))) * 0.5f) * 0.96875f) + 0.015625f;
-        _5148 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-        _5154 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-        _5159 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+        // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+        // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+        _5148 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+        _5154 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+        _5159 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
+        // RenoDX: <<< [Patch: SkySpectralOzone]
         _5164 = (((float2)(__3__36__0__0__g_texNetDensity.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_5138, _5129), 0.0f))).x) * -1.442695f;
         _5182 = ((1.0f - saturate(_5106 / (_5066 * 3.1415927f))) * _5047) * ((_sunLightIntensity * _sunLightPreset) / (dot(float3(exp2(_5164 * _5148), exp2(_5164 * _5154), exp2(_5164 * _5159)), float3(0.299f, 0.587f, 0.114f)) * _5047));
         _5183 = dot(float3(_63, _58, _65), float3(_sunDirection.x, _sunDirection.y, _sunDirection.z));
@@ -4374,12 +4414,21 @@ void main(
               _6650 = (_6583.y + _6625) * _6648;
               _6655 = _cloudScatteringCoefficient / _distanceScale;
               _6657 = (_6632 + _6533) * _6655;
-              _6661 = (_6638 * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _6661 = (_6638 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _6662 = _6661 * _6633;
               _6663 = _6657 + _6650;
-              _6666 = (_6641 * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _6666 = (_6641 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _6667 = _6666 * _6633;
-              _6670 = (_ozoneRatio * 2.1360002e-07f) + (_6643 * 1.9607843e-07f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _6670 = (_ozoneRatio * SKY_OZONE_3) + (_6643 * 1.9607843e-07f);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _6671 = _6670 * _6633;
               _6674 = exp2((_6662 + _6663) * -1.442695f);
               _6677 = exp2((_6667 + _6663) * -1.442695f);
@@ -4884,10 +4933,16 @@ void main(
               _8290 = (_mieAerosolAbsorption + 1.0f) * _8287;
               _8295 = _cloudScatteringCoefficient / _distanceScale;
               _8297 = _8295 * (_8182 + _8274);
-              _8301 = (_8280 * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _8301 = (_8280 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _8304 = _8297 + ((_8232.y + _8267) * _8290);
-              _8307 = (_8283 * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-              _8310 = (_ozoneRatio * 2.1360002e-07f) + (_8285 * 1.9607843e-07f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _8307 = (_8283 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+              _8310 = (_ozoneRatio * SKY_OZONE_3) + (_8285 * 1.9607843e-07f);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _8314 = exp2(((_8301 * _8275) + _8304) * -1.442695f);
               _8318 = exp2(((_8307 * _8275) + _8304) * -1.442695f);
               _8322 = exp2(((_8310 * _8275) + _8304) * -1.442695f);
@@ -5076,9 +5131,12 @@ void main(
           _8878 = (_8856 + _8817) * _8836;
           _8890 = (((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * sqrt(_mieScaledHeight * _8829)) * exp2((_8830 / _mieScaledHeight) * 1.442695f);
           _8892 = _8890 * (_8876 + _8823);
-          _8901 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-          _8907 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-          _8912 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+          // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+          // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+          _8901 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+          _8907 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+          _8912 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
+          // RenoDX: <<< [Patch: SkySpectralOzone]
           _8917 = dot(float3(_63, _58, _65), float3(_moonDirection.x, _moonDirection.y, _moonDirection.z));
           if (_8605) {
             _8939 = ((exp2(log2(saturate((_8583 - _8604) / (1.0f - _8604))) * 0.2f) * 0.4921875f) + 0.50390625f);
@@ -5138,9 +5196,12 @@ void main(
           _9138 = 0.0f;
         }
         _9153 = (((_8542 * 2e-05f) * _mieAerosolDensity) * (_mieAerosolAbsorption + 1.0f)) + ((_cloudScatteringCoefficient / _distanceScale) * (_8541 + _8540));
-        _9166 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f)) * _8543) + _9153) * -1.442695f);
-        _9176 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f)) * _8543) + _9153) * -1.442695f);
-        _9185 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f)) * _8543) + _9153) * -1.442695f);
+        // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+        // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+        _9166 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1)) * _8543) + _9153) * -1.442695f);
+        _9176 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2)) * _8543) + _9153) * -1.442695f);
+        _9185 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3)) * _8543) + _9153) * -1.442695f);
+        // RenoDX: <<< [Patch: SkySpectralOzone]
         _9192 = (((_9135 * _5182) * _9166) + _8546) + (((_9166 * _9138) + _8549) * _5253);
         _9199 = (((_9134 * _5182) * _9176) + _8545) + (((_9176 * _9137) + _8548) * _5253);
         _9206 = (((_9133 * _5182) * _9185) + _8544) + (((_9185 * _9136) + _8547) * _5253);
@@ -5544,9 +5605,25 @@ void main(
     }
     GroupMemoryBarrierWithGroupSync();
     if (!((uint)(int)(SV_DispatchThreadID.x) > (uint)8)) {
+      // RenoDX: >>> [Patch: DawnDuskSHDirectionalBias] [Version: 1.13.00]
+      // Description: Builds R/G/B directional biases from the three per-channel L0 slots before the native row switch; a disabled Dawn/Dusk gate returns three zero vectors.
+      float _rndx_dawn_dusk_factor = DawnDuskFactor(_sunDirection.y);
+      float3 _rndx_sh_bias_R, _rndx_sh_bias_G, _rndx_sh_bias_B;
+      SHDirectionalBias(float3(_sunDirection.x, _sunDirection.y, _sunDirection.z),
+                        _rndx_dawn_dusk_factor,
+                        float3(((_global_4[0]) * 0.0078125f), ((_global_6[0]) * 0.0078125f), ((_global_8[0]) * 0.0078125f)),
+                        _rndx_sh_bias_R, _rndx_sh_bias_G, _rndx_sh_bias_B);
+      // RenoDX: <<< [Patch: DawnDuskSHDirectionalBias]
       switch ((uint)(SV_DispatchThreadID.x)) {
         case 0: {
-          __3__39__0__1__g_texPrecomputedAmbientUAV[0] = float4(((_global_4[0]) * 0.0078125f), ((_global_4[1]) * 0.0078125f), ((_global_4[2]) * 0.0078125f), ((_global_4[3]) * 0.0078125f));
+          // RenoDX: >>> [Patch: DawnDuskSHDirectionalBias] [Version: 1.13.00]
+          // Description: Adds the gated sun-direction bias only to packed L1 slots [1..3] using [-y,+z,-x]; the native L0 slot [0] is unchanged.
+          __3__39__0__1__g_texPrecomputedAmbientUAV[0] = float4(
+              ((_global_4[0]) * 0.0078125f),
+              ((_global_4[1]) * 0.0078125f) - _rndx_sh_bias_R.y,
+              ((_global_4[2]) * 0.0078125f) + _rndx_sh_bias_R.z,
+              ((_global_4[3]) * 0.0078125f) - _rndx_sh_bias_R.x);
+          // RenoDX: <<< [Patch: DawnDuskSHDirectionalBias]
           break;
         }
         case 1: {
@@ -5554,7 +5631,14 @@ void main(
           break;
         }
         case 2: {
-          __3__39__0__1__g_texPrecomputedAmbientUAV[2] = float4(((_global_6[0]) * 0.0078125f), ((_global_6[1]) * 0.0078125f), ((_global_6[2]) * 0.0078125f), ((_global_6[3]) * 0.0078125f));
+          // RenoDX: >>> [Patch: DawnDuskSHDirectionalBias] [Version: 1.13.00]
+          // Description: Adds the gated sun-direction bias only to packed L1 slots [1..3] using [-y,+z,-x]; the native L0 slot [0] is unchanged.
+          __3__39__0__1__g_texPrecomputedAmbientUAV[2] = float4(
+              ((_global_6[0]) * 0.0078125f),
+              ((_global_6[1]) * 0.0078125f) - _rndx_sh_bias_G.y,
+              ((_global_6[2]) * 0.0078125f) + _rndx_sh_bias_G.z,
+              ((_global_6[3]) * 0.0078125f) - _rndx_sh_bias_G.x);
+          // RenoDX: <<< [Patch: DawnDuskSHDirectionalBias]
           break;
         }
         case 3: {
@@ -5562,7 +5646,14 @@ void main(
           break;
         }
         case 4: {
-          __3__39__0__1__g_texPrecomputedAmbientUAV[4] = float4(((_global_8[0]) * 0.0078125f), ((_global_8[1]) * 0.0078125f), ((_global_8[2]) * 0.0078125f), ((_global_8[3]) * 0.0078125f));
+          // RenoDX: >>> [Patch: DawnDuskSHDirectionalBias] [Version: 1.13.00]
+          // Description: Adds the gated sun-direction bias only to packed L1 slots [1..3] using [-y,+z,-x]; the native L0 slot [0] is unchanged.
+          __3__39__0__1__g_texPrecomputedAmbientUAV[4] = float4(
+              ((_global_8[0]) * 0.0078125f),
+              ((_global_8[1]) * 0.0078125f) - _rndx_sh_bias_B.y,
+              ((_global_8[2]) * 0.0078125f) + _rndx_sh_bias_B.z,
+              ((_global_8[3]) * 0.0078125f) - _rndx_sh_bias_B.x);
+          // RenoDX: <<< [Patch: DawnDuskSHDirectionalBias]
           break;
         }
         case 5: {
@@ -5609,9 +5700,12 @@ void main(
             _10683 = 0.99609375f;
           }
           _10692 = (exp2(log2(saturate((_10660 + -16.0f) / (_atmosphereThickness + -32.0f))) * 0.5f) * 0.96875f) + 0.015625f;
-          _10702 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-          _10708 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-          _10713 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+          // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+          // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+          _10702 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+          _10708 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+          _10713 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
+          // RenoDX: <<< [Patch: SkySpectralOzone]
           _10718 = (((float2)(__3__36__0__0__g_texNetDensity.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_10692, _10683), 0.0f))).x) * -1.442695f;
           _10730 = acos(min(max(dot(float3(_sunDirection.x, _sunDirection.y, _sunDirection.z), float3(_moonDirection.x, _moonDirection.y, _moonDirection.z)), -1.0f), 1.0f));
           _10731 = _10730 * 57.295776f;
@@ -6042,9 +6136,25 @@ void main(
       }
       GroupMemoryBarrierWithGroupSync();
       if (!((uint)(int)(SV_DispatchThreadID.x) > (uint)8)) {
+        // RenoDX: >>> [Patch: DawnDuskSHDirectionalBias] [Version: 1.13.00]
+        // Description: Builds R/G/B directional biases from the three per-channel L0 slots before the native row switch; a disabled Dawn/Dusk gate returns three zero vectors.
+        float _rndx_dawn_dusk_factor = DawnDuskFactor(_sunDirection.y);
+        float3 _rndx_sh_bias_R, _rndx_sh_bias_G, _rndx_sh_bias_B;
+        SHDirectionalBias(float3(_sunDirection.x, _sunDirection.y, _sunDirection.z),
+                          _rndx_dawn_dusk_factor,
+                          float3(((_global_4[0]) * 0.0078125f), ((_global_6[0]) * 0.0078125f), ((_global_8[0]) * 0.0078125f)),
+                          _rndx_sh_bias_R, _rndx_sh_bias_G, _rndx_sh_bias_B);
+        // RenoDX: <<< [Patch: DawnDuskSHDirectionalBias]
         switch ((uint)(SV_DispatchThreadID.x)) {
           case 0: {
-            __3__39__0__1__g_texPrecomputedAmbientUAV[0] = float4(((_global_4[0]) * 0.0078125f), ((_global_4[1]) * 0.0078125f), ((_global_4[2]) * 0.0078125f), ((_global_4[3]) * 0.0078125f));
+            // RenoDX: >>> [Patch: DawnDuskSHDirectionalBias] [Version: 1.13.00]
+            // Description: Adds the gated sun-direction bias only to packed L1 slots [1..3] using [-y,+z,-x]; the native L0 slot [0] is unchanged.
+            __3__39__0__1__g_texPrecomputedAmbientUAV[0] = float4(
+                ((_global_4[0]) * 0.0078125f),
+                ((_global_4[1]) * 0.0078125f) - _rndx_sh_bias_R.y,
+                ((_global_4[2]) * 0.0078125f) + _rndx_sh_bias_R.z,
+                ((_global_4[3]) * 0.0078125f) - _rndx_sh_bias_R.x);
+            // RenoDX: <<< [Patch: DawnDuskSHDirectionalBias]
             break;
           }
           case 1: {
@@ -6052,7 +6162,14 @@ void main(
             break;
           }
           case 2: {
-            __3__39__0__1__g_texPrecomputedAmbientUAV[2] = float4(((_global_6[0]) * 0.0078125f), ((_global_6[1]) * 0.0078125f), ((_global_6[2]) * 0.0078125f), ((_global_6[3]) * 0.0078125f));
+            // RenoDX: >>> [Patch: DawnDuskSHDirectionalBias] [Version: 1.13.00]
+            // Description: Adds the gated sun-direction bias only to packed L1 slots [1..3] using [-y,+z,-x]; the native L0 slot [0] is unchanged.
+            __3__39__0__1__g_texPrecomputedAmbientUAV[2] = float4(
+                ((_global_6[0]) * 0.0078125f),
+                ((_global_6[1]) * 0.0078125f) - _rndx_sh_bias_G.y,
+                ((_global_6[2]) * 0.0078125f) + _rndx_sh_bias_G.z,
+                ((_global_6[3]) * 0.0078125f) - _rndx_sh_bias_G.x);
+            // RenoDX: <<< [Patch: DawnDuskSHDirectionalBias]
             break;
           }
           case 3: {
@@ -6060,7 +6177,14 @@ void main(
             break;
           }
           case 4: {
-            __3__39__0__1__g_texPrecomputedAmbientUAV[4] = float4(((_global_8[0]) * 0.0078125f), ((_global_8[1]) * 0.0078125f), ((_global_8[2]) * 0.0078125f), ((_global_8[3]) * 0.0078125f));
+            // RenoDX: >>> [Patch: DawnDuskSHDirectionalBias] [Version: 1.13.00]
+            // Description: Adds the gated sun-direction bias only to packed L1 slots [1..3] using [-y,+z,-x]; the native L0 slot [0] is unchanged.
+            __3__39__0__1__g_texPrecomputedAmbientUAV[4] = float4(
+                ((_global_8[0]) * 0.0078125f),
+                ((_global_8[1]) * 0.0078125f) - _rndx_sh_bias_B.y,
+                ((_global_8[2]) * 0.0078125f) + _rndx_sh_bias_B.z,
+                ((_global_8[3]) * 0.0078125f) - _rndx_sh_bias_B.x);
+            // RenoDX: <<< [Patch: DawnDuskSHDirectionalBias]
             break;
           }
           case 5: {
@@ -6107,9 +6231,12 @@ void main(
               _12317 = 0.99609375f;
             }
             _12326 = (exp2(log2(saturate((_12294 + -16.0f) / (_atmosphereThickness + -32.0f))) * 0.5f) * 0.96875f) + 0.015625f;
-            _12336 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-            _12342 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-            _12347 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+            // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+            // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+            _12336 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+            _12342 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+            _12347 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
+            // RenoDX: <<< [Patch: SkySpectralOzone]
             _12352 = (((float2)(__3__36__0__0__g_texNetDensity.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_12326, _12317), 0.0f))).x) * -1.442695f;
             _12364 = acos(min(max(dot(float3(_sunDirection.x, _sunDirection.y, _sunDirection.z), float3(_moonDirection.x, _moonDirection.y, _moonDirection.z)), -1.0f), 1.0f));
             _12365 = _12364 * 57.295776f;

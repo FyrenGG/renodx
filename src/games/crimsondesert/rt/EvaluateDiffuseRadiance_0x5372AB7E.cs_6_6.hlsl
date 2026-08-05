@@ -1,9 +1,35 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct SurfelData {
   uint _baseColor;
   uint _normal;
   half3 _radiance;
   uint16_t _radius;
 };
+// RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.13.00]
+// Description: Smooths large square diffuse-GI patches that appear on snowy terrain in RR-on EvaluateDiffuseRadianceCS variants. Vanilla quantizes surfel voxel clipmap lookups with floor(wrappedViewPos...), so adjacent pixels can snap to visible cell boundaries. When Snow / Fog Lighting Fixes is enabled, this adds small per-pixel, frame-varying jitter before quantization; Off returns the exact vanilla coordinate.
+static const float RENODX_SURFEL_JITTER_AMOUNT = 1.0f;
+
+float RenoDXSurfelHash(float2 p) {
+  return frac(frac(dot(p, float2(0.0671105608344078f, 0.005837149918079376f))) * 52.98291778564453f);
+}
+
+float3 RenoDXSurfelVoxelJitter(float3 voxelCoord, float2 pixelCoord, float frameIndex, uint frameNumber) {
+  if (SNOW_FOG_FIX <= 0.0f) {
+    return voxelCoord;
+  }
+
+  float rand0 = RenoDXSurfelHash(pixelCoord);
+  float rand1 = RenoDXSurfelHash(pixelCoord + float2(frameIndex * 32.665000915527344f, frameIndex * 11.8149995803833f));
+  float framePhase = frac(float(frameNumber) * 0.6180339887f);
+  float r0 = frac(rand0 + framePhase) * 2.0f - 1.0f;
+  float r1 = frac(rand1 + framePhase * 1.3247179572f) * 2.0f - 1.0f;
+  float r2 = frac(rand0 * 7.461f + rand1 * 3.517f + framePhase * 0.7548776662f) * 2.0f - 1.0f;
+  return voxelCoord + float3(r0, r1, r2) * RENODX_SURFEL_JITTER_AMOUNT;
+}
+// RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
 
 struct anon {
   float4 _shadowDepthRanges;
@@ -1459,9 +1485,13 @@ void main(
     while(true) {
       _234 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_232) + (int)(20)))];
       _240 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_232) + (int)(36)))];
-      _250 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _228) * _234.w) + _240.x));
-      _256 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _229) * _234.w) + _240.y));
-      _262 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _230) * _234.w) + _240.z));
+      // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+      // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+      float3 _rndx_surfel_jitter_250 = RenoDXSurfelVoxelJitter(float3(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _228) * _234.w) + _240.x, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _229) * _234.w) + _240.y, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _230) * _234.w) + _240.z), float2(_77, _78), _169, _frameNumber.x);
+      _250 = (int)(floor(_rndx_surfel_jitter_250.x));
+      _256 = (int)(floor(_rndx_surfel_jitter_250.y));
+      _262 = (int)(floor(_rndx_surfel_jitter_250.z));
+      // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
       if (((int)_250 < (int)((int)(_234.x + -63.0f))) || !((int)_250 < (int)((int)(_234.x + 63.0f))) || ((int)_256 < (int)((int)(_234.y + -31.0f))) || !((int)_256 < (int)((int)(_234.y + 31.0f))) || ((int)_262 < (int)((int)(_234.z + -63.0f))) || !((int)_262 < (int)((int)(_234.z + 63.0f)))) {
         _287 = (int)(_232) + (int)(1);
         if ((uint)_287 < (uint)8) {
@@ -1484,9 +1514,13 @@ void main(
       while(true) {
         _313 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_311) + (int)(20)))];
         _319 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_311) + (int)(36)))];
-        _329 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _303) * _313.w) + _319.x));
-        _335 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _306) * _313.w) + _319.y));
-        _341 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _309) * _313.w) + _319.z));
+        // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+        // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+        float3 _rndx_surfel_jitter_329 = RenoDXSurfelVoxelJitter(float3(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _303) * _313.w) + _319.x, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _306) * _313.w) + _319.y, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _309) * _313.w) + _319.z), float2(_77, _78), _169, _frameNumber.x);
+        _329 = (int)(floor(_rndx_surfel_jitter_329.x));
+        _335 = (int)(floor(_rndx_surfel_jitter_329.y));
+        _341 = (int)(floor(_rndx_surfel_jitter_329.z));
+        // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
         if (((int)_329 < (int)((int)(_313.x + -63.0f))) || ((!((int)_329 < (int)((int)(_313.x + -63.0f)))) && (!((int)_329 < (int)((int)(_313.x + 63.0f))))) || (((!((int)_329 < (int)((int)(_313.x + -63.0f)))) && ((int)_329 < (int)((int)(_313.x + 63.0f)))) && ((int)_335 < (int)((int)(_313.y + -31.0f)))) || ((((!((int)_329 < (int)((int)(_313.x + -63.0f)))) && ((int)_329 < (int)((int)(_313.x + 63.0f)))) && (!((int)_335 < (int)((int)(_313.y + -31.0f))))) && (!((int)_335 < (int)((int)(_313.y + 31.0f))))) || (((((!((int)_329 < (int)((int)(_313.x + -63.0f)))) && ((int)_329 < (int)((int)(_313.x + 63.0f)))) && (!((int)_335 < (int)((int)(_313.y + -31.0f))))) && ((int)_335 < (int)((int)(_313.y + 31.0f)))) && ((int)_341 < (int)((int)(_313.z + -63.0f)))) || ((((((!((int)_329 < (int)((int)(_313.x + -63.0f)))) && ((int)_329 < (int)((int)(_313.x + 63.0f)))) && (!((int)_335 < (int)((int)(_313.y + -31.0f))))) && ((int)_335 < (int)((int)(_313.y + 31.0f)))) && (!((int)_341 < (int)((int)(_313.z + -63.0f))))) && (!((int)_341 < (int)((int)(_313.z + 63.0f)))))) {
           _366 = (int)(_311) + (int)(1);
           if ((uint)_366 < (uint)8) {
@@ -1514,9 +1548,13 @@ void main(
             while(true) {
               _374 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_372) + (int)(20)))];
               _380 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_372) + (int)(36)))];
-              _390 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _303) * _374.w) + _380.x));
-              _396 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _306) * _374.w) + _380.y));
-              _402 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _309) * _374.w) + _380.z));
+              // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+              // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+              float3 _rndx_surfel_jitter_390 = RenoDXSurfelVoxelJitter(float3(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _303) * _374.w) + _380.x, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _306) * _374.w) + _380.y, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _309) * _374.w) + _380.z), float2(_77, _78), _169, _frameNumber.x);
+              _390 = (int)(floor(_rndx_surfel_jitter_390.x));
+              _396 = (int)(floor(_rndx_surfel_jitter_390.y));
+              _402 = (int)(floor(_rndx_surfel_jitter_390.z));
+              // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
               if (((int)_390 < (int)((int)(_374.x + -63.0f))) || ((!((int)_390 < (int)((int)(_374.x + -63.0f)))) && (!((int)_390 < (int)((int)(_374.x + 63.0f))))) || (((!((int)_390 < (int)((int)(_374.x + -63.0f)))) && ((int)_390 < (int)((int)(_374.x + 63.0f)))) && ((int)_396 < (int)((int)(_374.y + -31.0f)))) || ((((!((int)_390 < (int)((int)(_374.x + -63.0f)))) && ((int)_390 < (int)((int)(_374.x + 63.0f)))) && (!((int)_396 < (int)((int)(_374.y + -31.0f))))) && (!((int)_396 < (int)((int)(_374.y + 31.0f))))) || (((((!((int)_390 < (int)((int)(_374.x + -63.0f)))) && ((int)_390 < (int)((int)(_374.x + 63.0f)))) && (!((int)_396 < (int)((int)(_374.y + -31.0f))))) && ((int)_396 < (int)((int)(_374.y + 31.0f)))) && ((int)_402 < (int)((int)(_374.z + -63.0f)))) || ((((((!((int)_390 < (int)((int)(_374.x + -63.0f)))) && ((int)_390 < (int)((int)(_374.x + 63.0f)))) && (!((int)_396 < (int)((int)(_374.y + -31.0f))))) && ((int)_396 < (int)((int)(_374.y + 31.0f)))) && (!((int)_402 < (int)((int)(_374.z + -63.0f))))) && (!((int)_402 < (int)((int)(_374.z + 63.0f)))))) {
                 _427 = (int)(_372) + (int)(1);
                 if ((uint)_427 < (uint)8) {
@@ -1550,9 +1588,13 @@ void main(
                   while(true) {
                     _457 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_455) + (int)(20)))];
                     _463 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_455) + (int)(36)))];
-                    _474 = (int)(floor((((_303 - _453) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x) * _457.w) + _463.x));
-                    _481 = (int)(floor((((_306 - _453) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y) * _457.w) + _463.y));
-                    _488 = (int)(floor((((_309 - _453) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z) * _457.w) + _463.z));
+                    // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+                    // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+                    float3 _rndx_surfel_jitter_474 = RenoDXSurfelVoxelJitter(float3((((_303 - _453) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x) * _457.w) + _463.x, (((_306 - _453) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y) * _457.w) + _463.y, (((_309 - _453) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z) * _457.w) + _463.z), float2(_77, _78), _169, _frameNumber.x);
+                    _474 = (int)(floor(_rndx_surfel_jitter_474.x));
+                    _481 = (int)(floor(_rndx_surfel_jitter_474.y));
+                    _488 = (int)(floor(_rndx_surfel_jitter_474.z));
+                    // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
                     if (((int)_474 < (int)((int)(_457.x + -63.0f))) || ((!((int)_474 < (int)((int)(_457.x + -63.0f)))) && (!((int)_474 < (int)((int)(_457.x + 63.0f))))) || (((!((int)_474 < (int)((int)(_457.x + -63.0f)))) && ((int)_474 < (int)((int)(_457.x + 63.0f)))) && ((int)_481 < (int)((int)(_457.y + -31.0f)))) || ((((!((int)_474 < (int)((int)(_457.x + -63.0f)))) && ((int)_474 < (int)((int)(_457.x + 63.0f)))) && (!((int)_481 < (int)((int)(_457.y + -31.0f))))) && (!((int)_481 < (int)((int)(_457.y + 31.0f))))) || (((((!((int)_474 < (int)((int)(_457.x + -63.0f)))) && ((int)_474 < (int)((int)(_457.x + 63.0f)))) && (!((int)_481 < (int)((int)(_457.y + -31.0f))))) && ((int)_481 < (int)((int)(_457.y + 31.0f)))) && ((int)_488 < (int)((int)(_457.z + -63.0f)))) || ((((((!((int)_474 < (int)((int)(_457.x + -63.0f)))) && ((int)_474 < (int)((int)(_457.x + 63.0f)))) && (!((int)_481 < (int)((int)(_457.y + -31.0f))))) && ((int)_481 < (int)((int)(_457.y + 31.0f)))) && (!((int)_488 < (int)((int)(_457.z + -63.0f))))) && (!((int)_488 < (int)((int)(_457.z + 63.0f)))))) {
                       _513 = (int)(_455) + (int)(1);
                       if ((uint)_513 < (uint)8) {
@@ -2045,9 +2087,13 @@ void main(
   while(true) {
     _1235 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_1233) + (int)(20)))];
     _1241 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_1233) + (int)(36)))];
-    _1251 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _142) * _1235.w) + _1241.x));
-    _1257 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _151) * _1235.w) + _1241.y));
-    _1263 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _160) * _1235.w) + _1241.z));
+    // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+    // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+    float3 _rndx_surfel_jitter_1251 = RenoDXSurfelVoxelJitter(float3(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _142) * _1235.w) + _1241.x, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _151) * _1235.w) + _1241.y, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _160) * _1235.w) + _1241.z), float2(_77, _78), _169, _frameNumber.x);
+    _1251 = (int)(floor(_rndx_surfel_jitter_1251.x));
+    _1257 = (int)(floor(_rndx_surfel_jitter_1251.y));
+    _1263 = (int)(floor(_rndx_surfel_jitter_1251.z));
+    // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
     if (((int)_1251 < (int)((int)(_1235.x + -63.0f))) || ((!((int)_1251 < (int)((int)(_1235.x + -63.0f)))) && (!((int)_1251 < (int)((int)(_1235.x + 63.0f))))) || (((!((int)_1251 < (int)((int)(_1235.x + -63.0f)))) && ((int)_1251 < (int)((int)(_1235.x + 63.0f)))) && ((int)_1257 < (int)((int)(_1235.y + -31.0f)))) || ((((!((int)_1251 < (int)((int)(_1235.x + -63.0f)))) && ((int)_1251 < (int)((int)(_1235.x + 63.0f)))) && (!((int)_1257 < (int)((int)(_1235.y + -31.0f))))) && (!((int)_1257 < (int)((int)(_1235.y + 31.0f))))) || (((((!((int)_1251 < (int)((int)(_1235.x + -63.0f)))) && ((int)_1251 < (int)((int)(_1235.x + 63.0f)))) && (!((int)_1257 < (int)((int)(_1235.y + -31.0f))))) && ((int)_1257 < (int)((int)(_1235.y + 31.0f)))) && ((int)_1263 < (int)((int)(_1235.z + -63.0f)))) || ((((((!((int)_1251 < (int)((int)(_1235.x + -63.0f)))) && ((int)_1251 < (int)((int)(_1235.x + 63.0f)))) && (!((int)_1257 < (int)((int)(_1235.y + -31.0f))))) && ((int)_1257 < (int)((int)(_1235.y + 31.0f)))) && (!((int)_1263 < (int)((int)(_1235.z + -63.0f))))) && (!((int)_1263 < (int)((int)(_1235.z + 63.0f)))))) {
       _1288 = (int)(_1233) + (int)(1);
       if ((uint)_1288 < (uint)8) {
@@ -2103,9 +2149,13 @@ void main(
       while(true) {
         _1377 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_1375) + (int)(20)))];
         _1383 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_1375) + (int)(36)))];
-        _1393 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _1368) * _1377.w) + _1383.x));
-        _1399 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _1367) * _1377.w) + _1383.y));
-        _1405 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _1366) * _1377.w) + _1383.z));
+        // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+        // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+        float3 _rndx_surfel_jitter_1393 = RenoDXSurfelVoxelJitter(float3(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _1368) * _1377.w) + _1383.x, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _1367) * _1377.w) + _1383.y, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _1366) * _1377.w) + _1383.z), float2(_77, _78), _169, _frameNumber.x);
+        _1393 = (int)(floor(_rndx_surfel_jitter_1393.x));
+        _1399 = (int)(floor(_rndx_surfel_jitter_1393.y));
+        _1405 = (int)(floor(_rndx_surfel_jitter_1393.z));
+        // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
         if (((int)_1393 < (int)((int)(_1377.x + -63.0f))) || ((!((int)_1393 < (int)((int)(_1377.x + -63.0f)))) && (!((int)_1393 < (int)((int)(_1377.x + 63.0f))))) || (((!((int)_1393 < (int)((int)(_1377.x + -63.0f)))) && ((int)_1393 < (int)((int)(_1377.x + 63.0f)))) && ((int)_1399 < (int)((int)(_1377.y + -31.0f)))) || ((((!((int)_1393 < (int)((int)(_1377.x + -63.0f)))) && ((int)_1393 < (int)((int)(_1377.x + 63.0f)))) && (!((int)_1399 < (int)((int)(_1377.y + -31.0f))))) && (!((int)_1399 < (int)((int)(_1377.y + 31.0f))))) || (((((!((int)_1393 < (int)((int)(_1377.x + -63.0f)))) && ((int)_1393 < (int)((int)(_1377.x + 63.0f)))) && (!((int)_1399 < (int)((int)(_1377.y + -31.0f))))) && ((int)_1399 < (int)((int)(_1377.y + 31.0f)))) && ((int)_1405 < (int)((int)(_1377.z + -63.0f)))) || ((((((!((int)_1393 < (int)((int)(_1377.x + -63.0f)))) && ((int)_1393 < (int)((int)(_1377.x + 63.0f)))) && (!((int)_1399 < (int)((int)(_1377.y + -31.0f))))) && ((int)_1399 < (int)((int)(_1377.y + 31.0f)))) && (!((int)_1405 < (int)((int)(_1377.z + -63.0f))))) && (!((int)_1405 < (int)((int)(_1377.z + 63.0f)))))) {
           _1430 = (int)(_1375) + (int)(1);
           if ((uint)_1430 < (uint)8) {
@@ -2288,9 +2338,13 @@ void main(
                 while(true) {
                   _1742 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_1740) + (int)(20)))];
                   _1748 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_1740) + (int)(36)))];
-                  _1758 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _1732) * _1742.w) + _1748.x));
-                  _1764 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _1734) * _1742.w) + _1748.y));
-                  _1770 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _1736) * _1742.w) + _1748.z));
+                  // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+                  // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+                  float3 _rndx_surfel_jitter_1758 = RenoDXSurfelVoxelJitter(float3(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _1732) * _1742.w) + _1748.x, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _1734) * _1742.w) + _1748.y, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _1736) * _1742.w) + _1748.z), float2(_77, _78), _169, _frameNumber.x);
+                  _1758 = (int)(floor(_rndx_surfel_jitter_1758.x));
+                  _1764 = (int)(floor(_rndx_surfel_jitter_1758.y));
+                  _1770 = (int)(floor(_rndx_surfel_jitter_1758.z));
+                  // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
                   if (((int)_1758 < (int)((int)(_1742.x + -63.0f))) || ((!((int)_1758 < (int)((int)(_1742.x + -63.0f)))) && (!((int)_1758 < (int)((int)(_1742.x + 63.0f))))) || (((!((int)_1758 < (int)((int)(_1742.x + -63.0f)))) && ((int)_1758 < (int)((int)(_1742.x + 63.0f)))) && ((int)_1764 < (int)((int)(_1742.y + -31.0f)))) || ((((!((int)_1758 < (int)((int)(_1742.x + -63.0f)))) && ((int)_1758 < (int)((int)(_1742.x + 63.0f)))) && (!((int)_1764 < (int)((int)(_1742.y + -31.0f))))) && (!((int)_1764 < (int)((int)(_1742.y + 31.0f))))) || (((((!((int)_1758 < (int)((int)(_1742.x + -63.0f)))) && ((int)_1758 < (int)((int)(_1742.x + 63.0f)))) && (!((int)_1764 < (int)((int)(_1742.y + -31.0f))))) && ((int)_1764 < (int)((int)(_1742.y + 31.0f)))) && ((int)_1770 < (int)((int)(_1742.z + -63.0f)))) || ((((((!((int)_1758 < (int)((int)(_1742.x + -63.0f)))) && ((int)_1758 < (int)((int)(_1742.x + 63.0f)))) && (!((int)_1764 < (int)((int)(_1742.y + -31.0f))))) && ((int)_1764 < (int)((int)(_1742.y + 31.0f)))) && (!((int)_1770 < (int)((int)(_1742.z + -63.0f))))) && (!((int)_1770 < (int)((int)(_1742.z + 63.0f)))))) {
                     _1795 = (int)(_1740) + (int)(1);
                     if ((uint)_1795 < (uint)8) {
@@ -2325,9 +2379,13 @@ void main(
                       while(true) {
                         _1824 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_1822) + (int)(20)))];
                         _1830 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_1822) + (int)(36)))];
-                        _1841 = (int)(floor((((_1732 - _1820) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x) * _1824.w) + _1830.x));
-                        _1848 = (int)(floor((((_1734 - _1820) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y) * _1824.w) + _1830.y));
-                        _1855 = (int)(floor((((_1736 - _1820) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z) * _1824.w) + _1830.z));
+                        // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+                        // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+                        float3 _rndx_surfel_jitter_1841 = RenoDXSurfelVoxelJitter(float3((((_1732 - _1820) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x) * _1824.w) + _1830.x, (((_1734 - _1820) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y) * _1824.w) + _1830.y, (((_1736 - _1820) + __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z) * _1824.w) + _1830.z), float2(_77, _78), _169, _frameNumber.x);
+                        _1841 = (int)(floor(_rndx_surfel_jitter_1841.x));
+                        _1848 = (int)(floor(_rndx_surfel_jitter_1841.y));
+                        _1855 = (int)(floor(_rndx_surfel_jitter_1841.z));
+                        // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
                         if (((int)_1841 < (int)((int)(_1824.x + -63.0f))) || ((!((int)_1841 < (int)((int)(_1824.x + -63.0f)))) && (!((int)_1841 < (int)((int)(_1824.x + 63.0f))))) || (((!((int)_1841 < (int)((int)(_1824.x + -63.0f)))) && ((int)_1841 < (int)((int)(_1824.x + 63.0f)))) && ((int)_1848 < (int)((int)(_1824.y + -31.0f)))) || ((((!((int)_1841 < (int)((int)(_1824.x + -63.0f)))) && ((int)_1841 < (int)((int)(_1824.x + 63.0f)))) && (!((int)_1848 < (int)((int)(_1824.y + -31.0f))))) && (!((int)_1848 < (int)((int)(_1824.y + 31.0f))))) || (((((!((int)_1841 < (int)((int)(_1824.x + -63.0f)))) && ((int)_1841 < (int)((int)(_1824.x + 63.0f)))) && (!((int)_1848 < (int)((int)(_1824.y + -31.0f))))) && ((int)_1848 < (int)((int)(_1824.y + 31.0f)))) && ((int)_1855 < (int)((int)(_1824.z + -63.0f)))) || ((((((!((int)_1841 < (int)((int)(_1824.x + -63.0f)))) && ((int)_1841 < (int)((int)(_1824.x + 63.0f)))) && (!((int)_1848 < (int)((int)(_1824.y + -31.0f))))) && ((int)_1848 < (int)((int)(_1824.y + 31.0f)))) && (!((int)_1855 < (int)((int)(_1824.z + -63.0f))))) && (!((int)_1855 < (int)((int)(_1824.z + 63.0f)))))) {
                           _1880 = (int)(_1822) + (int)(1);
                           if ((uint)_1880 < (uint)8) {
@@ -3350,9 +3408,13 @@ void main(
         while(true) {
           _4229 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_4227) + (int)(20)))];
           _4235 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_4227) + (int)(36)))];
-          _4245 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _2321) * _4229.w) + _4235.x));
-          _4251 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _2323) * _4229.w) + _4235.y));
-          _4257 = (int)(floor(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _2325) * _4229.w) + _4235.z));
+          // RenoDX: >>> [Patch: SurfelVoxelClipmapJitter] [Version: 1.16.00]
+          // Description: Jitters this exact R2-native voxel coordinate before integer quantization when Snow / Fog Lighting Fixes is active; the disabled helper returns the untouched vanilla coordinate.
+          float3 _rndx_surfel_jitter_4245 = RenoDXSurfelVoxelJitter(float3(((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.x + _2321) * _4229.w) + _4235.x, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.y + _2323) * _4229.w) + _4235.y, ((__3__35__0__0__VoxelGlobalIlluminationConstantBuffer_view._wrappedViewPos.z + _2325) * _4229.w) + _4235.z), float2(_77, _78), _169, _frameNumber.x);
+          _4245 = (int)(floor(_rndx_surfel_jitter_4245.x));
+          _4251 = (int)(floor(_rndx_surfel_jitter_4245.y));
+          _4257 = (int)(floor(_rndx_surfel_jitter_4245.z));
+          // RenoDX: <<< [Patch: SurfelVoxelClipmapJitter]
           if (((int)_4245 < (int)((int)(_4229.x + -63.0f))) || ((!((int)_4245 < (int)((int)(_4229.x + -63.0f)))) && (!((int)_4245 < (int)((int)(_4229.x + 63.0f))))) || (((!((int)_4245 < (int)((int)(_4229.x + -63.0f)))) && ((int)_4245 < (int)((int)(_4229.x + 63.0f)))) && ((int)_4251 < (int)((int)(_4229.y + -31.0f)))) || ((((!((int)_4245 < (int)((int)(_4229.x + -63.0f)))) && ((int)_4245 < (int)((int)(_4229.x + 63.0f)))) && (!((int)_4251 < (int)((int)(_4229.y + -31.0f))))) && (!((int)_4251 < (int)((int)(_4229.y + 31.0f))))) || (((((!((int)_4245 < (int)((int)(_4229.x + -63.0f)))) && ((int)_4245 < (int)((int)(_4229.x + 63.0f)))) && (!((int)_4251 < (int)((int)(_4229.y + -31.0f))))) && ((int)_4251 < (int)((int)(_4229.y + 31.0f)))) && ((int)_4257 < (int)((int)(_4229.z + -63.0f)))) || ((((((!((int)_4245 < (int)((int)(_4229.x + -63.0f)))) && ((int)_4245 < (int)((int)(_4229.x + 63.0f)))) && (!((int)_4251 < (int)((int)(_4229.y + -31.0f))))) && ((int)_4251 < (int)((int)(_4229.y + 31.0f)))) && (!((int)_4257 < (int)((int)(_4229.z + -63.0f))))) && (!((int)_4257 < (int)((int)(_4229.z + 63.0f)))))) {
             _4282 = (int)(_4227) + (int)(1);
             if ((uint)_4282 < (uint)8) {

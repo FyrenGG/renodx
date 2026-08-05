@@ -38,14 +38,8 @@
 #define CUSTOM_FLAGS__MOON_ADJUSTMENTS                  0b10000000000000000000000000u
 #define CUSTOM_FLAGS__BASIC_POSTPROCESS_FINAL           0b1000000000000000000000000000u
 #define CUSTOM_FLAGS__FOLIAGE_SPEEDTREE_WIND_COHERENCE  0b10000000000000000000000000000u
-// RenoDX: >>> [Patch: ShadowEdgeNoiseFix] [Version: 1.09]
-// Description: Adds the Shadow Edge Noise Fix flag. The contact-shadow pass clamps X samples but not Y samples; the UI toggle can disable the X clamp so left/right edges do not reuse the last depth column.
 #define CUSTOM_FLAGS__SHADOW_EDGE_NOISE_FIX             0x20000000u
-// RenoDX: <<< [Patch: ShadowEdgeNoiseFix]
-// RenoDX: >>> [Patch: MilkyWayAlphaOcclusion] [Version: experimental-20260614]
-// Description: Adds an experimental flag for replacement Milky Way textures that intentionally use alpha as sky coverage. When enabled in supported sky shaders, authored alpha attenuates procedural stars and Milky Way sparkle boosts behind opaque custom texture content.
 #define CUSTOM_FLAGS__MILKY_WAY_ALPHA_OCCLUSION         0x40000000u
-// RenoDX: <<< [Patch: MilkyWayAlphaOcclusion]
 
 #define CUSTOM_FLAGS                               shader_injection.custom_flags
 
@@ -142,26 +136,17 @@
 #define FOLIAGE_TRANSMISSION                   (FOLIAGE_IMPROVEMENTS >= 2.f ? 1.0f : 0.0f)
 #define RT_QUALITY                             (RR_ENABLED == 1.f ? (float)((CUSTOM_FLAGS_AS_UINT >> 10u) & 0x3u) : 0.f)
 #define RR_ENABLED                             ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__RR_ENABLED) != 0u ? 1.f : 0.f)
-// RenoDX: >>> [Patch: FoliageSpeedTreeWindCoherenceToggle] [Version: 1.09]
-// Description: Exposes the foliage SpeedTree wind-coherence shader fix as a UI checkbox by reading its packed flag directly; vegetation shaders use this gate to fall back when current and previous winded positions diverge.
 #define FOLIAGE_SPEEDTREE_WIND_COHERENCE       ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__FOLIAGE_SPEEDTREE_WIND_COHERENCE) != 0u ? 1.f : 0.f)
-// RenoDX: <<< [Patch: FoliageSpeedTreeWindCoherenceToggle]
-// RenoDX: >>> [Patch: ShadowEdgeNoiseFix] [Version: 1.09]
-// Description: Vanilla clamps contact-shadow X samples before loading depth, while Y is left unclamped. With the fix on, X is also left unclamped so offscreen side samples cannot stretch the edge depth column.
 #define SHADOW_CONTACT_SAMPLE_X(sample_x, half_texel_x) \
   (((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__SHADOW_EDGE_NOISE_FIX) != 0u) ? (sample_x) : min(max((sample_x), (half_texel_x)), (1.0f - (half_texel_x))))
-// RenoDX: <<< [Patch: ShadowEdgeNoiseFix]
 #define AURORA_BOREALIS_ENABLED                ((RR_ENABLED == 1.f && (CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__AURORA_BOREALIS) != 0u) ? 1.f : 0.f)
 #define RT_GI_KNEE                             2.0f
 #define RT_GI_STRENGTH                         0.07f
 #define MATERIAL_IMPROVEMENTS                  ((RR_ENABLED == 1.f && (CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__MATERIAL_IMPROVEMENTS) != 0u) ? 1.f : 0.f)
-// RenoDX: >>> [Patch: MaterialImprovementFeatureGates] [Version: 1.09]
-// Description: Keeps broad Material Improvements mapped only to shader paths that survived live validation. EON diffuse BRDF and spectral diffraction remain parked because enabling them together caused blocky direct/local-light mismatches across tiled lighting regions; smooth terminator, specular anti-aliasing, and refraction surface shadowing stay RR-gated behind the UI toggle.
 #define DIFFUSE_BRDF_MODE                      0.0f
 #define SMOOTH_TERMINATOR                      (MATERIAL_IMPROVEMENTS == 1.f ? 1.0f : 0.0f)
 #define SPECULAR_AA                            (MATERIAL_IMPROVEMENTS == 1.f ? 1.0f : 0.0f)
 #define DIFFRACTION                            0.0f
-// RenoDX: <<< [Patch: MaterialImprovementFeatureGates]
 #define FOLIAGE_COLOR_CORRECT                  (FOLIAGE_IMPROVEMENTS >= 2.f ? 1.0f : 0.0f)
 #define FOLIAGE_DESAT_STRENGTH                 0.55f
 #define FOLIAGE_HUE_SHIFT                      0.0f
@@ -197,20 +182,13 @@
 #define SNOW_FOG_FIX                           ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__SNOW_FOG_FIX) != 0u ? 1.f : 0.f)
 #define DAWN_DUSK_GI_ENERGY                    0.7f
 #define DAWN_DUSK_WEATHER_SEED                 shader_injection.dawn_dusk_weather_seed
-#define DAWN_DUSK_LMS_L                        1.0f
-#define DAWN_DUSK_LMS_M                        1.0f
-#define DAWN_DUSK_LMS_S                        1.0f
-#define CLOUD_REDDENING_STRENGTH               1.0f
 #define DAWN_DUSK_WEATHER_BLEND                shader_injection.dawn_dusk_weather_blend
 #define AURORA_GI_ENERGY                       1.0f
 #define AURORA_BRIGHTNESS                      shader_injection.aurora_brightness
 #define AURORA_CHANCE                          shader_injection.aurora_chance
 #define AURORA_NIGHT_SEED                      shader_injection.aurora_night_seed
 #define MILKY_WAY_LIGHT_INTENSITY              shader_injection.milky_way_light_intensity
-// RenoDX: >>> [Patch: MilkyWayAlphaOcclusion] [Version: experimental-20260614]
-// Description: Exposes the experimental Milky Way alpha coverage toggle to shaders. Supported sky shaders use this flag to decide whether authored alpha in replacement Milky Way textures should attenuate procedural stars and sparkle boosts.
 #define MILKY_WAY_ALPHA_OCCLUSION              ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__MILKY_WAY_ALPHA_OCCLUSION) != 0u ? 1.f : 0.f)
-// RenoDX: <<< [Patch: MilkyWayAlphaOcclusion]
 #define NIGHT_SKY_ATTENUATION                  ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__NIGHT_SKY_ATTENUATION) != 0u ? 1.f : 0.f)
 #define PURKINJE_EFFECT                        ((RR_ENABLED == 1.f && (CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__PURKINJE_EFFECT) != 0u) ? 1.f : 0.f)
 #define CUSTOM_WEATHER_EDITING                 ((RR_ENABLED == 1.f && (CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__CUSTOM_WEATHER_EDITING) != 0u) ? 1.f : 0.f)

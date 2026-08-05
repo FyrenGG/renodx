@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared option and helper declarations consumed by this shader's annotated RenoDX patches. This dependency-only prefix replaces no native executable statement; removing the block restores successor A byte-for-byte.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct MaterialOverrideParametersTreeStruct {
   uint _baseColorTexture;
   uint _normalTexture;
@@ -2001,6 +2005,28 @@ OutputSignature main(
     _1520 = _97;
     _1521 = _87;
   }
+  // RenoDX: >>> [Patch: FoliageSpeedTreeWindCoherence] [Version: 1.16.00]
+  // Description: Rejects a wind result when current and previous SpeedTree positions diverge by one unit or become non-finite, then restores the native unbent position and normal. A disabled feature performs no writes.
+  if (FOLIAGE_SPEEDTREE_WIND_COHERENCE == 1.f) {
+    const float3 _renodxSpeedTreeBasePosition = float3(_87, _97, _92);
+    const float3 _renodxSpeedTreeBaseNormal = float3(_157, _162, _167);
+    const float3 _renodxSpeedTreeCurrentPosition = float3(_1521, _1520, _1519);
+    const float3 _renodxSpeedTreePreviousPosition = float3(_1518, _1517, _1516);
+    const float3 _renodxSpeedTreeWindDelta = _renodxSpeedTreeCurrentPosition - _renodxSpeedTreePreviousPosition;
+    const bool _renodxSpeedTreeWindCoherent = dot(_renodxSpeedTreeWindDelta, _renodxSpeedTreeWindDelta) < 1.0f;
+    if (!_renodxSpeedTreeWindCoherent) {
+      _1521 = _renodxSpeedTreeBasePosition.x;
+      _1520 = _renodxSpeedTreeBasePosition.y;
+      _1519 = _renodxSpeedTreeBasePosition.z;
+      _1518 = _renodxSpeedTreeBasePosition.x;
+      _1517 = _renodxSpeedTreeBasePosition.y;
+      _1516 = _renodxSpeedTreeBasePosition.z;
+      _1515 = _renodxSpeedTreeBaseNormal.x;
+      _1514 = _renodxSpeedTreeBaseNormal.y;
+      _1513 = _renodxSpeedTreeBaseNormal.z;
+    }
+  }
+  // RenoDX: <<< [Patch: FoliageSpeedTreeWindCoherence]
   _1524 = mad(_180, _1519, mad(_120, _1520, (_114 * _1521)));
   _1527 = mad(_182, _1519, mad(_122, _1520, (_116 * _1521)));
   _1530 = mad(_184, _1519, mad(_124, _1520, (_118 * _1521)));

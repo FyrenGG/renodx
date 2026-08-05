@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared spectral and/or Dawn/Dusk helpers required by this shader's owned patch families.
+#include "sky_spectral_common.hlsli"
+#include "sky_dawn_dusk_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<float4> __3__36__0__0__g_terrainShadowDepth : register(t43, space36);
 
 Texture2DArray<float4> __3__36__0__0__g_shadowDepthArray : register(t87, space36);
@@ -286,6 +291,11 @@ void main(
   uint3 SV_GroupThreadID : SV_GroupThreadID,
   uint SV_GroupIndex : SV_GroupIndex
 ) {
+  // RenoDX: >>> [Patch: DawnDuskImprovements] [Version: 1.13.00]
+  // Description: Computes the gated Dawn/Dusk factor and its Mie-g companion at function scope so every structurally recovered branch and final output site has one initialized dominating definition.
+  float _dawnDuskFactor = DawnDuskFactor(_sunDirection.y);
+  float _boostedMieG = MiePhaseBoostedG(_miePhaseConst, _dawnDuskFactor);
+  // RenoDX: <<< [Patch: DawnDuskImprovements]
   int _43;
   uint _46;
   uint _49;
@@ -449,6 +459,22 @@ void main(
   float _3408;
   float _3446;
   float _3852;
+  // RenoDX: >>> [Patch: DawnDuskImprovements] [Version: 1.13.00]
+  // Description: Declarations for the boosted-g Mie phase companion variables used by the
+  //              precomputed-LUT sun path. The companions mirror the vanilla sun Henyey-Greenstein
+  //              phase terms (_3928/_3934/_3935/_3942) with the dawn/dusk-boosted g; they are
+  //              declared here because the decompiled shader hoists all loop-carried locals into
+  //              this declaration block, and they are assigned at the [Patch: DawnDuskImprovements]
+  //              companion sites below. When Dawn/Dusk Improvements is Off (or the sun is outside
+  //              the dawn/dusk window) the boosted g equals the vanilla g, so the companions hold
+  //              values bit-identical to the vanilla terms they mirror.
+  //              .
+  // [DAWN_DUSK] boosted-g Mie phase companions for the LUT sun path
+  float _3928b;
+  float _3934b;
+  float _3935b;
+  float _3942b;
+  // RenoDX: <<< [Patch: DawnDuskImprovements]
   float _3953;
   float _4040;
   float _4046;
@@ -1885,21 +1911,56 @@ void main(
             _1785 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
             _1788 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
             _1790 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
+            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
+            // Description: Overwrites the main-view red and green packed Rayleigh channels from the exact native blue reference before extinction assembly; Off leaves all native channel values unchanged.
+            if (SKY_SCATTERING) {
+              float _rndx_sky_ref_1 = _1790;
+              _1785 = _rndx_sky_ref_1 * SKY_RAYLEIGH_CH1;
+              _1788 = _rndx_sky_ref_1 * SKY_RAYLEIGH_CH2;
+            }
+            // RenoDX: <<< [Patch: SkySpectralRayleigh]
             _1792 = _mieAerosolDensity * 2e-05f;
             _1795 = (_mieAerosolAbsorption + 1.0f) * _1792;
             _1797 = (_1730.y + _1772) * _1795;
             _1802 = _cloudScatteringCoefficient / _distanceScale;
             _1804 = (_1779 + _1680) * _1802;
-            _1808 = (_1785 * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+            // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+            // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+            _1808 = (_1785 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
             _1809 = _1808 * _1780;
             _1810 = _1804 + _1797;
-            _1813 = (_1788 * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
+            _1813 = (_1788 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
             _1814 = _1813 * _1780;
-            _1817 = (_ozoneRatio * 2.1360002e-07f) + (_1790 * 1.9607843e-07f);
+            _1817 = (_ozoneRatio * SKY_OZONE_3) + (_1790 * 1.9607843e-07f);
+            // RenoDX: <<< [Patch: SkySpectralOzone]
             _1818 = _1817 * _1780;
             _1821 = exp2((_1809 + _1810) * -1.442695f);
             _1824 = exp2((_1814 + _1810) * -1.442695f);
             _1827 = exp2((_1810 + _1818) * -1.442695f);
+          // RenoDX: >>> [Patch: DawnDuskCloudReddening] [Version: 1.13.00]
+          // Description: At cloud-dense ray-march steps during dawn/dusk, attenuates the green/blue
+          //              transmittance channels (branchless *= below; red untouched) so sunrise and
+          //              sunset clouds redden the way long-path Rayleigh-filtered sunlight should —
+          //              vanilla computes extinction uniformly across cloud and clear air, so clouds
+          //              never warm at the horizon. CloudReddeningFactor (sky_weather_common.hlsli)
+          //              returns identity 1.0 unless ALL of the following hold (there is no dedicated
+          //              cloud-reddening toggle): (1) CUSTOM_WEATHER_EDITING resolves to 1 — defined
+          //              in shared.h as runtime Ray Reconstruction detection (RR_ENABLED) AND the
+          //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues (WIP)", default On
+          //              per the addon.cpp settings list, inert without RR); (2) the step's cloud
+          //              optical depth argument is > 0; (3) _dawnDuskFactor > 0, requiring
+          //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On) and
+          //              sun elevation inside the -0.17..0.26 rad window; (4) the rolled weather
+          //              preset's cloudReddening column > 0 (strength comes from that column). The saturating
+          //              curve plateaus at 0.65x G/B for thick clouds instead of going black. If any
+          //              condition fails the factor is exactly 1.0 and the multiplies are bit-exact
+          //              no-ops.
+          // [CLOUD_REDDENING] boost G/B extinction at cloud-dense steps
+          float _cloudRedFactor = CloudReddeningFactor((_1680 + _1802), _dawnDuskFactor, false);
+          _1821 *= 1.f;               // R unchanged
+          _1824 *= _cloudRedFactor;   // G attenuated
+          _1827 *= _cloudRedFactor;   // B attenuated
+          // RenoDX: <<< [Patch: DawnDuskCloudReddening]
             _1832 = ((_1824 * 0.33951f) + (_1821 * 0.61312f)) + (_1827 * 0.04737f);
             _1837 = ((_1824 * 0.91636f) + (_1821 * 0.0702f)) + (_1827 * 0.01345f);
             _1842 = ((_1824 * 0.10958f) + (_1821 * 0.02062f)) + (_1827 * 0.8698f);
@@ -1914,7 +1975,16 @@ void main(
             _1864 = _miePhaseConst * _miePhaseConst;
             _1865 = _1864 + 1.0f;
             _1871 = (((1.0f - _1864) * 3.0f) / ((_1864 + 2.0f) * 2.0f)) * 0.07957747f;
-            _1879 = (_1871 * _1792) * (_169 / exp2(log2(_1865 - (_miePhaseConst * _171)) * 1.5f));
+            // RenoDX: >>> [Patch: DawnDuskImprovements] [Version: 1.13.00]
+            // Description: Uses the boosted Mie-g formula only inside the explicit Dawn/Dusk gate and executes the exact clean native assignment in the Off branch.
+            [branch]
+            if (DAWN_DUSK_IMPROVEMENTS == 1.f) {
+              float _rndx_mie_g2_3_1917 = _boostedMieG * _boostedMieG;
+              float _rndx_mie_g2p1_3_1917 = _rndx_mie_g2_3_1917 + 1.0f;
+              float _rndx_mie_norm_3_1917 = (((1.0f - _rndx_mie_g2_3_1917) * 3.0f) / ((_rndx_mie_g2_3_1917 + 2.0f) * 2.0f)) * 0.07957747f;
+              _1879 = (_rndx_mie_norm_3_1917 * _1792) * (_169 / exp2(log2(_rndx_mie_g2p1_3_1917 - (_boostedMieG * _171)) * 1.5f));            } else {
+              _1879 = (_1871 * _1792) * (_169 / exp2(log2(_1865 - (_miePhaseConst * _171)) * 1.5f));            }
+            // RenoDX: <<< [Patch: DawnDuskImprovements]
             _1880 = exp2(log2(1.0f - exp2((_1765 * -14.42695f) * _1847)) * 1.25f) * _1765;
             _1881 = _1880 * 64.0f;
             _1883 = (_1881 * _184) * _798;
@@ -1926,6 +1996,12 @@ void main(
             _1905 = exp2(((_1808 * _1769) + _1901) * -1.442695f);
             _1909 = exp2(((_1813 * _1769) + _1901) * -1.442695f);
             _1913 = exp2((_1901 + (_1817 * _1769)) * -1.442695f);
+            // RenoDX: >>> [Patch: DawnDuskCloudReddening] [Version: 1.13.00]
+            // Description: Attenuates only the exact green and blue members of this native RGB transmittance triplet using the path-specific cloud optical depth; red is unchanged and the helper returns identity unless all feature gates are active.
+            float _rndx_cloud_red_2_1926 = CloudReddeningFactor((_1679 + _1802), _dawnDuskFactor, false);
+            _1909 *= _rndx_cloud_red_2_1926;
+            _1913 *= _rndx_cloud_red_2_1926;
+            // RenoDX: <<< [Patch: DawnDuskCloudReddening]
             _1914 = _1792 * _810;
             _1916 = _1802 * (_1765 + _1006);
             _1928 = (((_1785 * _1859) + _1916) + (_mieScatterColor.x * _1914)) * (((_1909 * 0.33951f) + (_1905 * 0.61312f)) + (_1913 * 0.04737f));
@@ -1943,6 +2019,30 @@ void main(
             _1996 = exp2((_1990 + _1991) * -1.442695f);
             _1999 = exp2((_1992 + _1991) * -1.442695f);
             _2002 = exp2((_1991 + _1993) * -1.442695f);
+          // RenoDX: >>> [Patch: DawnDuskCloudReddening] [Version: 1.13.00]
+          // Description: At cloud-dense ray-march steps during dawn/dusk, attenuates the green/blue
+          //              transmittance channels (branchless *= below; red untouched) so sunrise and
+          //              sunset clouds redden the way long-path Rayleigh-filtered sunlight should —
+          //              vanilla computes extinction uniformly across cloud and clear air, so clouds
+          //              never warm at the horizon. CloudReddeningFactor (sky_weather_common.hlsli)
+          //              returns identity 1.0 unless ALL of the following hold (there is no dedicated
+          //              cloud-reddening toggle): (1) CUSTOM_WEATHER_EDITING resolves to 1 — defined
+          //              in shared.h as runtime Ray Reconstruction detection (RR_ENABLED) AND the
+          //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues (WIP)", default On
+          //              per the addon.cpp settings list, inert without RR); (2) the step's cloud
+          //              optical depth argument is > 0; (3) _dawnDuskFactor > 0, requiring
+          //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On) and
+          //              sun elevation inside the -0.17..0.26 rad window; (4) the rolled weather
+          //              preset's cloudReddening column > 0 (strength comes from that column). The saturating
+          //              curve plateaus at 0.65x G/B for thick clouds instead of going black. If any
+          //              condition fails the factor is exactly 1.0 and the multiplies are bit-exact
+          //              no-ops.
+          // [CLOUD_REDDENING] boost G/B extinction at cloud-dense steps
+          float _cloudRedFactor3 = CloudReddeningFactor((_1680 + _1802), _dawnDuskFactor, false);
+          _1996 *= 1.f;                // R unchanged
+          _1999 *= _cloudRedFactor3;   // G attenuated
+          _2002 *= _cloudRedFactor3;   // B attenuated
+          // RenoDX: <<< [Patch: DawnDuskCloudReddening]
             _2004 = (_209 * 0.059683103f) * _1859;
             _2012 = (_1871 * _1914) * (_209 / exp2(log2(_1865 - (_miePhaseConst * _210)) * 1.5f));
             _2019 = (_1802 * _798) * ((((_225 * 2.0f) * _1006) * _1858) + (_1881 * _217));
@@ -1960,6 +2060,30 @@ void main(
               _2089 = _2069 + 1.0f;
               _2099 = ((((_1880 * 4.0743666f) * _281) * _798) * _1802) * (((1.0f - _2069) * 3.0f) / ((_2069 + 2.0f) * 2.0f));
               _2100 = (_169 / exp2(log2(_2089 - (_cloudPhaseConstFront * _164)) * 1.5f)) * _2099;
+            // RenoDX: >>> [Patch: DawnDuskCloudReddening] [Version: 1.13.00]
+            // Description: At cloud-dense ray-march steps during dawn/dusk, attenuates the green/blue
+            //              transmittance channels (branchless *= below; red untouched) so sunrise and
+            //              sunset clouds redden the way long-path Rayleigh-filtered sunlight should —
+            //              vanilla computes extinction uniformly across cloud and clear air, so clouds
+            //              never warm at the horizon. CloudReddeningFactor (sky_weather_common.hlsli)
+            //              returns identity 1.0 unless ALL of the following hold (there is no dedicated
+            //              cloud-reddening toggle): (1) CUSTOM_WEATHER_EDITING resolves to 1 — defined
+            //              in shared.h as runtime Ray Reconstruction detection (RR_ENABLED) AND the
+            //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues (WIP)", default On
+            //              per the addon.cpp settings list, inert without RR); (2) the step's cloud
+            //              optical depth argument is > 0; (3) _dawnDuskFactor > 0, requiring
+            //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On) and
+            //              sun elevation inside the -0.17..0.26 rad window; (4) the rolled weather
+            //              preset's cloudReddening column > 0 (strength comes from that column). The saturating
+            //              curve plateaus at 0.65x G/B for thick clouds instead of going black. If any
+            //              condition fails the factor is exactly 1.0 and the multiplies are bit-exact
+            //              no-ops.
+            // [CLOUD_REDDENING] boost G/B extinction at cloud-dense steps
+            float _cloudRedFactor4 = CloudReddeningFactor(((_1680 * 0.20000000298023224f) + _1802), _dawnDuskFactor, false);
+            _2076 *= 1.f;                // R unchanged
+            _2079 *= _cloudRedFactor4;   // G attenuated
+            _2082 *= _cloudRedFactor4;   // B attenuated
+            // RenoDX: <<< [Patch: DawnDuskCloudReddening]
               _2101 = _2072 + _1989;
               _2104 = exp2((_1990 + _2101) * -1.442695f);
               _2107 = exp2((_1992 + _2101) * -1.442695f);
@@ -1970,6 +2094,30 @@ void main(
               _2163 = ((_2100 * (((_2079 * 0.33951f) + (_2076 * 0.61312f)) + (_2082 * 0.04737f))) + _1940);
               _2164 = ((_2117 * (((_2107 * 0.10958f) + (_2104 * 0.02062f)) + (_2110 * 0.8698f))) + _2064);
               _2165 = ((_2117 * (((_2107 * 0.91636f) + (_2104 * 0.0702f)) + (_2110 * 0.01345f))) + _2049);
+            // RenoDX: >>> [Patch: DawnDuskCloudReddening] [Version: 1.13.00]
+            // Description: At cloud-dense ray-march steps during dawn/dusk, attenuates the green/blue
+            //              transmittance channels (branchless *= below; red untouched) so sunrise and
+            //              sunset clouds redden the way long-path Rayleigh-filtered sunlight should —
+            //              vanilla computes extinction uniformly across cloud and clear air, so clouds
+            //              never warm at the horizon. CloudReddeningFactor (sky_weather_common.hlsli)
+            //              returns identity 1.0 unless ALL of the following hold (there is no dedicated
+            //              cloud-reddening toggle): (1) CUSTOM_WEATHER_EDITING resolves to 1 — defined
+            //              in shared.h as runtime Ray Reconstruction detection (RR_ENABLED) AND the
+            //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues (WIP)", default On
+            //              per the addon.cpp settings list, inert without RR); (2) the step's cloud
+            //              optical depth argument is > 0; (3) _dawnDuskFactor > 0, requiring
+            //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On) and
+            //              sun elevation inside the -0.17..0.26 rad window; (4) the rolled weather
+            //              preset's cloudReddening column > 0 (strength comes from that column). The saturating
+            //              curve plateaus at 0.65x G/B for thick clouds instead of going black. If any
+            //              condition fails the factor is exactly 1.0 and the multiplies are bit-exact
+            //              no-ops.
+            // [CLOUD_REDDENING] boost G/B extinction at cloud-dense steps
+            float _cloudRedFactor5 = CloudReddeningFactor(((_1680 * 0.20000000298023224f) + _1802), _dawnDuskFactor, false);
+            _2104 *= 1.f;                // R unchanged
+            _2107 *= _cloudRedFactor5;   // G attenuated
+            _2110 *= _cloudRedFactor5;   // B attenuated
+            // RenoDX: <<< [Patch: DawnDuskCloudReddening]
               _2166 = ((_2117 * (((_2107 * 0.33951f) + (_2104 * 0.61312f)) + (_2110 * 0.04737f))) + _2034);
             } else {
               _2161 = _1986;
@@ -2368,17 +2516,34 @@ void main(
               _3468 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
               _3471 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
               _3473 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
+              // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
+              // Description: Overwrites the main-view red and green packed Rayleigh channels from the exact native blue reference before extinction assembly; Off leaves all native channel values unchanged.
+              if (SKY_SCATTERING) {
+                float _rndx_sky_ref_2 = _3473;
+                _3468 = _rndx_sky_ref_2 * SKY_RAYLEIGH_CH1;
+                _3471 = _rndx_sky_ref_2 * SKY_RAYLEIGH_CH2;
+              }
+              // RenoDX: <<< [Patch: SkySpectralRayleigh]
               _3475 = _mieAerosolDensity * 2e-05f;
               _3478 = (_mieAerosolAbsorption + 1.0f) * _3475;
               _3483 = _cloudScatteringCoefficient / _distanceScale;
               _3485 = _3483 * (_3370 + _3462);
-              _3489 = (_3468 * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+              _3489 = (_3468 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
               _3492 = _3485 + ((_3420.y + _3455) * _3478);
-              _3495 = (_3471 * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-              _3498 = (_ozoneRatio * 2.1360002e-07f) + (_3473 * 1.9607843e-07f);
+              _3495 = (_3471 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+              _3498 = (_ozoneRatio * SKY_OZONE_3) + (_3473 * 1.9607843e-07f);
+              // RenoDX: <<< [Patch: SkySpectralOzone]
               _3502 = exp2(((_3489 * _3463) + _3492) * -1.442695f);
               _3506 = exp2(((_3495 * _3463) + _3492) * -1.442695f);
               _3510 = exp2(((_3498 * _3463) + _3492) * -1.442695f);
+              // RenoDX: >>> [Patch: DawnDuskCloudReddening] [Version: 1.13.00]
+              // Description: Attenuates only the exact green and blue members of this native RGB transmittance triplet using the path-specific cloud optical depth; red is unchanged and the helper returns identity unless all feature gates are active.
+              float _rndx_cloud_red_6_2379 = CloudReddeningFactor((_3370 + _3462), _dawnDuskFactor, false);
+              _3506 *= _rndx_cloud_red_6_2379;
+              _3510 *= _rndx_cloud_red_6_2379;
+              // RenoDX: <<< [Patch: DawnDuskCloudReddening]
               _3515 = ((_3506 * 0.33951f) + (_3502 * 0.61312f)) + (_3510 * 0.04737f);
               _3520 = ((_3506 * 0.91636f) + (_3502 * 0.0702f)) + (_3510 * 0.01345f);
               _3525 = ((_3506 * 0.10958f) + (_3502 * 0.02062f)) + (_3510 * 0.8698f);
@@ -2393,7 +2558,26 @@ void main(
               _3544 = _miePhaseConst * _miePhaseConst;
               _3545 = _3544 + 1.0f;
               _3551 = (((1.0f - _3544) * 3.0f) / ((_3544 + 2.0f) * 2.0f)) * 0.07957747f;
-              _3559 = (_3551 * _3475) * (_169 / exp2(log2(_3545 - (_miePhaseConst * _171)) * 1.5f));
+            // RenoDX: >>> [Patch: DawnDuskImprovements] [Version: 1.13.00]
+            // Description: Companion copies of the sun Henyey-Greenstein phase terms computed with the
+            //              dawn/dusk-boosted g (see the [Patch: DawnDuskImprovements] setup block near
+            //              the top of main): the sun in-scatter path consumes the *b companions for a
+            //              stronger forward-scatter lobe around the low sun, while the moon HG (_3752)
+            //              keeps the vanilla _3575/_3582. When Dawn/Dusk Improvements is Off (or the
+            //              sun is outside the dawn/dusk window) _boostedMieG equals the vanilla
+            //              _miePhaseConst, so the companions are bit-identical to the vanilla terms
+            //              they mirror.
+            // [DAWN_DUSK] Sun HG uses boosted g - moon HG (_3752) still uses vanilla _3575/_3582
+            [branch]
+            if (DAWN_DUSK_IMPROVEMENTS == 1.f) {
+              float _3569b = _boostedMieG * _boostedMieG;
+              float _3575b = _3569b + 1.0f;
+              float _3582b = (((1.0f - _3569b) * 3.0f) / ((_3569b + 2.0f) * 2.0f)) * 0.07957746833562851f;
+              _3559 = (_3582b * _3475) * (_169 / exp2(log2(_3575b - (_boostedMieG * _171)) * 1.5f));
+            } else {
+                _3559 = (_3551 * _3475) * (_169 / exp2(log2(_3545 - (_miePhaseConst * _171)) * 1.5f));
+            }
+            // RenoDX: <<< [Patch: DawnDuskImprovements]
               _3562 = ((_184 * 64.0f) * _2371) * _3536;
               _3563 = _202 * 2.0f;
               _3567 = (_3541 * _3515) * _volumeFogScatterColor.x;
@@ -2405,6 +2589,12 @@ void main(
               _3583 = exp2(((_3489 * _3452) + _3579) * -1.442695f);
               _3587 = exp2(((_3495 * _3452) + _3579) * -1.442695f);
               _3591 = exp2(((_3498 * _3452) + _3579) * -1.442695f);
+              // RenoDX: >>> [Patch: DawnDuskCloudReddening] [Version: 1.13.00]
+              // Description: Attenuates only the exact green and blue members of this native RGB transmittance triplet using the path-specific cloud optical depth; red is unchanged and the helper returns identity unless all feature gates are active.
+              float _rndx_cloud_red_7_2405 = CloudReddeningFactor((_3369 + _3462), _dawnDuskFactor, false);
+              _3587 *= _rndx_cloud_red_7_2405;
+              _3591 *= _rndx_cloud_red_7_2405;
+              // RenoDX: <<< [Patch: DawnDuskCloudReddening]
               _3596 = ((_3587 * 0.33951f) + (_3583 * 0.61312f)) + (_3591 * 0.04737f);
               _3601 = ((_3587 * 0.91636f) + (_3583 * 0.0702f)) + (_3591 * 0.01345f);
               _3606 = ((_3587 * 0.10958f) + (_3583 * 0.02062f)) + (_3591 * 0.8698f);
@@ -2422,6 +2612,12 @@ void main(
               _3634 = exp2(((_3489 * _3627) + _3630) * -1.442695f);
               _3638 = exp2(((_3495 * _3627) + _3630) * -1.442695f);
               _3642 = exp2(((_3498 * _3627) + _3630) * -1.442695f);
+              // RenoDX: >>> [Patch: DawnDuskCloudReddening] [Version: 1.13.00]
+              // Description: Attenuates only the exact green and blue members of this native RGB transmittance triplet using the path-specific cloud optical depth; red is unchanged and the helper returns identity unless all feature gates are active.
+              float _rndx_cloud_red_8_2422 = CloudReddeningFactor((_3370 + _3462), _dawnDuskFactor, false);
+              _3638 *= _rndx_cloud_red_8_2422;
+              _3642 *= _rndx_cloud_red_8_2422;
+              // RenoDX: <<< [Patch: DawnDuskCloudReddening]
               _3647 = ((_3638 * 0.33951f) + (_3634 * 0.61312f)) + (_3642 * 0.04737f);
               _3652 = ((_3638 * 0.91636f) + (_3634 * 0.0702f)) + (_3642 * 0.01345f);
               _3657 = ((_3638 * 0.10958f) + (_3634 * 0.02062f)) + (_3642 * 0.8698f);
@@ -2506,7 +2702,17 @@ void main(
               _3884 = _3883 + 1.0f;
               _3885 = _miePhaseConst * 2.0f;
               _3891 = (((1.0f - _3883) * 3.0f) / ((_3883 + 2.0f) * 2.0f)) * 0.07957747f;
-              _3898 = (_3879 / exp2(log2(_3884 - (_3885 * _3813)) * 1.5f)) * _3891;
+              // RenoDX: >>> [Patch: DawnDuskImprovements] [Version: 1.13.00]
+              // Description: Uses the boosted Mie-g formula only inside the explicit Dawn/Dusk gate and executes the exact clean native assignment in the Off branch.
+              [branch]
+              if (DAWN_DUSK_IMPROVEMENTS == 1.f) {
+                float _rndx_mie_g2_5_2509 = _boostedMieG * _boostedMieG;
+                float _rndx_mie_g2p1_5_2509 = _rndx_mie_g2_5_2509 + 1.0f;
+                float _rndx_mie_g2x_5_2509 = _boostedMieG * 2.0f;
+                float _rndx_mie_norm_5_2509 = (((1.0f - _rndx_mie_g2_5_2509) * 3.0f) / ((_rndx_mie_g2_5_2509 + 2.0f) * 2.0f)) * 0.07957747f;
+                _3898 = (_3879 / exp2(log2(_rndx_mie_g2p1_5_2509 - (_rndx_mie_g2x_5_2509 * _3813)) * 1.5f)) * _rndx_mie_norm_5_2509;              } else {
+                _3898 = (_3879 / exp2(log2(_3884 - (_3885 * _3813)) * 1.5f)) * _3891;              }
+              // RenoDX: <<< [Patch: DawnDuskImprovements]
               // [sem: _3__36__0__0__g_texPrecomputedLUTMulti_sampleLod]
               _3900 = __3__36__0__0__g_texPrecomputedLUTMulti.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float3(_3860, _3852, _3866), 0.0f);
               // [sem: _3__36__0__0__g_texPrecomputedLUTMultiMie_sampleLod]
@@ -2577,9 +2783,19 @@ void main(
               _4101 = (_4079 + _4040) * _4059;
               _4113 = (((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * sqrt(_mieScaledHeight * _4052)) * exp2((_4053 / _mieScaledHeight) * 1.442695f);
               _4115 = _4113 * (_4099 + _4046);
-              _4125 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-              _4131 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-              _4136 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+              // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
+              // Description: Hoists one exact main-view fused RGB extinction triplet, gates red/green Rayleigh reconstruction from blue, and routes the same native rows through the gated ozone constants.
+              float _rndx_sky_beta_r_3 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
+              float _rndx_sky_beta_g_3 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
+              float _rndx_sky_beta_b_3 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
+              if (SKY_SCATTERING) {
+                _rndx_sky_beta_r_3 = _rndx_sky_beta_b_3 * SKY_RAYLEIGH_CH1;
+                _rndx_sky_beta_g_3 = _rndx_sky_beta_b_3 * SKY_RAYLEIGH_CH2;
+              }
+              _4125 = ((_rndx_sky_beta_r_3) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+              _4131 = ((_rndx_sky_beta_g_3) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+              _4136 = ((_rndx_sky_beta_b_3) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
+              // RenoDX: <<< [Patch: SkySpectralRayleigh]
               _4140 = exp2(((_4125 * _4101) + _4115) * -1.442695f);
               _4144 = exp2(((_4131 * _4101) + _4115) * -1.442695f);
               _4148 = exp2(((_4136 * _4101) + _4115) * -1.442695f);
@@ -2774,9 +2990,19 @@ void main(
           _4656 = (_4634 + _4595) * _4614;
           _4668 = (((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * sqrt(_mieScaledHeight * _4607)) * exp2((_4608 / _mieScaledHeight) * 1.442695f);
           _4670 = _4668 * (_4654 + _4601);
-          _4680 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-          _4686 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-          _4691 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+          // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
+          // Description: Hoists one exact main-view fused RGB extinction triplet, gates red/green Rayleigh reconstruction from blue, and routes the same native rows through the gated ozone constants.
+          float _rndx_sky_beta_r_4 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
+          float _rndx_sky_beta_g_4 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
+          float _rndx_sky_beta_b_4 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
+          if (SKY_SCATTERING) {
+            _rndx_sky_beta_r_4 = _rndx_sky_beta_b_4 * SKY_RAYLEIGH_CH1;
+            _rndx_sky_beta_g_4 = _rndx_sky_beta_b_4 * SKY_RAYLEIGH_CH2;
+          }
+          _4680 = ((_rndx_sky_beta_r_4) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+          _4686 = ((_rndx_sky_beta_g_4) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+          _4691 = ((_rndx_sky_beta_b_4) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
+          // RenoDX: <<< [Patch: SkySpectralRayleigh]
           _4695 = exp2(((_4680 * _4656) + _4670) * -1.442695f);
           _4699 = exp2(((_4686 * _4656) + _4670) * -1.442695f);
           _4703 = exp2(((_4691 * _4656) + _4670) * -1.442695f);
@@ -2903,7 +3129,17 @@ void main(
         _5033 = _5032 + 1.0f;
         _5034 = _miePhaseConst * 2.0f;
         _5040 = (((1.0f - _5032) * 3.0f) / ((_5032 + 2.0f) * 2.0f)) * 0.07957747f;
-        _5047 = (_5028 / exp2(log2(_5033 - (_5034 * _4962)) * 1.5f)) * _5040;
+        // RenoDX: >>> [Patch: DawnDuskImprovements] [Version: 1.13.00]
+        // Description: Uses the boosted Mie-g formula only inside the explicit Dawn/Dusk gate and executes the exact clean native assignment in the Off branch.
+        [branch]
+        if (DAWN_DUSK_IMPROVEMENTS == 1.f) {
+          float _rndx_mie_g2_6_2906 = _boostedMieG * _boostedMieG;
+          float _rndx_mie_g2p1_6_2906 = _rndx_mie_g2_6_2906 + 1.0f;
+          float _rndx_mie_g2x_6_2906 = _boostedMieG * 2.0f;
+          float _rndx_mie_norm_6_2906 = (((1.0f - _rndx_mie_g2_6_2906) * 3.0f) / ((_rndx_mie_g2_6_2906 + 2.0f) * 2.0f)) * 0.07957747f;
+          _5047 = (_5028 / exp2(log2(_rndx_mie_g2p1_6_2906 - (_rndx_mie_g2x_6_2906 * _4962)) * 1.5f)) * _rndx_mie_norm_6_2906;        } else {
+          _5047 = (_5028 / exp2(log2(_5033 - (_5034 * _4962)) * 1.5f)) * _5040;        }
+        // RenoDX: <<< [Patch: DawnDuskImprovements]
         // [sem: _3__36__0__0__g_texPrecomputedLUTMulti_sampleLod]
         _5049 = __3__36__0__0__g_texPrecomputedLUTMulti.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float3(_5009, _5001, _5015), 0.0f);
         // [sem: _3__36__0__0__g_texPrecomputedLUTMultiMie_sampleLod]
@@ -2975,9 +3211,19 @@ void main(
         _5252 = (_5230 + _5191) * _5210;
         _5264 = (((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * sqrt(_mieScaledHeight * _5203)) * exp2((_5204 / _mieScaledHeight) * 1.442695f);
         _5266 = _5264 * (_5250 + _5197);
-        _5275 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
-        _5281 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
-        _5286 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
+        // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
+        // Description: Hoists one exact main-view fused RGB extinction triplet, gates red/green Rayleigh reconstruction from blue, and routes the same native rows through the gated ozone constants.
+        float _rndx_sky_beta_r_5 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
+        float _rndx_sky_beta_g_5 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
+        float _rndx_sky_beta_b_5 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
+        if (SKY_SCATTERING) {
+          _rndx_sky_beta_r_5 = _rndx_sky_beta_b_5 * SKY_RAYLEIGH_CH1;
+          _rndx_sky_beta_g_5 = _rndx_sky_beta_b_5 * SKY_RAYLEIGH_CH2;
+        }
+        _5275 = ((_rndx_sky_beta_r_5) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+        _5281 = ((_rndx_sky_beta_g_5) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+        _5286 = ((_rndx_sky_beta_b_5) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
+        // RenoDX: <<< [Patch: SkySpectralRayleigh]
         _5290 = exp2(((_5275 * _5252) + _5266) * -1.442695f);
         _5294 = exp2(((_5281 * _5252) + _5266) * -1.442695f);
         _5298 = exp2(((_5286 * _5252) + _5266) * -1.442695f);
@@ -3046,9 +3292,19 @@ void main(
         _5515 = _4913;
       }
       _5530 = (((_4922 * 2e-05f) * _mieAerosolDensity) * (_mieAerosolAbsorption + 1.0f)) + ((_cloudScatteringCoefficient / _distanceScale) * (_4921 + _4920));
-      _5543 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f)) * _4923) + _5530) * -1.442695f);
-      _5553 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f)) * _4923) + _5530) * -1.442695f);
-      _5562 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f)) * _4923) + _5530) * -1.442695f);
+      // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
+      // Description: Hoists one exact main-view fused RGB extinction triplet, gates red/green Rayleigh reconstruction from blue, and routes the same native rows through the gated ozone constants.
+      float _rndx_sky_beta_r_6 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
+      float _rndx_sky_beta_g_6 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
+      float _rndx_sky_beta_b_6 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
+      if (SKY_SCATTERING) {
+        _rndx_sky_beta_r_6 = _rndx_sky_beta_b_6 * SKY_RAYLEIGH_CH1;
+        _rndx_sky_beta_g_6 = _rndx_sky_beta_b_6 * SKY_RAYLEIGH_CH2;
+      }
+      _5543 = exp2((((((_rndx_sky_beta_r_6) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1)) * _4923) + _5530) * -1.442695f);
+      _5553 = exp2((((((_rndx_sky_beta_g_6) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2)) * _4923) + _5530) * -1.442695f);
+      _5562 = exp2((((((_rndx_sky_beta_b_6) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3)) * _4923) + _5530) * -1.442695f);
+      // RenoDX: <<< [Patch: SkySpectralRayleigh]
       _5572 = (((_5543 * _5512) * _precomputedAmbient7.y) + _4919) + (_precomputedAmbient7.w * ((_5543 * _5509) + _4916));
       _5579 = (((_5553 * _5511) * _precomputedAmbient7.y) + _4918) + (_precomputedAmbient7.w * ((_5553 * _5508) + _4915));
       _5586 = (((_5562 * _5510) * _precomputedAmbient7.y) + _4917) + (_precomputedAmbient7.w * ((_5562 * _5507) + _4914));
@@ -3083,6 +3339,40 @@ void main(
     _5650 = 1.0f;
     _5651 = 1.0f;
   }
+  // RenoDX: >>> [Patch: DawnDuskImprovements] [Version: 1.13.00]
+  // Description: Applies a directional warm/cool hue bias to the final inscatter during the
+  //              dawn/dusk window: the sun-facing and away-from-sun hemispheres get distinct horizon
+  //              hues (vanilla east and west horizons look nearly identical at sunrise and sunset).
+  //              Bias colours come from WeatherInscatterBias via InscatterColorBias
+  //              (sky_dawn_dusk_common.hlsli / sky_weather_common.hlsli); when Dynamic Dawn/Dusk
+  //              Hues is additionally active the warm tint shifts per day cycle. Gated by
+  //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On per the
+  //              addon.cpp settings list); when Off (or outside the window) the helper returns
+  //              (1,1,1) and the multiplies are bit-exact no-ops.
+  // [DAWN_DUSK] Inscatter colour bias
+  float _viewSunDot = dot(float3(_115, _116, _117), float3(_sunDirection.x, _sunDirection.y, _sunDirection.z));
+  float3 _inscatterBias = InscatterColorBias(_viewSunDot, _dawnDuskFactor, float3(_5651, _5650, _5649));
+  _5648 *= _inscatterBias.x;
+  _5647 *= _inscatterBias.y;
+  _5646 *= _inscatterBias.z;
+  // RenoDX: <<< [Patch: DawnDuskImprovements]
+  // RenoDX: >>> [Patch: NightSkyAttenuation] [Version: 1.13.00]
+  // Description: Multiplies the final inscatter RGB by a sun-elevation brightness ramp as the last
+  //              step before the UAV write (extinction untouched): 10% brightness while the sun is
+  //              below ~+5 deg (0.087 rad), ramping to 100% by +10 deg (0.17 rad), unity above
+  //              (NightSkyAttenuation, sky_dawn_dusk_common.hlsli). Vanilla scattering brightens the
+  //              sky far too early (~3am-4:30am) and keeps it bright well after sunset; this keeps
+  //              nights genuinely dark. Gated by NIGHT_SKY_ATTENUATION (UI "Darker Nights/Dawn/Dusk
+  //              (WIP)", default On per the addon.cpp settings list); when Off the helper returns
+  //              exactly 1.0 and the multiplies are bit-exact no-ops.
+  // [NIGHT_SKY_ATTENUATION] Reduce sky brightness when sun is below horizon
+  {
+    float _nightSkyAtten = NightSkyAttenuation(_sunDirection.y);
+    _5648 *= _nightSkyAtten;
+    _5647 *= _nightSkyAtten;
+    _5646 *= _nightSkyAtten;
+  }
+  // RenoDX: <<< [Patch: NightSkyAttenuation]
   __3__38__0__1__g_texSkyInscatterUAV[int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y))] = float4(_5648, _5647, _5646, _53.x);
   __3__38__0__1__g_texSkyExtinctionUAV[int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y))] = float4(_5651, _5650, _5649, 0.0f);
 }

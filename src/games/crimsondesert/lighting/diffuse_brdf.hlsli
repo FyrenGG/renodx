@@ -152,7 +152,13 @@ float CallistoSmoothTerminator(
 
   float edge      = alpha_s * p;
   float cosTheta_i = max(NdotL, 0.0f);
-  float s          = smoothstep(0.0f, edge, cosTheta_i);
+  // edge collapses to 0 whenever VdotH or NdotH reaches 1 (alpha_s == 0), and also if the caller
+  // passes edge length 0. smoothstep(0, 0, x) divides by a zero interval and yields NaN or infinity,
+  // and NaN would survive the blend below even though its weight is 0 there - lerp computes
+  // 1 + w*(s - 1), and w*(NaN - 1) is NaN for any w. Substituting the blend's own degenerate result
+  // (s is fully discarded when alpha_s is 0) keeps the shading term finite without changing any case
+  // where edge is positive.
+  float s          = (edge > 0.0f) ? smoothstep(0.0f, edge, cosTheta_i) : 1.0f;
 
   return lerp(1.0f, s, alpha_s * o);
 }

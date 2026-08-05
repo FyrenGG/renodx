@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct ManyLightsData {
   float4 _position;
   float4 _color;
@@ -1696,6 +1700,24 @@ float4 main(
       _2361 = _1902;
       _2362 = _1941;
     }
+    // RenoDX: >>> [Patch: RefractionNightInscatterAttenuation] [Version: 1.16.00]
+    // Description: _2382/_2383/_2384 are the atmospheric in-scattering terms that this refraction
+    //              pass adds on top of the refracted scene colour for water, ice and other special
+    //              refraction surfaces. When the night sky attenuation feature is enabled, the sky
+    //              itself is darkened in a separate pass, but this in-scattering is computed from
+    //              the unmodified atmosphere constants and therefore stays at daytime brightness -
+    //              refracting surfaces end up glowing brighter than the sky behind them at night.
+    //              This block scales the in-scattering by sun elevation: fully unattenuated while
+    //              the sun is at or above the horizon, ramping to 15% once the sun is more than
+    //              about 14 degrees below it, matching the separate sky darkening.
+    if (NIGHT_SKY_ATTENUATION == 1.f) {
+      float _nightFactor = saturate(-_sunDirection.y * 4.0f);
+      float _nightAtten = lerp(1.0f, 0.15f, _nightFactor);
+      _2360 *= _nightAtten;
+      _2361 *= _nightAtten;
+      _2362 *= _nightAtten;
+    }
+    // RenoDX: <<< [Patch: RefractionNightInscatterAttenuation]
     _2365 = (int)((_474 * _bufferSizeAndInvSize.x) + 0.5f);
     _2368 = (int)((_473 * _bufferSizeAndInvSize.y) + 0.5f);
     [branch]
@@ -1764,6 +1786,33 @@ float4 main(
     SV_Target.y = (((((((_2361 * 0.91636f) + (_2360 * 0.0702f)) + (_2362 * 0.01345f)) + select(_209, (_2442.y * _2439), 0.0f)) + _2448.y) + (min(60000.0f, _2244) * _2446)) + (((_2436 + _2248.y) * _2345) * exp2(_1772 * _518)));
     SV_Target.z = (((((((_2361 * 0.10958f) + (_2360 * 0.02062f)) + (_2362 * 0.8698f)) + select(_209, (_2442.z * _2440), 0.0f)) + _2448.z) + (min(60000.0f, _2245) * _2446)) + (((_2437 + _2248.z) * _2345) * exp2(_1772 * _523)));
     SV_Target.w = 1.0f;
+    // RenoDX: >>> [Patch: RefractionSurfaceShadowGate] [Version: 1.16.00]
+    // Description: Restores visible sun/cloud shadowing on the surface of refracting materials such
+    //              as water and ice. Vanilla only accounts for that shadowing inside the
+    //              in-scattering integral, so a shadowed water surface still reads at full daylight
+    //              brightness against shadowed terrain around it. The weight gates the effect to
+    //              pixels that actually take the special refraction path (_208 is the refraction
+    //              material weight, _211 marks the special refraction/underwater path) and that have
+    //              enough optical thickness (_1845, ramped in above 0.04) so thin stencil-only
+    //              interior glass keeps the original blending. Where the gate passes, everything
+    //              except the light transmitted straight through the surface is multiplied by the
+    //              combined cascade and terrain shadow term (_1039, _1111), floored at 0.3 so
+    //              shadowed water never goes fully black, and blended in by the gate weight. The
+    //              transmitted component is subtracted out first and added back afterwards so light
+    //              coming from behind the surface is not double-shadowed. Only active when the
+    //              material improvements feature is enabled.
+    float _rndx_refraction_shadow_weight = saturate(_207 * float((bool)_209) * saturate((_1756 - 0.04f) * 16.0f));
+    if (MATERIAL_IMPROVEMENTS == 1.f && _rndx_refraction_shadow_weight > 0.0f) {
+      float _rndx_surface_shadow = min(_1015, _1087);
+      float _rndx_soft_shadow = lerp(1.0f, max(0.3f, _rndx_surface_shadow), _rndx_refraction_shadow_weight);
+      float3 _rndx_scene_through = float3(
+        (_2345 * exp2(_1772 * _513)) * (_2435 + _2248.x),
+        (_2345 * exp2(_1772 * _518)) * (_2436 + _2248.y),
+        (_2345 * exp2(_1772 * _523)) * (_2437 + _2248.z)
+      );
+      SV_Target.xyz = (SV_Target.xyz - _rndx_scene_through) * _rndx_soft_shadow + _rndx_scene_through;
+    }
+    // RenoDX: <<< [Patch: RefractionSurfaceShadowGate]
     break;
   }
   return SV_Target;

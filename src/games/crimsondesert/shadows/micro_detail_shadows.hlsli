@@ -20,6 +20,24 @@
 #ifndef CRIMSONDESERT_MICRO_DETAIL_SHADOWS_HLSLI
 #define CRIMSONDESERT_MICRO_DETAIL_SHADOWS_HLSLI
 
+// shared implementation of the "Contact Micro Shadows" feature: a 32-step screen-space depth
+// re-march along the light direction (Bend Studio-style SSS) that produces the fine sub-pixel
+// contact darkening which the SceneShadowTiled replacements composite into their contact-shadow
+// term. Compared to the game's own binary hit/miss contact test it uses a perspective-corrected
+// continuous thickness window with graduated occlusion, self-shadow rejection, stencil-id
+// exclusion (sky/VFX/cloth/velvet, table below), foliage thickness/occlusion boosts, and a
+// distance fade. Consumers: included only by the seven SceneShadowTiled replacement shaders
+// (SceneShadowTiled_0x0335F364, _0x27ED6B54, _0x42099399, _0xA216E553, _0xD770C829,
+// _0xF97D504B and SceneShadowTiledNight_0xBB1C6110); each call site passes its own tuning
+// constants from shared.h. Gate: internally gated at the top of ApplyContactMicroDetailShadow -
+// when MICRO_SHADOW_QUALITY <= MICRO_SHADOW_QUALITY_OFF or detailStrength <= 0 the helper
+// returns the incoming contact shadow unchanged, so setting the "Contact Micro Shadows" UI
+// option to Off preserves the native shader result (parity axis: vanilla-when-Off). The shipped
+// default is MICRO_SHADOW_QUALITY_BALANCED (addon.cpp ContactShadowQuality .default_value), so
+// the march IS active out of the box.
+// The end marker for this block sits at the bottom of the file: everything in between is
+// injected code attributed to this patch family.
+
 // Stencil IDs that must NOT receive micro detail contact shadows
 //
 //  2        = Sky/background geometry
@@ -28,7 +46,16 @@
 //  7        = SSS/VFX (vanilla reduces 6-7 to 1% shadow via _2888 & -2 == 6)
 //  10       = Sky
 //  21, 22   = Special effect materials (vanilla zeroes cross-stencil contact for these)
-//  33, 55   = Cloth / velvet (vanilla reduces to 1% shadow)
+//  33, 54   = Cloth / velvet (vanilla reduces to 1% shadow)
+//
+// Material id caution: the game renumbered this table in 1.16.00. Ids at and above the old 38
+// shifted DOWN by one, so cloth/velvet moved 55 -> 54 and the neighbouring class moved 54 -> 53.
+// Ids at or below 33 were NOT affected, and 66 / 106 / 107 / 18 / 26 and the 11..19 foliage band
+// were likewise unchanged. Vanilla's own cross-stencil cloth test is the reference:
+//   1.15  ((_a == 33) && (_b == 33)) || (!(_a == 33) && ((_a == 55) && (_b == 55)))
+//   1.16  ((_a == 33) && (_b == 33)) || (!(_a == 33) && ((_a == 54) && (_b == 54)))
+// Re-check these constants against that expression on any future game update; a stale id here
+// silently excludes the wrong material class instead of failing.
 
 static const int CONTACT_MICRO_STEPS = 32;
 
@@ -60,7 +87,7 @@ float ApplyContactMicroDetailShadow(
       || stencil == 21
       || stencil == 22
       || stencil == 33
-      || stencil == 55) {
+      || stencil == 54) {
     return contactShadow;
   }
 
@@ -124,8 +151,14 @@ float ApplyContactMicroDetailShadow(
     if (_microSelfFade <= 0.0f) continue;
 
     float _mRayDepth = _mcz * _rcpW;
-    int2 _mpx = int2((int)(_muv.x * _bufferSizeAndInvSize.x),
-                     (int)(_muv.y * _bufferSizeAndInvSize.y));
+    // The bounds test above rejects UVs above 1 but admits exactly 1, which scales to the pixel index
+    // one past the last valid texel. A Load at that index returns zero rather than failing, and a zero
+    // depth/stencil pair is indistinguishable here from a real sample, so an edge ray could register a
+    // phantom occluder. Clamping to the last texel gives the same result a clamp-addressed sampler
+    // would and leaves every in-range coordinate untouched.
+    int2 _mpx = min(int2((int)(_muv.x * _bufferSizeAndInvSize.x),
+                         (int)(_muv.y * _bufferSizeAndInvSize.y)),
+                    int2((int)_bufferSizeAndInvSize.x - 1, (int)_bufferSizeAndInvSize.y - 1));
     uint _mdr = __3__36__0__0__g_depthStencil.Load(int3(_mpx, 0)).x;
     uint _mst = (_mdr >> 24) & 127u;
     if (_mst == 2u
@@ -136,7 +169,7 @@ float ApplyContactMicroDetailShadow(
         || _mst == 21u
         || _mst == 22u
         || _mst == 33u
-        || _mst == 55u) continue;
+        || _mst == 54u) continue;
 
     float _microFoliageSample = (((_mst >= 11u && _mst <= 19u) || _mst == 66u || _mst == 107u) ? 1.0f : 0.0f);
     float _microSampleThick = _microWorldThick * lerp(1.0f, foliageThicknessBoost, _microFoliageSample);

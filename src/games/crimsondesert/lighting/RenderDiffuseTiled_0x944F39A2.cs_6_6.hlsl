@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared option and helper declarations consumed by this shader's annotated RenoDX patches. This dependency-only prefix replaces no native executable statement; removing the block restores successor A byte-for-byte.
+#include "../shared.h"
+#include "foliage_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct anon {
   uint4 g_tileIndex[4096];
 };
@@ -4337,6 +4342,25 @@ void main(
       _2174 = _176;
       _2175 = (half)(select(_2134, 0.0f, _2044));
     }
+    // RenoDX: >>> [Patch: FoliageColorCorrect] [Version: 1.16.00]
+    // Description: Applies RenoDX foliage color shaping to foliage stencil materials (stencil ids
+    //              12..18) right after the shader has resolved the direct-diffuse base color for the
+    //              pixel. Vanilla foliage albedo reads flat and yellow-green under strong sun, so the
+    //              helper re-balances hue and saturation. The shadow-map visibility term from
+    //              g_sceneShadowColor is passed in so foliage that is shadowed is not pushed through
+    //              the fully sunlit shaping curve, which would otherwise make shaded leaves glow.
+    //              Gated by FOLIAGE_COLOR_CORRECT; at 0 the block does not execute.
+    if (FOLIAGE_COLOR_CORRECT > 0.0f && ((uint)(_119 - 12) < 7u)) {
+      float3 _rndx_fcBaseColor = float3(float(_2172), float(_2171), float(_2170));
+      half4 _rndx_fcShadow = __3__36__0__0__g_sceneShadowColor.Load(int3(_98, _103, 0));
+      float _rndx_fcShadowVis = saturate(dot(float3(_rndx_fcShadow.xyz), float3(0.2126f, 0.7152f, 0.0722f)));
+      float3 _rndx_fcCorrected = FoliageColorCorrect(_rndx_fcBaseColor, _sunDirection.xyz, _rndx_fcShadowVis, float3(1.0f, 1.0f, 1.0f));
+      float3 _rndx_fscColor = FoliageSelectiveColor(_rndx_fcCorrected);
+      _2172 = half(_rndx_fscColor.x);
+      _2171 = half(_rndx_fscColor.y);
+      _2170 = half(_rndx_fscColor.z);
+    }
+    // RenoDX: <<< [Patch: FoliageColorCorrect]
     _2176 = _2040 & -2;
     _2177 = (_2176 == 66);
     _2178 = (_2040 == 53);
@@ -7657,6 +7681,25 @@ void main(
         _7928 = _7907;
         _7929 = _7908;
       }
+      // RenoDX: >>> [Patch: FoliageFinalAO] [Version: 1.16.00]
+      // Description: Applies RenoDX foliage ambient-occlusion darkening to the final direct-lit scene
+      //              color for foliage stencil materials (stencil ids 12..18). Vanilla leaves the
+      //              direct sun contribution on foliage almost entirely unoccluded, so dense canopies
+      //              read flat and over-bright. The occlusion factor is the shader's own blended
+      //              multi-tap scene-AO accumulator, and it is mixed in proportionally to how directly
+      //              lit the pixel is, taken from the shadow-map colour, so already shadowed foliage is
+      //              not darkened twice. Gated by FOLIAGE_AO_STRENGTH; at 0 the block does not
+      //              execute, and the lerp keeps the multiplier at exactly 1.0 for fully shadowed
+      //              pixels.
+      if (FOLIAGE_AO_STRENGTH > 0.0f && ((uint)(_119 - 12) < 7u)) {
+        half4 _rndx_shadow = __3__36__0__0__g_sceneShadowColor.Load(int3(_98, _103, 0));
+        float _rndx_directRatio = saturate(dot(float3(_rndx_shadow.xyz), float3(0.333f, 0.333f, 0.333f)));
+        float _rndx_ao = lerp(1.0f, saturate(_2111), _rndx_directRatio * FOLIAGE_AO_STRENGTH);
+        _7929 *= _rndx_ao;
+        _7928 *= _rndx_ao;
+        _7927 *= _rndx_ao;
+      }
+      // RenoDX: <<< [Patch: FoliageFinalAO]
       __3__38__0__1__g_sceneColorUAV[int2(_98, _103)] = float4(_7929, _7928, _7927, 1.0f);
     }
   }

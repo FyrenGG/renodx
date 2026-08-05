@@ -1,3 +1,10 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared spectral and/or Dawn/Dusk helpers required by this shader's owned patch families.
+#include "../shared.h"
+#include "../lighting/diffuse_brdf.hlsli"
+#include "aurora_common.hlsli"
+#include "moon_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct PostProcessSkyStruct {
   uint _moonTexture;
   uint _milkyWayTexture;
@@ -264,6 +271,13 @@ void main(
   float _438;
   float _439;
   float _440;
+  // RenoDX: >>> [Patch: MoonAdjustments] [Version: 1.16.00]
+  // Description: Carrier for the moon disk's shaded RGB. The moon-rendering region assigns it on
+  //              every path (stylized phase, plain disk, and the moon-absent fallback all write it),
+  //              and the sky compositing further down reads it. Declared here at function scope only
+  //              so it is visible to both regions; it changes no native computation by itself.
+  float3 _rndx_moonDiskRgb;
+  // RenoDX: <<< [Patch: MoonAdjustments]
   float _594;
   float _595;
   float _596;
@@ -524,25 +538,86 @@ void main(
     _258 = (float)((int)((int)(_174 * 1500.0f)));
     _271 = frac((sin((_255 * 6.666667e-05f) + (_252 * 0.011333333f)) * 10000.0f) * (abs(sin((_255 * 0.008666666f) + (_252 * 0.00066666666f))) + 0.1f));
     _283 = frac((sin((_271 * 17.0f) + (_258 * 6.666667e-05f)) * 10000.0f) * (abs(sin(_271 + (_258 * 0.008666666f))) + 0.1f));
-    _287 = saturate((_249 + -0.7f) * 3.3333333f) * 1.5f;
+    // RenoDX: >>> [Patch: MilkyWayAlphaOcclusion] [Version: 1.16.00]
+    // Description: Lets replacement Milky Way textures with authored alpha coverage hide the visible sky shader's procedural stars and texture sparkle boosts. Off preserves the existing addon behavior. When enabled, sampled Milky Way alpha is interpreted as coverage: alpha 0 keeps procedural stars/sparkles visible and alpha 1 fully occludes them behind custom texture content such as authored planets or dense galaxy artwork.
+    float _rndx_milkyWayStarVisibility = 1.0f - (MILKY_WAY_ALPHA_OCCLUSION * saturate(_212.w));
+    _287 = _rndx_milkyWayStarVisibility * saturate((_249 + -0.699999988079071f) * 3.3333332538604736f) * 1.5f;
     _289 = (_287 * _212.x) + _212.x;
     _291 = (_287 * _212.y) + _212.y;
     _293 = (_287 * _212.z) + _212.z;
-    _297 = saturate((_283 + -0.98f) * 50.00005f) * 9.0f;
+    _297 = _rndx_milkyWayStarVisibility * saturate((_283 + -0.9800000190734863f) * 50.00004959106445f) * 9.0f;
+    // RenoDX: <<< [Patch: MilkyWayAlphaOcclusion]
     _300 = WaveReadLaneFirst(_materialIndex);
     _308 = WaveReadLaneFirst(BindlessParameters_PostProcessSky[((int)((uint)((uint)(select(((uint)_300 < (uint)170000), _300, 0))) + (uint)(0)))].BindlessParameters_PostProcessSky._milkyWayRatio);
     _311 = WaveReadLaneFirst(_materialIndex);
     _319 = WaveReadLaneFirst(BindlessParameters_PostProcessSky[((int)((uint)((uint)(select(((uint)_311 < (uint)170000), _311, 0))) + (uint)(0)))].BindlessParameters_PostProcessSky._starRatio);
-    _329 = ((saturate((_249 + -0.999f) * 1000.0129f) * 0.1f) + (saturate((_283 + -0.9995f) * 1999.9065f) * 3.0f)) * _319;
-    _333 = _329 + (_308 * ((_289 * _297) + _289));
-    _337 = _329 + (_308 * ((_291 * _297) + _291));
-    _341 = _329 + (_308 * ((_293 * _297) + _293));
-    _350 = select((dot(float3(_136, _137, _138), float3(_sunDirection.x, _sunDirection.y, _sunDirection.z)) > _sunSizeAngleCosine), 1.0f, 0.0f);
-    _353 = min(1e+06f, _precomputedAmbient7.x);
-    _356 = (_350 * (_353 - _333)) + _333;
-    _359 = (_350 * (_353 - _337)) + _337;
-    _362 = (_350 * (_353 - _341)) + _341;
-    _366 = sin(_moonSizeAngle * 0.017453292f);
+    // RenoDX: >>> [Patch: MilkyWayAlphaOcclusion] [Version: 1.16.00]
+    // Description: Applies the same authored Milky Way alpha coverage to the separate procedural star scalar. This keeps the star field from showing through opaque custom Milky Way texture content when the experimental alpha occlusion toggle is enabled.
+    _329 = _rndx_milkyWayStarVisibility * _319 * ((saturate((_283 + -0.9994999766349792f) * 1999.906494140625f) * 3.0f) + (saturate((_249 + -0.9990000128746033f) * 1000.0128784179688f) * 0.10000000149011612f));
+    // RenoDX: <<< [Patch: MilkyWayAlphaOcclusion]
+    // RenoDX: >>> [Patch: MilkyWayLightIntensity] [Version: 1.16.00]
+    // Description: Scales only the sampled Milky Way texture contribution in the visible sky material. Procedural stars still use the game's _starRatio, and moon, aurora, fog, and atmospheric inscatter keep their existing intensity paths. The user-facing value is a percentage (slider 1.0 stored as 100), so the neutral setting reproduces the game's own Milky Way ratio to within 1 ULP rather than bit-exactly: 100 * 0.01f is evaluated at runtime and 0.01f is not exactly representable in binary floating point. The scaled ratio is then packaged as a float3 and added per channel, a bitwise-identical regrouping of the game's original per-channel Milky Way accumulation.
+    float _rndx_milkyWayRatio = _308 * max(MILKY_WAY_LIGHT_INTENSITY, 0.0f) * 0.01f;
+    float3 _rndx_milkyWayRgb = _rndx_milkyWayRatio * float3(((_289 * _297) + _289), ((_291 * _297) + _291), ((_293 * _297) + _293));
+    _333 = _329 + _rndx_milkyWayRgb.x;
+    _337 = _329 + _rndx_milkyWayRgb.y;
+    _341 = _329 + _rndx_milkyWayRgb.z;
+    // RenoDX: <<< [Patch: MilkyWayLightIntensity]
+    // RenoDX: >>> [Patch: SunImprovements] [Version: 1.10-family]
+    // Description: Replaces the vanilla sun disk, a hard binary in/out mask (view-dot compared against the CPU-precomputed sun-size cosine) that aliases and shimmers under TAA, with a widened softened disk: per-channel chromatic edge radii, limb darkening, a distance-falloff corona, and a Henyey-Greenstein-residual Mie halo, all fed by the same precomputed sun luminance. Gated by the Sun Improvements toggle (SUN_IMPROVEMENTS flag, default On per the addon settings list). Off-state is exact: the else branch emits the vanilla single-sample mask select with identical operand order to the vanilla decompile, and the hoisted _sunRadiusVanilla/_sunAngle values are dead in that path.
+    float _sunViewDot = dot(float3(_136, _137, _138), float3(_sunDirection.x, _sunDirection.y, _sunDirection.z));
+    float _sunRadiusVanilla = _sunSizeAngle * 0.01745329238474369f;
+    float _sunAngle = acos(clamp(_sunViewDot, -1.0f, 1.0f));
+    if (SUN_IMPROVEMENTS == 1.f) {
+      float _sunRadius = _sunRadiusVanilla * 2.5f;
+      float _sunRadiusR = _sunRadius;
+      float _sunRadiusG = _sunRadius * 1.01f;
+      float _sunRadiusB = _sunRadius * 1.02f;
+      float _pixelAngle = _sunRadius * 0.05f;
+      float _sunEdgeR = 1.0f - smoothstep(_sunRadiusR - _pixelAngle, _sunRadiusR + _pixelAngle, _sunAngle);
+      float _sunEdgeG = 1.0f - smoothstep(_sunRadiusG - _pixelAngle, _sunRadiusG + _pixelAngle, _sunAngle);
+      float _sunEdgeB = 1.0f - smoothstep(_sunRadiusB - _pixelAngle, _sunRadiusB + _pixelAngle, _sunAngle);
+
+      float _sunDiskR = saturate(_sunAngle / max(_sunRadius, 1e-6f));
+      float _sunDiskMu = sqrt(1.0f - _sunDiskR * _sunDiskR);
+      float _sunLimbDark = pow(max(0.001f, _sunDiskMu), 0.6f);
+      float _sunMaskR = _sunEdgeR * _sunLimbDark;
+      float _sunMaskG = _sunEdgeG * _sunLimbDark;
+      float _sunMaskB = _sunEdgeB * ((_sunLimbDark * 0.92f) + 0.08f);
+      float _sunLum = min(1e+06f, _precomputedAmbient7.x);
+
+      float _coronaR = max(0.0f, _sunAngle - _sunRadiusR) / max(_sunRadius, 1e-6f);
+      float _corona = (_sunLum * 0.006f) / (1.0f + (_coronaR * _coronaR * 10.0f));
+      _corona *= saturate(_sunDirection.y * 5.0f);
+      float _coronaContribR = _corona * 1.10f;
+      float _coronaContribG = _corona * 0.95f;
+      float _coronaContribB = _corona * 0.75f;
+
+      float _g = _miePhaseConst;
+      float _g2 = _g * _g;
+      float _denom = max(1e-6f, 1.0f + _g2 - (2.0f * _g * _sunViewDot));
+      float _hg = (1.0f - _g2) / (_denom * sqrt(_denom));
+      float _hgResidual = max(0.0f, (_hg * 0.07957747f) - 0.07957747f);
+      float _gauss = exp((-0.5f * (_sunAngle * _sunAngle)) / (0.087f * 0.087f));
+      float _diskMask = smoothstep(_sunRadius * 0.8f, _sunRadius * 1.5f, _sunAngle);
+      float _mieHalo = _sunLum * (_mieAerosolDensity * 2e-5f) * _hgResidual * _gauss * _diskMask * saturate(_sunDirection.y * 5.0f);
+
+      _356 = (_sunMaskR * (_sunLum - _333)) + _333 + _coronaContribR + _mieHalo;
+      _359 = (_sunMaskG * (_sunLum - _337)) + _337 + _coronaContribG + _mieHalo;
+      _362 = (_sunMaskB * (_sunLum - _341)) + _341 + _coronaContribB + _mieHalo;
+    } else {
+      float _sunMask = select((_sunViewDot > _sunSizeAngleCosine), 1.0f, 0.0f);
+      float _sunLum = min(1e+06f, _precomputedAmbient7.x);
+      _356 = (_sunMask * (_sunLum - _333)) + _333;
+      _359 = (_sunMask * (_sunLum - _337)) + _337;
+      _362 = (_sunMask * (_sunLum - _341)) + _341;
+    }
+    // RenoDX: <<< [Patch: SunImprovements]
+    // RenoDX: >>> [Patch: MoonAdjustments] [Version: 1.10-family]
+    // Description: Improves moon size, shading, phase, and eclipse styling. Every modified path is gated; when Moon Adjustments is Off the native disk size, precomputed cone cosine, luminance, shading, and texture combine are restored.
+    float _moonSizeScale = renodx::math::Select(MOON_ADJUSTMENTS == 1.f, max(1.0f, MOON_DISK_SIZE), 1.0f);
+    float _moonSizeAngleAdjusted = _moonSizeAngle * _moonSizeScale;
+    _366 = sin(_moonSizeAngleAdjusted * 0.01745329238474369f);
     _369 = -0.0f - _moonDirection.x;
     _371 = -0.0f - _moonDirection.y;
     _373 = -0.0f - _moonDirection.z;
@@ -550,44 +625,123 @@ void main(
     _376 = dot(float3(_369, _371, _373), float3(_136, _137, _138)) * 2.0f;
     _383 = (_376 * _376) - ((_374 * 4.0f) * (dot(float3(_369, _371, _373), float3(_369, _371, _373)) - (_366 * _366)));
     if (!(_383 < 0.0f)) {
-      _390 = ((-0.0f - _376) - sqrt(_383)) / (_374 * 2.0f);
-      if (!(!(_390 >= 0.0f))) {
-        _394 = (_390 * _136) - _moonDirection.x;
-        _396 = (_390 * _137) - _moonDirection.y;
-        _398 = (_390 * _138) - _moonDirection.z;
-        _400 = rsqrt(dot(float3(_394, _396, _398), float3(_394, _396, _398)));  // [sem: invLength]
-        _405 = (_400 * _398);
-        _406 = (_400 * _396);
-        _407 = (_400 * _394);
-      } else {
-        _405 = 0.0f;
-        _406 = 0.0f;
-        _407 = 0.0f;
-      }
+      _390 = (((-0.0f - _376) - sqrt(_383)) / (_374 * 2.0f));
     } else {
-      _405 = 0.0f;
-      _406 = 0.0f;
+      _390 = -1.0f;
+    }
+    if (!(!(_390 >= 0.0f))) {
+      _394 = (_390 * _136) - _moonDirection.x;
+      _396 = (_390 * _137) - _moonDirection.y;
+      _398 = (_390 * _138) - _moonDirection.z;
+      _400 = rsqrt(dot(float3(_394, _396, _398), float3(_394, _396, _398)));  // [sem: invLength]
+      _407 = (_400 * _394);
+      _406 = (_400 * _396);
+      _405 = (_400 * _398);
+    } else {
       _407 = 0.0f;
+      _406 = 0.0f;
+      _405 = 0.0f;
     }
-    // [sem: invLength]
+  // [sem: invLength]
     _409 = rsqrt(dot(float3(_moonDirection.x, _moonDirection.y, _moonDirection.z), float3(_moonDirection.x, _moonDirection.y, _moonDirection.z)));
-    if (dot(float3(_136, _137, _138), float3((_409 * _moonDirection.x), (_409 * _moonDirection.y), (_409 * _moonDirection.z))) > _moonSizeAngleCosine) {
-      _437 = ((dot(float3(_407, _406, _405), float3(_moonUp.x, _moonUp.y, _moonUp.z)) * 0.5f) + 0.5f);
-      _438 = ((dot(float3(_407, _406, _405), float3(_moonRight.x, _moonRight.y, _moonRight.z)) * 0.5f) + 0.5f);
+    _rndx_moonDiskRgb = float3(0.0f, 0.0f, 0.0f);
+    if (dot(float3(_136, _137, _138), float3((_409 * _moonDirection.x), (_409 * _moonDirection.y), (_409 * _moonDirection.z))) > renodx::math::Select(MOON_ADJUSTMENTS == 1.f, cos(_moonSizeAngleAdjusted * 0.01745329238474369f), _moonSizeAngleCosine)) {
+      float3 _sphereN = float3(_407, _406, _405);
+      float3 _sunDir = float3(_sunDirection.x, _sunDirection.y, _sunDirection.z);
+      float _moonRaw = _precomputedAmbient7.z;
+      float _moonLum = _moonRaw;
+      if (MOON_ADJUSTMENTS == 1.f) {
+        _moonLum *= 0.01f;
+      }
+      float _moonNdotLRaw = dot(_sphereN, _sunDir);
+      float _moonNdotL = saturate(_moonNdotLRaw);
+      float _moonShading;
+      if (MOON_ADJUSTMENTS == 1.f) {
+        static const float MOON_ROUGHNESS = 0.9f;
+        float3 _viewDir = float3(_136, _137, _138);
+        float _NdotV = saturate(dot(_sphereN, -_viewDir));
+        float _LdotV = dot(_sunDir, -_viewDir);
+        float _eonScalar = EON_DiffuseScalar(_moonNdotL, _NdotV, _LdotV, MOON_ROUGHNESS);
+        float _eonShading = _moonNdotL * _eonScalar * 1.3f;
+        float3 _moonFwd = float3(_409 * _moonDirection.x, _409 * _moonDirection.y, _409 * _moonDirection.z);
+        float _NdotV_moon = saturate(dot(_sphereN, _moonFwd));
+        float _phaseViewNdot = saturate(dot(_sphereN, -_moonFwd));
+        float _limbDark = MoonLimbDarkening(_NdotV_moon, MOON_LIMB_DARKENING);
+        float _innerGlow = MoonInnerGlow(_NdotV_moon, MOON_GLOW_STRENGTH);
+        float _brightMul = MoonBrightnessMultiplier(AE_DYNAMISM_HIGH, MOON_BRIGHTNESS);
+        _moonShading = (_eonShading * _limbDark + _innerGlow) * _brightMul;
+        float _moonDiskLight = _moonShading * _moonLum * 0.35f;
+        float _moonFullReferenceLight = _moonLum * _brightMul * 0.35f;
+        // RenoDX: >>> [Patch: StableMoonPhaseFrame] [Version: 1.16.00]
+        // Description: Builds the art-directed moon phase mask from a stable world-up tangent frame instead of flipping the local x axis from dot(_sunDir, _moonRight). Near the horizon that dot product can hover around zero and make partial phases swap sides from frame to frame; this keeps the crescent coordinates continuous while leaving the moon texture UVs on the game's original right/up axes.
+        float3 _phaseWorldUp = abs(_moonFwd.y) < 0.98f ? float3(0.0f, 1.0f, 0.0f) : float3(1.0f, 0.0f, 0.0f);
+        float3 _phaseRightDir = normalize(cross(_phaseWorldUp, _moonFwd));
+        float3 _phaseUpDir = normalize(cross(_moonFwd, _phaseRightDir));
+        float2 _moonLocalPhase = float2(dot(_sphereN, _phaseRightDir), dot(_sphereN, _phaseUpDir));
+        // RenoDX: <<< [Patch: StableMoonPhaseFrame]
+        // RenoDX: >>> [Patch: StylizedMoonPhase] [Version: 1.16.00]
+        // Description: Uses the existing sun/moon directions plus the moon's local right/up axes to render soft, stylized moon phase/eclipsing. If Crimson Desert's lighting vectors collapse to an always-full moon, the helper falls back to an art-directed crescent mask so the visible disk still reads as a stylized moon phase instead of a uniformly lit texture.
+        _rndx_moonDiskRgb = RenoDXApplyStylizedMoonPhase(_sunDir, _moonFwd, _moonLocalPhase, _moonNdotLRaw, _phaseViewNdot, _moonDiskLight, _moonFullReferenceLight, STYLIZED_LUNAR_PHASE);
+        // RenoDX: <<< [Patch: StylizedMoonPhase]
+      } else {
+        _moonShading = _moonNdotL;
+        float _moonDiskLight = _moonShading * _moonLum;
+        _rndx_moonDiskRgb = float3(_moonDiskLight, _moonDiskLight, _moonDiskLight);
+      }
+      _440 = max(max(_rndx_moonDiskRgb.x, _rndx_moonDiskRgb.y), _rndx_moonDiskRgb.z);
       _439 = 1.0f;
-      _440 = (saturate(dot(float3(_407, _406, _405), float3(_sunDirection.x, _sunDirection.y, _sunDirection.z))) * _precomputedAmbient7.z);
+      _438 = ((dot(float3(_407, _406, _405), float3(_moonRight.x, _moonRight.y, _moonRight.z)) * 0.5f) + 0.5f);
+      _437 = ((dot(float3(_407, _406, _405), float3(_moonUp.x, _moonUp.y, _moonUp.z)) * 0.5f) + 0.5f);
     } else {
-      _437 = 0.0f;
-      _438 = 0.0f;
-      _439 = 0.0f;
       _440 = 0.0f;
+      _439 = 0.0f;
+      _438 = 0.0f;
+      _437 = 0.0f;
+      _rndx_moonDiskRgb = float3(0.0f, 0.0f, 0.0f);
     }
+    // RenoDX: <<< [Patch: MoonAdjustments]
+    // RenoDX: >>> [Patch: StylizedMoonEclipseCorona] [Version: 1.16.00]
+    // Description: Adds a stylized eclipse corona for the final Stylized Lunar Phase / Eclipse range. The visible moon disk is already darkened into a blood-copper silhouette by the moon phase helper; this block adds the external pearly halo, warmer inner rim, wispy horizontal streamers, and tiny crimson prominence glints that make the 180..200 range read as an intentionally unrealistic eclipse instead of just a dark moon texture.
+    if (MOON_ADJUSTMENTS == 1.f && STYLIZED_LUNAR_PHASE > 180.f) {
+      float _eclipseSilhouette = smoothstep(180.0f, 200.0f, STYLIZED_LUNAR_PHASE);
+      float3 _moonFwdHalo = float3(_409 * _moonDirection.x, _409 * _moonDirection.y, _409 * _moonDirection.z);
+      float3 _moonRightHalo = normalize(float3(_moonRight.x, _moonRight.y, _moonRight.z));
+      float3 _moonUpHalo = normalize(float3(_moonUp.x, _moonUp.y, _moonUp.z));
+      float3 _viewDirHalo = float3(_136, _137, _138);
+      float _moonEdgeCos = cos(_moonSizeAngleAdjusted * 0.01745329238474369f);
+      float _moonConeWidth = max(1e-6f, 1.0f - _moonEdgeCos);
+      float _moonRadial = sqrt(max(0.0f, (1.0f - dot(_viewDirHalo, _moonFwdHalo)) / _moonConeWidth));
+      float _outsideDisk = max(_moonRadial - 1.0f, 0.0f);
+      float _outsideMask = smoothstep(1.0f, 1.035f, _moonRadial);
+      float _moonAngularScale = max(0.0001f, sin(_moonSizeAngleAdjusted * 0.01745329238474369f));
+      float2 _skyMoonLocal = float2(dot(_viewDirHalo, _moonRightHalo), dot(_viewDirHalo, _moonUpHalo)) / _moonAngularScale;
+      float _skyMoonRadial = max(0.0001f, length(_skyMoonLocal));
+      float _streamerAxis = pow(saturate(abs(_skyMoonLocal.x) / _skyMoonRadial), 2.0f);
+      float _streamerShape = lerp(0.72f, 1.30f, _streamerAxis);
+      float _nearCorona = exp2(-_outsideDisk * 9.0f) * _outsideMask;
+      float _farCorona = exp2(-_outsideDisk * 2.15f) * _outsideMask * (1.0f - smoothstep(5.4f, 7.2f, _moonRadial));
+      float2 _prominenceDeltaA = _skyMoonLocal - float2(1.08f, 0.18f);
+      float2 _prominenceDeltaB = _skyMoonLocal - float2(-0.96f, -0.30f);
+      float _prominences = (exp2(-48.0f * dot(_prominenceDeltaA, _prominenceDeltaA)) + (0.55f * exp2(-56.0f * dot(_prominenceDeltaB, _prominenceDeltaB)))) * _outsideMask;
+      float _eclipseMoonLight = min(1e+06f, _precomputedAmbient7.z) * 0.01f * MoonBrightnessMultiplier(AE_DYNAMISM_HIGH, MOON_BRIGHTNESS) * 0.35f;
+      float3 _eclipseCoronaRgb = _eclipseMoonLight * _eclipseSilhouette * (
+          (_nearCorona * 0.070f * float3(0.88f, 0.56f, 0.94f)) +
+          (_farCorona * 0.026f * _streamerShape * float3(0.62f, 0.73f, 1.12f)) +
+          (_prominences * 0.055f * float3(1.18f, 0.14f, 0.20f)));
+      _356 += _eclipseCoronaRgb.x;
+      _359 += _eclipseCoronaRgb.y;
+      _362 += _eclipseCoronaRgb.z;
+    }
+    // RenoDX: <<< [Patch: StylizedMoonEclipseCorona]
     _443 = WaveReadLaneFirst(_materialIndex);
     _451 = WaveReadLaneFirst(BindlessParameters_PostProcessSky[((int)((uint)((uint)(select(((uint)_443 < (uint)170000), _443, 0))) + (uint)(0)))].BindlessParameters_PostProcessSky._moonTexture);
     _458 = __0__7__0__0__g_bindlessTextures[((int)((uint)((uint)(select(((uint)_451 < (uint)65000), _451, 0))) + (uint)(0)))].Sample(__0__4__0__0__g_staticBilinearClamp, float2(_438, _437));
-    _465 = (((_458.x * _440) - _356) * _439) + _356;
-    _469 = (((_458.y * _440) - _359) * _439) + _359;
-    _473 = (((_458.z * _440) - _362) * _439) + _362;
+    // RenoDX: >>> [Patch: MoonAdjustments] [Version: 1.10-family]
+    // Description: Combines the sampled moon texture with the per-channel moon disk light computed above. Vanilla multiplies the texture by a single scalar disk light; the Moon Adjustments block carries the disk light as a float3 (_rndx_moonDiskRgb) so the stylized phase treatment can tint channels independently. When Moon Adjustments is Off all three channels hold the identical vanilla scalar, making this combine bit-identical to the vanilla per-channel expression.
+    _465 = (((_458.x * _rndx_moonDiskRgb.x) - _356) * _439) + _356;
+    _469 = (((_458.y * _rndx_moonDiskRgb.y) - _359) * _439) + _359;
+    _473 = (((_458.z * _rndx_moonDiskRgb.z) - _362) * _439) + _362;
+    // RenoDX: <<< [Patch: MoonAdjustments]
     _476 = floor(_time.x);
     if (frac(sqrt(abs(_476 * 0.368417f)) * 3734.4219f) < 0.1f) {
       _484 = _476 + 60.0f;
@@ -777,6 +931,47 @@ void main(
     _946 = (_86 == 10);
     _947 = select(_946, 1.0f, _900.w);
     _950 = _947 * select((_796 != 0), 0.0f, 1.0f);
-    __3__38__0__1__g_postProcessUAV[int2(_54, _59)] = float4((((_947 * _790) + select(_946, 0.0f, _900.x)) + ((_793 * (((_595 * 0.33951f) + (_594 * 0.04737f)) + (_596 * 0.61312f))) * _950)), (((_947 * _791) + select(_946, 0.0f, _900.y)) + ((_794 * (((_595 * 0.91636f) + (_594 * 0.01345f)) + (_596 * 0.0702f))) * _950)), (((_947 * _792) + select(_946, 0.0f, _900.z)) + ((_795 * (((_595 * 0.10958f) + (_594 * 0.8698f)) + (_596 * 0.02062f))) * _950)), ((_945 + _938) - (_945 * _938)));
+    // RenoDX: >>> [Patch: AuroraVisibleSky] [Version: 1.16.00]
+    // Description: Routes the four exact native output expressions through RGB locals so gated aurora emission can be added before the single UAV write.
+    float _finalR = (((_947 * _790) + select(_946, 0.0f, _900.x)) + ((_793 * (((_595 * 0.33951f) + (_594 * 0.04737f)) + (_596 * 0.61312f))) * _950));
+    float _finalG = (((_947 * _791) + select(_946, 0.0f, _900.y)) + ((_794 * (((_595 * 0.91636f) + (_594 * 0.01345f)) + (_596 * 0.0702f))) * _950));
+    float _finalB = (((_947 * _792) + select(_946, 0.0f, _900.z)) + ((_795 * (((_595 * 0.10958f) + (_594 * 0.8698f)) + (_596 * 0.02062f))) * _950));
+    // RenoDX: <<< [Patch: AuroraVisibleSky]
+    // RenoDX: >>> [Patch: AuroraVisibleSky] [Version: 1.16.00]
+    // Description: Adds a Ray Reconstruction / Ray Regeneration-gated aurora emission pass to the visible night sky. The injected pass uses the shared aurora raymarch, applies the game sky tint and material fade, then blends in atmospheric transmittance, moon/sun suppression, and auto-exposure dampening so the aurora fades naturally in hazy or bright sky regions.
+    [branch]
+    if (AURORA_BOREALIS_ENABLED) {
+      float3 aurora = ComputeAurora(
+        float3(_136, _137, _138),
+        _time.x,
+        ComputeNightGate(_sunDirection.y),
+        _frameNumber.x,
+        uint2((uint)_67, (uint)_68),
+        _ssaoRandomDirection
+      );
+      aurora *= float3(_793, _794, _795);
+      aurora *= _947;
+      float auroraTransmittance = AuroraAtmosphereTransmittance(_137, _rayleighScaledHeight, _earthRadius);
+      aurora *= lerp(1.f, auroraTransmittance, 0.72f);
+      float moonWashout = 1.f - saturate(_precomputedAmbient7.z * 0.0005f);
+      aurora *= lerp(1.f, moonWashout, 0.3f);
+      aurora *= AuroraCelestialSuppression(
+        float3(_136, _137, _138),
+        float3(_sunDirection.x, _sunDirection.y, _sunDirection.z),
+        float3(_moonDirection.x, _moonDirection.y, _moonDirection.z),
+        _precomputedAmbient7.z,
+        1.f
+      );
+      aurora *= AuroraBrightnessDampening(AE_DYNAMISM_HIGH);
+
+      _finalR += mad(aurora.r, 0.6131200194358826f, mad(aurora.g, 0.3395099937915802f, aurora.b * 0.047370001673698425f));
+      _finalG += mad(aurora.r, 0.07020000368356705f, mad(aurora.g, 0.9163600206375122f, aurora.b * 0.013450000435113907f));
+      _finalB += mad(aurora.r, 0.02061999961733818f, mad(aurora.g, 0.10958000272512436f, aurora.b * 0.8697999715805054f));
+    }
+    // RenoDX: <<< [Patch: AuroraVisibleSky]
+    // RenoDX: >>> [Patch: AuroraVisibleSky] [Version: 1.16.00]
+    // Description: Writes the routed RGB channels and the untouched native alpha expression; the surrounding native control-flow braces remain in their clean structural positions.
+    __3__38__0__1__g_postProcessUAV[int2(_54, _59)] = float4(_finalR, _finalG, _finalB, ((_945 + _938) - (_945 * _938)));
+    // RenoDX: <<< [Patch: AuroraVisibleSky]
   }
 }

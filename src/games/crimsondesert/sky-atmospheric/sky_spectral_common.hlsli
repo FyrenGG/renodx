@@ -2,6 +2,7 @@
 #define SRC_CRIMSONDESERT_SKY_ATMOSPHERIC_SKY_SPECTRAL_COMMON_HLSLI_
 
 #include "../shared.h"
+// [SKY_SPECTRAL]
 
 // ============================================================================
 // Spectral atmospheric scattering support
@@ -52,7 +53,7 @@ static const float3x3 SKY_VANILLA_BT709_TO_BT2020 = float3x3(
 //
 // Garcia Linan formulation for in-scatter:
 //   L_display[row] = Σᵢ M_spectral[row][i] × T(λᵢ) × β(λᵢ) × phase
-//                  + (Σᵢ M_vanilla[row][i] × T(λᵢ)) × S_mie[row_colour]
+//              + (Σᵢ M_vanilla[row][i] × T(λᵢ)) × S_mie[row_colour]
 
 // Spectral Rayleigh: per wavelength T×β then matrix-convert to display
 #define SKY_RAY_INSCATTER(row, T0,T1,T2, b0,b1,b2, phase) \

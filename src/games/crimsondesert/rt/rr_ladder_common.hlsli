@@ -1,17 +1,53 @@
 #ifndef SRC_GAMES_CRIMSONDESERT_RT_RR_LADDER_COMMON_HLSLI_
 #define SRC_GAMES_CRIMSONDESERT_RT_RR_LADDER_COMMON_HLSLI_
 
-// RenoDX: >>> [Patch: RRLadderCandidateA] [Version: 1.13.00]
-// Description: Shared pure-function helpers for the Crimson Desert RR quality ladder
-// candidates. LANE-PORTABILITY CONTRACT: the game ships many precompiled permutations
-// (half-res/full-res, interleaved/non-interleaved, RR-on/RR-off) of the ReSTIR diffuse GI
-// shaders, each with a different hash and decompiled body. Every function in this file must
-// therefore stay a pure function of its explicit parameters: no resource (SRV/UAV/cbuffer)
-// access, no references to any surrounding shader's local variable names, and no baked-in
-// resolution, buffer-size, or payload-layout constants. Call sites gather the shader-local
-// values (pixel coordinates, frame number, luminance/radiance magnitudes), call a helper,
-// and apply the result, so re-applying a candidate to a different permutation body is a
-// mechanical matter of finding the same semantic anchors, not a rewrite.
+// =============================================================================
+// rr_ladder_common.hlsli — shared pure-function helper library for the Crimson
+// Desert SPMIS ray-traced diffuse-GI ladder (UI "Ray Reconstruction
+// Improvements", setting key SPMISQuality; runtime gates RT_QUALITY and the
+// RR_ENABLED auto-detect, both from shared.h).
+//
+// SHIPPING COMPOSITION (what actually runs, by tier):
+//  - Wide-pooling core ([Patch: SPMISWidePooling]): unbiased stochastic
+//    pairwise-MIS wide-kernel spatial resampling — the single terminal
+//    spatial-reuse branch for every active SPMIS tier (RT_QUALITY 1/2/3).
+//  - CGNS pool scoring ([Patch: SPMISCGNSPoolScoring]): compatibility-guided
+//    donor selection folded into the pooling core's probe importance
+//    (selection probability only; unbiased by construction).
+//  - Sampling decorrelation ([Patch: SPMISDecorrelation]): TEA scramble keys,
+//    temporal tap permutation, and anti-firefly conditioning, active on every
+//    active SPMIS tier in the raygen and temporal shaders.
+//  - Confidence/variance-gated de-clamp knee ([Patch: RRLadderFidelity]):
+//    restores energy the vanilla resolve saturate clips; SPMIS Balanced
+//    (RT_QUALITY==2) and SPMIS Boosted (RT_QUALITY==3) only.
+//  - Energy-character lift ([Patch: RRLadderLift]): SPMIS Boosted
+//    (RT_QUALITY==3) only.
+//  - Vanilla transliterations ([Patch: SPMISVanillaTransliterations]):
+//    arithmetic-identical lifts of the vanilla spatial shader's validation
+//    idioms, consumed by the pooling core.
+// RT_QUALITY==1 is an unexposed noise-only conditioning baseline (pooling +
+// scoring + decorrelation with the knee forced off); RT_QUALITY==0 leaves the
+// vanilla shaders bit-exact. The master-gated ReservoirAgeMaskFix in the
+// temporal shader is a defect fix independent of this ladder's quality tiers and runs only while RenoDX is active.
+//
+// LANE-PORTABILITY CONTRACT: the game ships many precompiled permutations
+// (half-res/full-res, interleaved/non-interleaved, RR-on/RR-off) of the ReSTIR
+// diffuse GI shaders, each with a different hash and decompiled body. Every
+// function in this file must therefore stay a pure function of its explicit
+// parameters: no resource (SRV/UAV/cbuffer) access, no references to any
+// surrounding shader's local variable names, and no baked-in resolution,
+// buffer-size, or payload-layout constants. Call sites gather the shader-local
+// values (pixel coordinates, frame number, luminance/radiance magnitudes),
+// call a helper, and apply the result, so re-applying a section to a different
+// permutation body is a mechanical matter of finding the same semantic
+// anchors, not a rewrite.
+// =============================================================================
+
+// SPMIS ladder's raygen and temporal shaders: a vanilla-matching TEA mixer, a second
+// independent TEA extraction used for scramble/permutation keys, the 4x4 XOR-3 reuse
+// permutation with screen-global per-tap-slot keys, and a conservative anti-firefly
+// clamp. Each helper's contract is documented at its definition below; all are pure
+// functions per the lane-portability contract in the file header.
 
 // Vanilla-matching TEA mixer (Zafar/Olano "GPU Random Numbers via the Tiny Encryption
 // Algorithm" key schedule, identical constants to the game's own inlined hash: key
@@ -83,18 +119,19 @@ float RRLadder_FireflyClampScalar(float merged_magnitude, float history_magnitud
   return merged_magnitude;
 }
 
-// RenoDX: <<< [Patch: RRLadderCandidateA]
 
-// RenoDX: >>> [Patch: RRLadderCandidateBC] [Version: 1.13.00]
-// Description: Pure-function helpers shared by the RT_QUALITY==2 "Smart Neighbors" and
-// RT_QUALITY==3 "Wide Pooling" spatial-resampling candidates. Each function is an
-// arithmetic transliteration of an expression the game's own ReSTIR diffuse-GI spatial
-// shader inlines (10:10:10 unorm normal decode/requantize, pixel-center NDC mapping,
-// inverse-projection world-relative position reconstruction, the luminance target
-// function, and the sign-gated clamped reconnection Jacobian), lifted into parameterized
-// form so both candidates evaluate donors with the exact vanilla validation semantics.
-// No resources, no resolution constants; matrices, texel words, and payload magnitudes
-// are always passed as parameters per the lane-portability contract above.
+// function is an arithmetic transliteration of an expression the game's own ReSTIR
+// diffuse-GI spatial shader inlines (10:10:10 unorm normal decode/requantize,
+// pixel-center NDC mapping, inverse-projection world-relative position reconstruction,
+// the luminance target function, and the sign-gated clamped reconnection Jacobian),
+// lifted into parameterized form so the wide-pooling spatial merge
+// ([Patch: SPMISWidePooling]) applies the exact vanilla validation semantics to
+// arbitrary donor coordinates. No resources, no resolution constants; matrices, texel
+// words, and payload magnitudes are always passed as parameters per the
+// lane-portability contract in the file header. These helpers mirror the native
+// shader body expression-for-expression: if a game patch changes those idioms in a
+// new native decompile, every function here must be re-verified against it before
+// the pooling core is trusted on that version.
 
 // 10:10:10 unorm -> [-1,1] component decode, arithmetic-identical to the game's inlined
 // form min(1, bits * (1/511) - 1) per component. Returns the UNNORMALIZED triple exactly
@@ -173,70 +210,31 @@ float RRLadder_ReconnectJacobianClamped(float3 from_pos, float3 to_pos, float3 h
   const float numer = -0.0f - (r2_from * dot(to_dir * rsqrt(r2_to), hit_n));
   return min(max(numer / (-0.0f - denom), 0.0f), 1.0f);              // vanilla _578
 }
-// RenoDX: <<< [Patch: RRLadderCandidateBC]
 
-// RenoDX: >>> [Patch: RRLadderCandidateB] [Version: 1.13.00]
-// Description: Helpers of the former standalone "Smart Neighbors" candidate. In the
-// 2026-07-05 ladder re-map that standalone lane was RETIRED; RRLadder_CompatScale /
-// RRLadder_CompatScore now serve the RT_QUALITY==2/3 Fidelity lanes' wide-pooling
-// probe selection (see RRFID_CGNS_POOL_SCORING in the RRLadderFidelity block below),
-// and the whole-pixel branch in the spatial shader is compiled out behind
-// RRB_STANDALONE_LANE. Original design: compatibility-guided spatial
-// neighbor selection (Junkins et al., "Compatibility-Guided Neighbor Selection for
-// ReSTIR", HPG 2026 / PACMCGIT 9(4):52) plus an exposure-aware resampling target
-// function (Capcom RE Engine GDC 2026, w' = 1 + alpha * w / E). Instead of reusing one
-// uniformly drawn neighbor per slot, each reuse slot scores a small pool of candidate
-// pixels with a G-buffer-only geometric compatibility heuristic and reservoir-selects
-// the winner proportional to score; because the score never reads samples or resampling
-// weights, the non-uniform pick preserves GRIS unbiasedness exactly like the vanilla
-// binary rejection does. The exposure-aware target adds a defensive +1 floor in
-// display-referred units so display-dim candidates stay selectable (decorrelation, less
-// RR boiling) while display-bright samples converge to vanilla luminance-proportional
-// selection. Pure functions + compile-time knobs only.
+// "Compatibility-Guided Neighbor Selection for ReSTIR", HPG 2026 / PACMCGIT 9(4):52)
+// consumed by the wide-pooling spatial branch ([Patch: SPMISWidePooling]) to shape its
+// probe-pool selection importance. Each probed candidate pixel is scored with a
+// G-buffer-only geometric compatibility heuristic (world-space surface-distance
+// falloff x normal-alignment power), so donors likely to survive the merge's
+// validation gates are drawn more often. Because the score reads only G-buffer
+// attributes — never samples, UCWs, or resampling weights — and the merge divides
+// every accepted donor by its exact selection pmf, the non-uniform pick shifts
+// variance toward compatible donors while preserving GRIS unbiasedness exactly like
+// the vanilla binary rejection does. Call sites live in the spatial shader's
+// pool-probe loop, compile-time gated by RRFID_CGNS_POOL_SCORING and floored by
+// RRFID_CGNS_SCORE_FLOOR (both declared with the [Patch: RRLadderFidelity] knobs
+// below). Spatial-shader blocks tagged with this patch name also cover the phase-1
+// pool-statistics accumulators (probe-luminance sum / sum-of-squares) that feed the
+// [Patch: RRLadderFidelity] knee's variance gate and the [Patch: RRLadderLift]
+// lambda: they are pool-loop instrumentation grouped here so the RRLadderFidelity
+// tag marks only the de-clamp mechanism itself. Pure functions + compile-time knobs
+// only, per the lane-portability contract in the file header.
 
-// K_c: candidate pixels scored per reuse slot. Total pool = K_c * vanilla slot count
-// (= 32 at the common M>=2 case), matching the paper's recommended K=32. Range 2..8;
-// higher = sharper selection (less noise / temporal covariance, more spatial covariance).
-#define RRB_CANDIDATES_PER_SLOT 4u
 // Omega (steradians): world-space footprint solid angle for the position falloff
 // (Keller et al. path-space-filtering footprint). Paper/code default.
 #define RRB_COMPAT_SOLID_ANGLE 0.05f
 // beta: normal-alignment sharpness exponent. Paper/code default.
 #define RRB_COMPAT_NORMAL_BETA 8.0f
-// Early-stop cutoff: stop scanning candidates once one scores at least this
-// (reference-code default; <1% SMAPE effect per the paper). Set > 1.0 to disable.
-#define RRB_EARLY_STOP_SCORE 0.5f
-// alpha: strength of luminance proportionality vs the defensive uniform floor in the
-// exposure-aware target (Capcom GDC 2026 value). Primary A/B tuning knob.
-#define RRB_EXPOSURE_ALPHA 16.0f
-// 0 (default) = no exposure cbuffer: the spatial shader's ExposureConstantBuffer
-// declaration compiles out and the target uses the compile-time RRB_EXPOSED_SCALE
-// constant below. A DevKit probe of the live spatial dispatch (2026-07-05) found NO
-// cbuffer bound at b31/space35 — the bound set at that dispatch is b0/space1,
-// b0/space34, b1/space1, and b18/space35 only — so declaring the cbuffer there is a
-// real PSO-creation / garbage-read hazard, not a hypothetical one. Compiling it out
-// also costs no correctness: the luminance the spatial shader reads from the reservoir
-// radiance texel was ALREADY multiplied by the engine's exposure scale when the
-// temporal pass packed it (f32tof16(_exposure4.y * luminance)), so the exposure-aware
-// target already operates on exposure-normalized units with RRB_EXPOSED_SCALE 1.0 and
-// no cbuffer read.
-// 1 = read the engine ExposureConstantBuffer (b31/space35, declaration mirrored from
-// the sibling temporal shader) — kept compilable for a future shader-selection lane
-// whose spatial dispatch actually binds exposure constants.
-#define RRB_USE_EXPOSURE_CBUFFER 0
-#define RRB_EXPOSED_SCALE 1.0f
-// 0 (default) = Candidate B's standalone early-return branch in the spatial shader is
-// compiled out (the gate constant-folds to false and /O3 dead-strips the branch). The
-// standalone lane was RETIRED when the ladder was re-mapped to the Fidelity lanes
-// (2026-07-05): B's compatibility-guided selection survives inside the wide-pooling
-// branch (its pool importance is scaled by RRLadder_CompatScore, selection
-// probability only), so a whole-pixel B path no longer owns a slider slot. Setting this
-// to 1 re-arms the branch for archival/diagnostic builds; it then SHADOWS the
-// RT_QUALITY==2 "Fidelity" lane (the B branch runs first and returns early), so never
-// ship with it armed.
-#ifndef RRB_STANDALONE_LANE
-#define RRB_STANDALONE_LANE 0
-#endif
 
 // s = sqrt(Omega/pi) * d: world-space footprint radius of solid angle Omega at camera
 // distance d (CGNS computeNeighborScale).
@@ -253,40 +251,9 @@ float RRLadder_CompatScore(float3 delta_pos, float3 n_query, float3 n_cand,
   return clamp(position_score * normal_score, 1e-8f, 1.0f);
 }
 
-// A-Chao streaming weighted reservoir sampling accept test: the first positive-weight
-// candidate is always accepted; later candidates win with probability weight/weight_sum.
-bool RRLadder_WrsAccept(float weight, inout float weight_sum, float u01) {
-  weight_sum += weight;
-  return (weight_sum > 0.0f) && ((u01 * weight_sum) < weight);
-}
-
-// Capcom GDC 2026 brightness compensation read as a target-function substitution:
-// p-hat' = 1 + alpha * p-hat * (unexposed->exposed scale). Substituted consistently at
-// every target-function site so the RIS estimator f(y)*W stays self-consistent.
-float RRLadder_ExposureAwareTarget(float phat_vanilla, float unexposed_to_exposed, float alpha) {
-  return 1.0f + ((alpha * phat_vanilla) * unexposed_to_exposed);
-}
-
-// Minimal MINSTD-form LCG streams (vanilla multiplier 48271, vanilla 24-bit extraction)
-// for Candidate B's own selection/merge randomness. Seed from a TEA second extraction so
-// the streams are independent of the vanilla sampling chain.
-uint RRLadder_LcgNext(inout uint lcg_state) {
-  lcg_state *= 48271u;
-  return lcg_state;
-}
-float RRLadder_LcgUnit(inout uint lcg_state) {  // [0, 1)
-  return float(RRLadder_LcgNext(lcg_state) & 16777215u) * 5.960464477539063e-08f;
-}
-float RRLadder_LcgSigned(inout uint lcg_state) {  // [-1, 1)
-  return (float(RRLadder_LcgNext(lcg_state) & 16777215u) * 1.1920928955078125e-07f) - 1.0f;
-}
-// RenoDX: <<< [Patch: RRLadderCandidateB]
-
-// RenoDX: >>> [Patch: RRLadderCandidateC] [Version: 1.13.00]
-// Description: Wide-pooling helpers, originally the standalone RT_QUALITY==3 "Wide
-// Pooling" candidate; since the 2026-07-05 ladder re-map they power the shared pooling
-// core of BOTH the RT_QUALITY==2 "Fidelity" and RT_QUALITY==3 "Fidelity Lift" lanes —
-// stochastic pairwise resampling
+// resampling core — the single terminal spatial-reuse branch for every active SPMIS
+// tier (SPMIS Balanced RT_QUALITY==2, SPMIS Boosted RT_QUALITY==3, and the unexposed
+// RT_QUALITY==1 conditioning baseline): stochastic pairwise resampling
 // MIS for unbiased large-kernel spatial reuse (Hedstrom et al., Eurographics/CGF 45(2)
 // 2026). Replaces the vanilla constant-MIS merge (final W divided by total M, the
 // darkening-bias source for wide kernels) with defensive generalized pairwise MIS
@@ -333,10 +300,7 @@ float RRLadder_PairwiseCanonicalBeta(float c_i, float c_c, float c_sum, float ph
   if (!(denom > 0.0f) || !((c_sum + c_c) > 0.0f)) return 0.0f;
   return (c_i / (c_sum + c_c)) * ((c_c * ph_c) / denom);
 }
-// RenoDX: <<< [Patch: RRLadderCandidateC]
 
-// RenoDX: >>> [Patch: RRLadderFidelity] [Version: 1.13.00]
-// Description: Pure-function helpers + knobs for the confidence-gated W de-clamp used by
 // the SPMIS Balanced (RT_QUALITY==2) and SPMIS Boosted (RT_QUALITY==3) tiers on the
 // wide-pooling path (at RT_QUALITY==1, unexposed, forces the resolve knee's k_eff to 0
 // via rrc_knee_tier so it stays vanilla-clamped). The game's ReSTIR diffuse-GI
@@ -402,10 +366,11 @@ float RRLadder_PairwiseCanonicalBeta(float c_i, float c_c, float c_sum, float ph
 #define RRFID_TEMPORAL_KNEE 0
 #endif
 // 1 (default) = the wide-pooling lanes scale their pool selection importance by
-// the RRLadder_CompatScore G-buffer compatibility heuristic (Candidate B's CGNS
-// selection folded into the pool). Selection probability only — the merge divides by
-// the exact selection pmf, so scoring shifts variance toward compatible donors without
-// bias. 0 = pure luminance-proportional pool selection (original Candidate C form).
+// the RRLadder_CompatScore G-buffer compatibility heuristic (the
+// [Patch: SPMISCGNSPoolScoring] scoring above). Selection probability only — the
+// merge divides by the exact selection pmf, so scoring shifts variance toward
+// compatible donors without bias. 0 = pure luminance-proportional pool selection
+// (no compatibility shaping).
 #ifndef RRFID_CGNS_POOL_SCORING
 #define RRFID_CGNS_POOL_SCORING 1
 #endif
@@ -475,10 +440,7 @@ float RRLadder_PoolAgreement(float lum_sum, float lum_sq_sum, float n, float var
                         / max(lum_sum, 1e-6f);
   return saturate(1.0f - (rel_std * variance_k));
 }
-// RenoDX: <<< [Patch: RRLadderFidelity]
 
-// RenoDX: >>> [Patch: RRLadderLift] [Version: 1.13.00]
-// Description: Pure-function helpers + knobs for the RT_QUALITY==3 "Fidelity Lift"
 // lane — an explicit, bounded, confidence-gated energy-character layer applied on top
 // of the wide-pooling merge at the spatial resolve. Motivation: an unbiased pairwise-MIS
 // merge self-normalizes W to its honest value, which reads subtle; the historically
@@ -500,8 +462,7 @@ float RRLadder_PoolAgreement(float lum_sum, float lum_sq_sum, float n, float var
 // passes through the shared RRLadder_ConfidenceRamp (zero through the first
 // RRFID_CONF_FLOOR frames of reservoir history, consistent with the de-clamp gate),
 // so fresh/disoccluded pixels get zero lift. Compile-time RRLIFT_ENABLE 0
-// removes every lift call site so lane 3 rebuilds bit-identical to lane 2 for clean
-// A/B rounds.
+// removes every lift call site so the disabled build preserves the no-lift path.
 
 // #if wrapper for all lift call sites (see above). Guarded #ifndef so a diagnostic
 // compile can force it via -D RRLIFT_ENABLE=0.
@@ -564,6 +525,5 @@ float RRLadder_LiftSoftKnee(float splat_base, float splat_lifted, float knee_str
   const float delta = max(0.0f, splat_lifted - splat_base);
   return splat_base + (delta / mad(delta, knee_strength, 1.0f));
 }
-// RenoDX: <<< [Patch: RRLadderLift]
 
 #endif  // SRC_GAMES_CRIMSONDESERT_RT_RR_LADDER_COMMON_HLSLI_

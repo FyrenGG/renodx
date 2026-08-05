@@ -3,6 +3,7 @@
 
 #include "../shared.h"
 #include "sky_weather_common.hlsli"
+// [DAWN_DUSK] [NIGHT_SKY_ATTENUATION]
 
 float DawnDuskFactor(float sunElevation) {
   if (DAWN_DUSK_IMPROVEMENTS == 0.f) return 0.f;
@@ -20,24 +21,22 @@ float DawnDuskFactor(float sunElevation) {
 // Gated behind NIGHT_SKY_ATTENUATION flag.
 //
 // Sun elevation zones (radians):
-//   < 0.0 rad (< 0°)     = night, 10% brightness
-//   0.0 to 0.17 rad      = twilight transition, 10% to 100%
-//   > 0.17 rad (> +10°)  = daytime, no attenuation
+//   < 0.087 rad (< +5°)     = night/low twilight, 10% brightness
+//   0.087 to 0.17 rad       = twilight-to-day transition, 10% to 100%
+//   > 0.17 rad (> +10°)     = daytime, no attenuation
 //
 // Returns a multiplier for inscatter energy
+//
+// The night and twilight floors are the same value, so one constant covers both. For a distinct
+// pre-dawn floor, add a second constant and blend with smoothstep(0.0f, 0.087f, sunElevation).
 
 float NightSkyAttenuation(float sunElevation) {
   if (NIGHT_SKY_ATTENUATION == 0.f) return 1.f;
 
-  float nightMin = 0.10f;
-  float twilightMin = 0.10f;
-
-  float nightToTwilight = smoothstep(0.0f, 0.087f, sunElevation);
-  float currentMin = lerp(nightMin, twilightMin, nightToTwilight);
-
+  float minBrightness = 0.10f;
   float twilightToDay = smoothstep(0.087f, 0.17f, sunElevation);
 
-  return lerp(currentMin, 1.f, twilightToDay);
+  return lerp(minBrightness, 1.f, twilightToDay);
 }
 
 float MiePhaseBoostedG(float baseG, float dawnDuskFactor) {
@@ -95,6 +94,11 @@ void SHDirectionalBias(float3 sunDir, float dawnDuskFactor, float3 L0,
 // Restores directional contrast to ambient since the sky probe is low res
 // and inscatter gets heavily averaged at mip 4. Not a big deal with direct
 // sun/moon lighting but during dawn/dusk it creates flat GI.
+// INTENTIONALLY UNCALLED. This is the per-pixel form of the correction SHDirectionalBias (above,
+// consumed by PrecomputeAmbient_0xC5560285) applies at the source, in the SH coefficients
+// themselves. Calling both would apply it twice, once in the probe reduction and again per pixel
+// in the lighting pass. Kept as reference for the tuning it encodes; delete only if the SH-side
+// approach is ever abandoned.
 float3 DawnDuskAmbientBoost(float3 ambientRGB, float3 surfaceNormal,
                             float3 sunDir, float dawnDuskFactor,
                             float3 shL0) {

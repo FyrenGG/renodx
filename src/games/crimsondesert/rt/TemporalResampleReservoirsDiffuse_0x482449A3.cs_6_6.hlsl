@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below; Imports "rr_ladder_common.hlsli" for the SPMIS reservoir-sampling and quality-ladder helpers used below.
+#include "../shared.h"
+#include "rr_ladder_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<float4> __3__36__0__0__g_raytracingNormal : register(t160, space36);
 
 Texture2D<float2> __3__36__0__0__g_velocity : register(t20, space36);
@@ -511,6 +516,37 @@ void main(
       _561 = _540;
     }
     _562 = (uint)((uint)(_561)) * (uint)(48271);
+    // RenoDX: >>> [Patch: SPMISDecorrelation] [Version: 1.16.00]
+    // Description: Derives the decorrelation keys used by the temporal reuse taps of this ReSTIR
+    //              temporal resampling shader. Two kinds of key are produced, matching the two
+    //              randomization sites further down:
+    //              (1) rr_ladder_keys - a PER-PIXEL, per-frame key taken from a second, independent
+    //                  extraction of this shader's own TEA hash. It uses the same Zafar/Olano key
+    //                  schedule and the same (pixel index, frame number) seeding as the sampling
+    //                  stream the shader already runs, but with extended rounds and a stream salt so
+    //                  it is structurally distinct from and statistically independent of that stream
+    //                  (residual chance collisions are around 2^-32 per word and are harmless). Only
+    //                  word .x is consumed, as the random start index for the +/-1 neighbour offset
+    //                  table - a quantity that is per-pixel in the vanilla draw it replaces too.
+    //              (2) rr_ladder_tap_keys - three PER-TAP-SLOT, SCREEN-GLOBAL 4-bit XOR-3 permutation
+    //                  keys derived from (frame number, tap slot) only, with no pixel term, for tap
+    //                  slot 0, slots 1-3 (shared) and slot 4. Keeping them pixel independent is what
+    //                  makes each tap slot's permutation a screen-wide bijection of the history
+    //                  buffer, so no history reservoir is lost.
+    //              The keys change no light energy - they only alter which history texel each
+    //              temporal tap reads - so they are safe on every ray-traced quality tier. They are
+    //              computed only when a quality tier that carries the decorrelation is active;
+    //              otherwise the vanilla code below runs unchanged.
+    const bool rr_ladder_decorrelate = (RR_ENABLED == 1.f && (RT_QUALITY == 1.f || RT_QUALITY == 2.f || RT_QUALITY == 3.f));
+    uint2 rr_ladder_keys = uint2(0u, 0u);
+    uint3 rr_ladder_tap_keys = uint3(0u, 0u, 0u);
+    if (rr_ladder_decorrelate) {
+      rr_ladder_keys = RRLadder_TeaSecondExtraction(uint((_bufferSizeAndInvSize.x * _26) + _25), _frameNumber.x, 1u);
+      rr_ladder_tap_keys = uint3(RRLadder_GlobalTapKey(_frameNumber.x, 0u),
+                                 RRLadder_GlobalTapKey(_frameNumber.x, 1u),
+                                 RRLadder_GlobalTapKey(_frameNumber.x, 4u));
+    }
+    // RenoDX: <<< [Patch: SPMISDecorrelation]
     _564 = __3__36__0__0__g_normalDepth.Load(int3(_364, _377, 0));  // [sem: _3__36__0__0__g_normalDepth_load]
     _571 = min(1.0f, ((((float)((uint)((uint)(_564.x & 1023)))) * 0.0019569471f) + -1.0f));  // [sem: _3__36__0__0__g_normalDepth_load_derived]
     _577 = min(1.0f, ((((float)((uint)((uint)(((uint)((uint)(_564.x)) >> 10) & 1023)))) * 0.0019569471f) + -1.0f));  // [sem: _3__36__0__0__g_normalDepth_load_derived]
@@ -534,7 +570,23 @@ void main(
       _636 = (_635 == 4);
       if (!_636) {
         if (!(_635 == 0)) {
-          _645 = (uint)((uint)(_635)) + (uint)((uint)(((float)((uint)((uint)(((int)((uint)((uint)(_180)) * (uint)(-856141137))) & 16777215)))) * 4.762411e-07f));
+          // RenoDX: >>> [Patch: SPMISDecorrelation] [Version: 1.16.00]
+          // Description: Replaces the random start index for the +/-1 temporal neighbour offsets.
+          //              Loop taps 1-3 index an 8-entry offset table at (start + tap) so the three
+          //              taps stay distinct; vanilla derives that start index from a low-quality LCG
+          //              stream (the per-pixel TEA state multiplied by -856141137, low 24 bits),
+          //              whose structure shows up as correlated neighbour choices between adjacent
+          //              pixels and frames. When a ray-traced quality tier that carries the
+          //              decorrelation is active, the same uniform 3-bit index is instead taken from
+          //              the TEA-quality per-pixel per-frame key derived above, which preserves the
+          //              consecutive-table-indexing design while removing the weak-stream structure.
+          //              With that gate off, the vanilla draw executes unchanged.
+          if (rr_ladder_decorrelate) {
+            _645 = _635 + ((rr_ladder_keys.x >> 20) & 7u);
+          } else {
+            _645 = _635 + uint(((float)((uint)((uint)(((int)(_180 * -856141137)) & 16777215)))) * 4.7624109811295057e-07f);
+          }
+          // RenoDX: <<< [Patch: SPMISDecorrelation]
           _647 = ((uint)((uint)(_645)) >> 1) & 1;
           _650 = (((uint)((uint)(_645)) >> 2) & 1) ^ 1;
           _653 = (int)(((int)((uint)((uint)(_645)) << 1)) & 2) + (int)(-1);
@@ -548,15 +600,51 @@ void main(
         _667 = (int)(SV_DispatchThreadID.y);
         _668 = (int)(SV_DispatchThreadID.x);
       }
-      if (_340 && ((_635 & -5) == 0)) {
+      // RenoDX: >>> [Patch: SPMISDecorrelation] [Version: 1.16.00]
+      // Description: Generalizes the temporal reuse tap permutation. Vanilla applies the 4x4 XOR-3
+      //              permutation ((coord + r) ^ 3) - r only to loop tap 0 (the reprojected pixel)
+      //              and tap 4 (the self pixel), only when _renderParams.x > 0, and with a per-frame
+      //              SCREEN-GLOBAL key (its key stream is seeded from the frame number only, with no
+      //              pixel term). A pixel-independent key is what makes the XOR-3 permutation a
+      //              screen-wide BIJECTIVE shuffle of the history buffer: every history reservoir is
+      //              read exactly once per permuted tap, so no history is lost. The three +/-1
+      //              neighbour taps are never permutation-randomized in vanilla, so consecutive
+      //              frames re-read history from structurally correlated locations - and DLSS Ray
+      //              Reconstruction assumes temporally reused sample locations are
+      //              permutation-randomized (DLSS-RR Integration Guide, section 3.5); leaving them
+      //              correlated shows up as temporal noise and smearing in the resolved image.
+      //              When a ray-traced quality tier that carries the decorrelation is active, all
+      //              five temporal reuse taps are permuted regardless of _renderParams.x, using the
+      //              per-tap-slot screen-global keys derived above. This extends the vanilla
+      //              screen-global convention from one shared key on two taps to independent keys on
+      //              three tap slots - tap 0, taps 1-3 (shared) and tap 4 - so every slot's mapping
+      //              stays a screen-wide bijection (history coverage fully preserved) while distinct
+      //              slots and successive frames still decorrelate. Taps 1-3 deliberately share one
+      //              key: a shared key applies one common bijection to their three distinct +/-1
+      //              offsets, so those taps can never alias onto the same history texel, whereas
+      //              independent keys would let even-delta tap pairs collide. The keys must stay
+      //              screen-global for the same reason - deriving them per pixel breaks the
+      //              bijection and leaves roughly 1/e of the history reservoirs unread on any given
+      //              frame, which thins the temporal history and reads as increased noise at 1 spp.
+      //              The permutation displaces a tap by at most 3 pixels per axis, so reuse locality
+      //              and the existing per-tap bounds and geometry rejection tests still hold. With
+      //              the gate off, the vanilla permutation (taps 0/4 only, screen-global key,
+      //              _renderParams.x-gated) executes unchanged.
+      if (rr_ladder_decorrelate) {
+        const uint rr_ladder_tap_key = (_635 == 0) ? rr_ladder_tap_keys.x : ((_635 == 4) ? rr_ladder_tap_keys.z : rr_ladder_tap_keys.y);
+        const int2 rr_ladder_permuted = RRLadder_Xor3Permute(int2(_668, _667), rr_ladder_tap_key);
+        _684 = rr_ladder_permuted.x;
+        _683 = rr_ladder_permuted.y;
+      } else if (_340 && ((_635 & -5) == 0)) {
         _673 = _562 & 3;
-        _675 = ((uint)((uint)(_562)) >> 2) & 3;
-        _683 = ((int)((uint)((uint)(((int)((uint)((uint)(_667)) + (uint)((uint)(_675)))) ^ 3)) - (uint)((uint)(_675))));
-        _684 = ((int)((uint)((uint)(((int)((uint)((uint)(_668)) + (uint)((uint)(_673)))) ^ 3)) - (uint)((uint)(_673))));
+        _675 = ((uint)(_562) >> 2) & 3;
+        _684 = ((int)(((uint)(((int)(_668 + _673)) ^ 3)) - _673));
+        _683 = ((int)(((uint)(((int)(_667 + _675)) ^ 3)) - _675));
       } else {
-        _683 = _667;
         _684 = _668;
+        _683 = _667;
       }
+      // RenoDX: <<< [Patch: SPMISDecorrelation]
       _685 = (float)((int)(_684));
       _686 = (float)((int)(_683));
       if (!((int)_684 < (int)0)) {
@@ -732,11 +820,83 @@ void main(
                   _1032 = (_1017 * 0.31830987f) * max(0.1f, dot(float3(_1008, _1009, _1010), float3((_1025 * _1021), (_1025 * _1022), (_1025 * _1023))));
                   _1036 = ((_1032 * ((float)((uint)((uint)(_975))))) + _1019) * _1019;
                   _1114 = saturate(select((_1036 == 0.0f), 0.0f, ((select(_1020, _1019, _1032) * _981) / _1036)));  // [sem: expr_sat]
+            // RenoDX: >>> [Patch: RRLadderFidelity] [Version: 1.16.00]
+            // Description: Optional de-clamp of the stored reservoir weight. Compiled OUT by default
+            //              via the RRFID_TEMPORAL_KNEE compile-time knob declared in
+            //              rr_ladder_common.hlsli, because a boosted weight written into the
+            //              reservoir survives reprojection and compounds against the reservoir
+            //              sample count across frames, which is far riskier than a single-frame
+            //              adjustment made at resolve time. The saturate directly above is the
+            //              primary asymmetric clip on the stored weight: the merged resampling ratio
+            //              (history term M * W * Jacobian * p-hat, plus the current sample's term,
+            //              normalized by the selected sample's target value) is clipped at 1 whenever
+            //              bright stable history is merged into a pixel whose selected sample has a
+            //              lower local target value, which throws away energy that the history
+            //              legitimately carried. When armed, every active ray-traced quality tier
+            //              re-applies the ratio through the shared soft knee using the smaller
+            //              temporal bound (RRFID_KNEE_KMAX_TEMPORAL = 1, so the stored weight can
+            //              reach at most 2), scaled by the pre-increment counter pair
+            //              min(M, age) so that refreshed or reset reservoirs - where either counter
+            //              is forced to 0 by the stochastic-refresh select - store exactly the
+            //              vanilla saturated value. Only merges that keep an established history
+            //              (M >= 4 and no refresh this frame) can exceed it. Arming this stage also
+            //              extends the anti-firefly clamp on the stored luminance below to the
+            //              lowest quality tier, so any lane that can store a de-clamped weight
+            //              always stores a clamped luminance alongside it.
+#if RRFID_TEMPORAL_KNEE
+            if (RR_ENABLED == 1.f && (RT_QUALITY == 1.f || RT_QUALITY == 2.f || RT_QUALITY == 3.f)) {
+              if ((!_974) && ((uint)(_815) >= 4u)) {
+                const float rr_fid_t_raw = select((_1036 == 0.0f), 0.0f, ((select(_1020, _1019, _1032) * _981) / _1036));
+                const float rr_fid_t_conf = min((float((uint)_975)), (float((uint)max(_1018 - 1, 0))));
+                _1114 = RRLadder_SoftKneeW(rr_fid_t_raw, RRFID_KNEE_KMAX_TEMPORAL * RRLadder_ConfidenceRamp(rr_fid_t_conf));
+              }
+            }
+#endif
+            // RenoDX: <<< [Patch: RRLadderFidelity]
                   _1115 = _1011;
                   _1116 = _1012;
                   _1117 = _1013;
                   _1118 = ((int)((int)(((int)((uint)((uint)((_1015 * 511.0f) + 511.5f)) << 10)) & 1047552) | (int)(((int)((uint)((_1014 * 511.0f) + 511.5f))) & 1023)) | (int)(((int)((uint)((uint)((_1016 * 511.0f) + 511.5f)) << 20)) & 1072693248));
-                  _1119 = ((int)((int)(((int)((uint)((uint)((int)min((uint)(1023), (uint)(((int)min((uint)(1023), (uint)(((int)(_975) + (int)(1))))))))) << 10)) & 1047552) | (int)(((int)min((uint)(63), (uint)(_1018))) & 63)) | (int)((int)((uint)(f32tof16((_exposure4.y * _1017))) << 16)));
+            // RenoDX: >>> [Patch: SPMISDecorrelation] [Version: 1.16.00]
+            // Description: Conservative anti-firefly clamp on the temporal reservoir radiance merge
+            //              write. A single very bright candidate sample winning the resampling coin
+            //              flip can multiply the stored reservoir luminance by orders of magnitude in
+            //              one frame; DLSS Ray Reconstruction resolves that as a bright splotch that
+            //              then persists through temporal reuse for many frames. When a ray-traced
+            //              quality tier that carries this conditioning is active AND the merge keeps
+            //              an established history (pre-merge history sample count M >= 4 and no
+            //              stochastic history refresh this frame), the luminance about to be stored
+            //              is clamped to at most 8x the pre-merge stored history luminance. The
+            //              comparison is made in stored-value units; per-frame exposure-scale drift
+            //              is far below the 8x headroom, so it cannot trip the clamp on its own.
+            //              Fresh and reset writes - disocclusion resets, degenerate-parallax resets
+            //              and stochastic-refresh frames - are never clamped, so legitimate lighting
+            //              changes still propagate at full speed. With the gate off, the stored value
+            //              is the unmodified vanilla expression.
+            float rr_ladder_stored_lum = _exposure4.y * _1017;
+            bool rr_ladder_lum_clamp_armed = rr_ladder_decorrelate;
+#if RRFID_TEMPORAL_KNEE
+            // The optional temporal knee above de-clamps the stored reservoir weight on every active
+            // quality tier. The lowest tier is already covered by rr_ladder_decorrelate, so this OR
+            // is redundant under the current gate; it is kept as a defensive no-op (the whole block
+            // is compiled out by default) so that narrowing the decorrelation gate can never leave a
+            // de-clamped stored weight paired with an unclamped stored luminance.
+            rr_ladder_lum_clamp_armed = rr_ladder_lum_clamp_armed || (RR_ENABLED == 1.f && RT_QUALITY == 1.f);
+#endif
+            if (rr_ladder_lum_clamp_armed && (!_974) && ((uint)(_815) >= 4u)) {
+              rr_ladder_stored_lum = RRLadder_FireflyClampScalar(rr_ladder_stored_lum, _814, 8.0f);
+            }
+            // RenoDX: <<< [Patch: SPMISDecorrelation]
+                  // RenoDX: >>> [Patch: ReservoirAgeMaskFix] [Version: 1.16.00]
+                  // Description: Fixes the native packed-reservoir counter overflow at the terminal merge write.
+                  //              _975 is the selected bits-10 counter before increment; native permits its
+                  //              reachable 63-to-64 transition through a ten-bit 0xFFC00 mask, which sets bit 16
+                  //              in the adjacent f16 luminance and wraps the six-bit counter on the next decode.
+                  //              Capping at 63 and masking with 0xFC00 preserves every 0..63 encoding while
+                  //              preventing that single spill. The bits-0 counter is already incremented in the
+                  //              native branch (_1018) and retains its native six-bit clamp.
+                  _1119 = ((int)((int)(((int)((uint)((uint)min((uint)(63), (uint)((int)(_975) + (int)(1)))) << 10)) & 64512) | (int)(((int)min((uint)(63), (uint)(_1018))) & 63)) | (int)((int)((uint)(f32tof16(rr_ladder_stored_lum)) << 16)));
+                  // RenoDX: <<< [Patch: ReservoirAgeMaskFix]
                 }
               } else {
                 _1114 = _633;  // [sem: expr_sat]

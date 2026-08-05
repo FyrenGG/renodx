@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct LightDataEncoded {
   float4 _position;
   float4 _color;
@@ -295,7 +299,13 @@ void main(
       _104 = _76;
       _105 = _77;
     }
-    if ((_96 < 0.0f) || ((_97 < 0.0f) || (_98 < 0.0f))) {
+    // RenoDX: >>> [Patch: DisableHeroLights] [Version: 1.16.00]
+    // Description: Names the native negative-color hero-light classification so the later color gate
+    //              reuses the exact same predicate. This replacement preserves the native branch body
+    //              and condition; only the predicate is hoisted into a local boolean.
+    bool _rndx_is_hero_light = (_96 < 0.0f) || ((_97 < 0.0f) || (_98 < 0.0f));
+    if (_rndx_is_hero_light) {
+    // RenoDX: <<< [Patch: DisableHeroLights]
       _114 = _94 - _viewPos.x;
       _116 = _104 - _viewPos.y;
       _118 = _105 - _viewPos.z;
@@ -325,9 +335,32 @@ void main(
     _169 = select(_50, 1e+06f, _95);
     _171 = saturate((float)((uint)((uint)(_133))));  // [sem: expr_sat]
     _176 = select(((_isPhotosensitiveMode_isAllolwBlood & 2) != 0), 0.1f, 1.0f);
+    // RenoDX: >>> [Patch: DisableHeroLights] [Version: 1.16.00]
+    // Description: Hoists the native many-lights RGB store operands into named locals so the hero-light
+    //              gate can zero only those channels. Each expression preserves the native exposure,
+    //              light-type blend, photosensitive multiplier, and RGB channel order exactly.
+    float _rndx_heroColorR = _176 * ((((_168 * _98) - _98) * _171) + _98);
+    float _rndx_heroColorG = _176 * ((((_168 * _97) - _97) * _171) + _97);
+    float _rndx_heroColorB = _176 * ((((_168 * _96) - _96) * _171) + _96);
+    // RenoDX: <<< [Patch: DisableHeroLights]
+    // RenoDX: >>> [Patch: DisableHeroLights] [Version: 1.16.00]
+    // Description: Crimson Desert marks the player-following rim and fill injections with negative encoded
+    //              color components. When the option is enabled, this block zeros only the stored RGB for
+    //              those classified entries; with the option disabled, no color local is modified.
+    if (DISABLE_HERO_LIGHTS > 0.5f && _rndx_is_hero_light) {
+      _rndx_heroColorR = 0.0f;
+      _rndx_heroColorG = 0.0f;
+      _rndx_heroColorB = 0.0f;
+    }
+    // RenoDX: <<< [Patch: DisableHeroLights]
     ManyLightsData __struct_store_0;
     __struct_store_0._position = float4(_131, _132, _105, _151);
-    __struct_store_0._color = float4((_176 * ((((_168 * _98) - _98) * _171) + _98)), (_176 * ((((_168 * _97) - _97) * _171) + _97)), (_176 * ((((_168 * _96) - _96) * _171) + _96)), select(((_93 & 1) != 0), (-0.0f - _169), _169));
+    // RenoDX: >>> [Patch: DisableHeroLights] [Version: 1.16.00]
+    // Description: Stores the hoisted RGB locals in the native X/Y/Z order while retaining the native alpha
+    //              sign and magnitude expression unchanged. With the option disabled, expanding the locals
+    //              reconstructs the successor-A float4 store exactly.
+    __struct_store_0._color = float4(_rndx_heroColorR, _rndx_heroColorG, _rndx_heroColorB, select(((_93 & 1) != 0), (-0.0f - _169), _169));
+    // RenoDX: <<< [Patch: DisableHeroLights]
     __struct_store_0._up = int2(_100, _99);
     __struct_store_0._look = int2(_102, _101);
     __3__39__0__1__g_manyLightsDataBufferUAV[(int)(SV_DispatchThreadID.x)] = __struct_store_0;

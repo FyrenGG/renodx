@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below; Imports "local_light_common.hlsl" for the local-light color and attenuation helpers used below.
+#include "../shared.h"
+#include "local_light_common.hlsl"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<float4> __3__36__0__0__g_inputSceneColor : register(t2, space36);
 
 Texture2D<float> __3__36__0__0__g_sceneDepth : register(t3, space36);
@@ -271,6 +276,22 @@ void main(
         _210 = select(_209, _182, 0.0f);
         _211 = select(_209, _185, 0.0f);
         _212 = select(_209, _188, 0.0f);
+        // RenoDX: >>> [Patch: LocalLightHueCorrection] [Version: 1.16.00]
+        // Description: Corrects the resolved local-light RGB toward the configured warm-fire hue and saturation before
+        //              the color reaches its alpha, geometry, or scene-composite consumers. Only the already-resolved
+        //              X/Y/Z color channels are rewritten; the W channel and resource index remain untouched.
+        //              The explicit neutral-settings gate performs no helper call or RGB write when hue is 0 and
+        //              saturation is 1, so the disabled path is the exact successor-A dataflow.
+        if (LOCAL_LIGHT_HUE_CORRECTION > 0.0f || abs(LOCAL_LIGHT_SATURATION - 1.0f) > 1e-6f) {
+          float3 _rndx_local_light_corrected = ApplyLocalLightHueCorrection(
+              float3(_210, _211, _212),
+              LOCAL_LIGHT_HUE_CORRECTION,
+              LOCAL_LIGHT_SATURATION);
+          _210 = _rndx_local_light_corrected.x;
+          _211 = _rndx_local_light_corrected.y;
+          _212 = _rndx_local_light_corrected.z;
+        }
+        // RenoDX: <<< [Patch: LocalLightHueCorrection]
         _213 = select(_209, _191, 1.0f);
         _215 = __3__36__0__0__g_inputSceneColor.Load(int3(_28, _31, 0));  // [sem: _3__36__0__0__g_inputSceneColor_load]
         if (_215.w == 0.0f) {

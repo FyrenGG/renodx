@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared option and helper declarations consumed by this shader's annotated RenoDX patches. This dependency-only prefix replaces no native executable statement; removing the block restores successor A byte-for-byte.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct MaterialOverrideParametersTreeStruct {
   uint _baseColorTexture;
   uint _normalTexture;
@@ -1827,6 +1831,28 @@ OutputSignature main(
     _1636 = _106;
     _1637 = _96;
   }
+  // RenoDX: >>> [Patch: FoliageSpeedTreeWindCoherence] [Version: 1.16.00]
+  // Description: Rejects a wind result when current and previous SpeedTree positions diverge by one unit or become non-finite, then restores the native unbent position and normal. A disabled feature performs no writes.
+  if (FOLIAGE_SPEEDTREE_WIND_COHERENCE == 1.f) {
+    const float3 _renodxSpeedTreeBasePosition = float3(_96, _106, _101);
+    const float3 _renodxSpeedTreeBaseNormal = float3(_220, _225, _230);
+    const float3 _renodxSpeedTreeCurrentPosition = float3(_1637, _1636, _1635);
+    const float3 _renodxSpeedTreePreviousPosition = float3(_1634, _1633, _1632);
+    const float3 _renodxSpeedTreeWindDelta = _renodxSpeedTreeCurrentPosition - _renodxSpeedTreePreviousPosition;
+    const bool _renodxSpeedTreeWindCoherent = dot(_renodxSpeedTreeWindDelta, _renodxSpeedTreeWindDelta) < 1.0f;
+    if (!_renodxSpeedTreeWindCoherent) {
+      _1637 = _renodxSpeedTreeBasePosition.x;
+      _1636 = _renodxSpeedTreeBasePosition.y;
+      _1635 = _renodxSpeedTreeBasePosition.z;
+      _1634 = _renodxSpeedTreeBasePosition.x;
+      _1633 = _renodxSpeedTreeBasePosition.y;
+      _1632 = _renodxSpeedTreeBasePosition.z;
+      _1631 = _renodxSpeedTreeBaseNormal.x;
+      _1630 = _renodxSpeedTreeBaseNormal.y;
+      _1629 = _renodxSpeedTreeBaseNormal.z;
+    }
+  }
+  // RenoDX: <<< [Patch: FoliageSpeedTreeWindCoherence]
   _1639 = (float)((uint)((uint)(_371 & 65535)));
   if (!(_debugTreeShapeVariation.w == 0)) {
     _1648 = _debugTreeShapeVariation.z;

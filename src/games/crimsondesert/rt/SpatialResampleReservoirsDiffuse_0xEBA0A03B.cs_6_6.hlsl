@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below; Imports "rr_ladder_common.hlsli" for the SPMIS reservoir-sampling and quality-ladder helpers used below.
+#include "../shared.h"
+#include "rr_ladder_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<uint> __3__36__0__0__g_sceneNormal : register(t50, space36);
 
 Texture2D<uint> __3__36__0__0__g_depthOpaque : register(t63, space36);
@@ -324,6 +329,385 @@ void main(
   _304 = (((float)((uint)((uint)(_285)))) * asfloat(_251.y)) * _300;
   _308 = select((_renderParams.x > 0.0f), 64.0f, 8.0f);
   _311 = (int)max((uint)(8), (uint)(((int)((uint)(16) / (uint)((uint)((int)max((uint)(1), (uint)(_285))))))));
+  // RenoDX: >>> [Patch: SPMISWidePooling] [Version: 1.13.00]
+  // Description: The shipping wide-pooling spatial-reuse core — the single terminal
+  // branch for every active SPMIS tier: RT_QUALITY==2 "SPMIS Balanced", RT_QUALITY==3
+  // "SPMIS Boosted", and the unexposed RT_QUALITY==1 noise-only conditioning baseline.
+  // Composition inside this one branch:
+  //  - ALL tiers: stochastic pairwise MIS wide-kernel spatial reuse (Hedstrom et al.,
+  //    Eurographics/CGF 45(2) 2026) + CGNS compatibility-guided pool scoring
+  //    ([Patch: SPMISCGNSPoolScoring], knob RRFID_CGNS_POOL_SCORING). This is the
+  //    noise-only conditioning; on the RT_QUALITY==1 tier the resolve splat stays
+  //    vanilla-clamped (rrc_knee_tier gate forces the de-clamp knee's
+  //    k_eff to 0, so RRLadder_SoftKneeW == saturate).
+  //  - tiers 2/3 only: the variance-gated W de-clamp at the resolve splat
+  //    ([Patch: RRLadderFidelity]).
+  //  - tier 3 only: the stability-gated energy-character lift ([Patch: RRLadderLift]).
+  // Semantic anchor: inserted after the vanilla center setup completes (center
+  // reservoir loads, center target value, reuse radius, and reuse slot count are all
+  // computed) and before the vanilla neighbor loop. The pooling core replaces
+  // the vanilla 1/M-normalized 8..16-donor merge with an unbiased defensive
+  // pairwise-MIS merge over donors importance-selected from a probed wide-kernel pool,
+  // so large-radius reuse no longer darkens or double-counts at geometry boundaries.
+  // Phase 1 probes RRC_POOL_COUNT ring-stratified coordinates (radiance texel plus,
+  // when RRFID_CGNS_POOL_SCORING is on, the cheap G-buffer normal/depth taps for the
+  // compatibility score) to accumulate the pool confidence sum and Eq.-17 importances
+  // (confidence x luminance x UCW, optionally x compatibility), and per-slot streaming
+  // WRS selects RRC_EVAL_COUNT donors with replacement (exact selection probability
+  // importance/importanceTotal, divided back out at the merge so any importance shaping
+  // stays unbiased).
+  // Phase 2 fully loads, gate-checks (all vanilla shift-validation tests verbatim via
+  // arithmetic-identical helpers), and merges only the selected donors with defensive
+  // generalized pairwise MIS weights; the canonical sample keeps a defensive share plus
+  // a one-draw stochastic beta-sum estimate (reverse shift of the center sample into a
+  // uniformly chosen probe's domain), and all non-canonical confidences are scaled by
+  // evaluated/pooled count (paper Sec. 4.3) to prevent dark pepper noise. Final
+  // W = wsum / p-hat_selected with NO division by donor count (the MIS weights
+  // self-normalize); the raw ratio is kept and the splat's ceiling is the
+  // confidence-gated soft knee instead of the vanilla hard saturate (see the
+  // [Patch: RRLadderFidelity] block at the final-normalization section below — the
+  // inverse-PDF guide UAV still receives a value in [0,1]). Guide-buffer laws
+  // (1.09 root cause): the hit-result UAV is
+  // always recomputed relative to the CENTER surface, donor hits are written only after
+  // passing every vanilla gate plus an above-horizon write-guard, and a failed guard
+  // reverts the WHOLE pixel to center-only vanilla-equivalent outputs — donor geometry
+  // never reaches the guide buffers unvalidated. All randomness comes from dedicated
+  // TEA second-extraction streams (5 = pool coords, 3 = slot WRS, 4 = merge acceptance
+  // + canonical probe index), with every multiplicative LCG state forced odd (| 1u) so
+  // no stream can degenerate to the zero fixed point; merge order is fixed (canonical
+  // incumbent first, then slots in order) and the acceptance stream advances once per
+  // slot regardless of
+  // branch outcomes. The vanilla RNG chain is never advanced inside the gate; with the
+  // gate off, the untouched vanilla loop below executes with identical values.
+  if (RR_ENABLED == 1.f && (RT_QUALITY == 1.f || RT_QUALITY == 2.f || RT_QUALITY == 3.f)) {
+    const int2 rrc_pixel = int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y));
+    const float3 rrc_center_normal = float3(_186, _187, _188);                  // N_c
+    const float3 rrc_center_pos = float3(_226, _235, _244);                     // P_c
+    const float3 rrc_center_hit = float3(_280, _281, _282);                     // H_c
+    const float rrc_center_ucw = asfloat(_251.y);                               // W_c
+    const float rrc_center_conf = min(RRC_CONFIDENCE_CAP, ((float)((uint)_285)));  // c_c
+    // Center hit normal (payload .w, unused by the vanilla spatial body) — needed only
+    // for the reverse-shift Jacobian; the phat_c > 0 && conf > 0 gate below skips
+    // the reverse shift exactly when this could be stale/garbage.
+    const float3 rrc_center_hitnormal = RRLadder_DecodeUnorm101010Normal(_246.w);
+    const float rrc_adjust = ((float)RRC_EVAL_COUNT) / ((float)RRC_POOL_COUNT);  // Sec. 4.3
+    const float rrc_radius = max(_308, RRC_WIDE_RADIUS);      // never narrower than vanilla mode
+    const float rrc_radius_local = max(8.0f, rrc_radius * 0.25f);  // local stratum
+    const uint rrc_pixflat = uint((_bufferSizeAndInvSize.x * _15) + _14);
+    // Dedicated white-noise streams; the vanilla chain is never advanced in-gate.
+    // All multiplicative LCG states below are forced odd (| 1u): an odd state under an
+    // odd multiplier stays odd forever, so no stream can hit the zero fixed point.
+    const uint2 rrc_seed_pool = RRLadder_TeaSecondExtraction(rrc_pixflat, _frameNumber.x, 5u);
+    const uint2 rrc_seed_slot = RRLadder_TeaSecondExtraction(rrc_pixflat, _frameNumber.x, 3u);
+    const uint2 rrc_seed_merge = RRLadder_TeaSecondExtraction(rrc_pixflat, _frameNumber.x, 4u);
+    const uint rrc_canon_index = rrc_seed_merge.y % RRC_POOL_COUNT;  // Ntilde_c = 1 uniform probe
+#if RRFID_CGNS_POOL_SCORING
+    // RenoDX: >>> [Patch: SPMISCGNSPoolScoring] [Version: 1.13.00]
+    // Description: World-space compatibility footprint scale for the CGNS pool
+    // selection scoring below (helpers and knobs in the [Patch: SPMISCGNSPoolScoring]
+    // section of rr_ladder_common.hlsli). View distance comes from the
+    // inverse-projection homogeneous divide term already computed for the center pixel
+    // (standard perspective: reconstruction w == 1/view_z); a constant-factor error
+    // here only rescales the effective footprint solid angle, not correctness.
+    const float rrc_compat_scale = RRLadder_CompatScale(RRB_COMPAT_SOLID_ANGLE, abs(1.0f / _217));
+    // RenoDX: <<< [Patch: SPMISCGNSPoolScoring]
+#endif
+
+    // ---- phase 1: probe pool, per-slot WRS donor selection ----
+    uint rrc_slot_coord[RRC_EVAL_COUNT];
+    float rrc_slot_imp[RRC_EVAL_COUNT];
+    uint rrc_slot_rng[RRC_EVAL_COUNT];
+    [unroll] for (uint rrc_s = 0u; rrc_s < RRC_EVAL_COUNT; ++rrc_s) {
+      rrc_slot_coord[rrc_s] = 0xFFFFFFFFu;
+      rrc_slot_imp[rrc_s] = 0.0f;
+      rrc_slot_rng[rrc_s] = (rrc_seed_slot.x + ((rrc_s + 1u) * rrc_seed_slot.y)) | 1u;  // per-slot stream, forced odd
+    }
+    float rrc_conf_sum = 0.0f;    // cS (uncapped-by-pool, per-probe capped)
+    float rrc_imp_total = 0.0f;   // Eq.-17 importance normalizer
+    // RenoDX: >>> [Patch: SPMISCGNSPoolScoring] [Version: 1.13.00]
+    // Description: f32 accumulators for the pool-luminance variance gate — phase-1
+    // pool-statistics instrumentation: sum and
+    // sum-of-squares of ALL RRC_POOL_COUNT phase-1 probes' decoded reservoir
+    // luminances (including zero-confidence/empty probes — sparse bright hits among
+    // dark neighbors are exactly the disagreement the gate must see). Two consumers,
+    // both via RRLadder_PoolAgreement and both in this wide-pooling branch: the
+    // [Patch: RRLadderFidelity] resolve knee's k_eff at the final-normalization site
+    // (lanes 2/3, knob
+    // RRFID_VARIANCE_K — pool disagreement collapses the de-clamp toward the vanilla
+    // saturate) and the RT_QUALITY==3 [Patch: RRLadderLift] lift lambda (knob
+    // RRLIFT_VARIANCE_K). NOT
+    // guarded by RRLIFT_ENABLE: the knee gate consumes these even in lift-off
+    // diagnostic builds. The surrounding pool loop was already full f32 (f16tof32
+    // decode into float sums), and these stay float — NEVER half — because a single
+    // squared probe luminance (up to ~65504^2 ~ 4.3e9) overflows f16 (see the
+    // accumulator contract on RRLadder_PoolAgreement).
+    float rrc_lum_sum = 0.0f;
+    float rrc_lum_sq_sum = 0.0f;
+    // RenoDX: <<< [Patch: SPMISCGNSPoolScoring]
+    float rrc_canon_conf = 0.0f;
+    int2 rrc_canon_coord = rrc_pixel;
+    uint rrc_coord_rng = rrc_seed_pool.x | 1u;  // forced odd
+    [loop] for (uint rrc_i = 0u; rrc_i < RRC_POOL_COUNT; ++rrc_i) {
+      // Vanilla offset idiom: 24-bit LCG extraction -> [-1,1) * radius, clamped to bounds
+      // (x draw from state * 48271 not fed forward; y stream multiplier fed forward).
+      const float rrc_ux = (((float)((uint)((rrc_coord_rng * 48271u) & 16777215u))) * 1.1920928955078125e-07f) - 1.0f;
+      rrc_coord_rng *= 2330089441u;  // vanilla y-stream multiplier (-1964877855)
+      const float rrc_uy = (((float)((uint)(rrc_coord_rng & 16777215u))) * 1.1920928955078125e-07f) - 1.0f;
+      const float rrc_r = (rrc_i < (RRC_POOL_COUNT >> 1u)) ? rrc_radius_local : rrc_radius;  // ring stratification
+      const int2 rrc_probe = int2(
+          int(min(max(float(int(rrc_ux * rrc_r) + rrc_pixel.x), 0.0f), (_bufferSizeAndInvSize.x + -1.0f))),
+          int(min(max(float(int(rrc_uy * rrc_r) + rrc_pixel.y), 0.0f), (_bufferSizeAndInvSize.y + -1.0f))));
+      const uint2 rrc_probe_rad = __3__36__0__0__g_diffuseGIReservoirRadiance.Load(int3(rrc_probe.x, rrc_probe.y, 0));
+      const float rrc_probe_conf = min(RRC_CONFIDENCE_CAP, ((float)((uint)(rrc_probe_rad.x & 1023))));
+      const float rrc_probe_lum = f16tof32(((uint)((uint)(rrc_probe_rad.x)) >> 16));  // exposure-scaled probe luminance (hoisted from the Eq.-17 product below)
+      float rrc_probe_imp = (rrc_probe_conf * rrc_probe_lum) * asfloat(rrc_probe_rad.y);  // Eq. 17: c * phat-proxy * W
+      // RenoDX: >>> [Patch: SPMISCGNSPoolScoring] [Version: 1.13.00]
+      // Description: Variance-gate accumulation for the pool-agreement factor (the
+      // [Patch: RRLadderFidelity] knee k_eff gate, lanes 2/3, plus the lane-3
+      // [Patch: RRLadderLift] lambda gate) — unconditional per
+      // probe (all pool probes count, empty reservoirs included) so the statistic
+      // reflects the full neighborhood, not just importance-positive taps.
+      rrc_lum_sum += rrc_probe_lum;
+      rrc_lum_sq_sum += rrc_probe_lum * rrc_probe_lum;
+      // RenoDX: <<< [Patch: SPMISCGNSPoolScoring]
+#if RRFID_CGNS_POOL_SCORING
+      // RenoDX: >>> [Patch: SPMISCGNSPoolScoring] [Version: 1.13.00]
+      // Description: Compatibility-guided pool selection (CGNS heuristic, Junkins et
+      // al. HPG 2026, applied to the wide-pooling probe
+      // importance; helpers in the [Patch: SPMISCGNSPoolScoring] section of
+      // rr_ladder_common.hlsli). Each probe's Eq.-17 selection importance is scaled by a
+      // G-buffer-only geometric compatibility score (surface-distance falloff x normal
+      // alignment) so donors likely to survive the merge gates are drawn more often.
+      // SELECTION PROBABILITY ONLY: the score never touches samples, UCWs, or the MIS
+      // weights, and the merge below divides every accepted donor by its exact
+      // selection pmf (importance/importanceTotal), so this shaping is unbiased by
+      // construction — it moves variance, not energy. The score is floored
+      // (RRFID_CGNS_SCORE_FLOOR) because that same 1/pmf division would otherwise
+      // amplify a gate-passing donor that happened to score near zero.
+      const float3 rrc_probe_normal = RRLadder_DecodeUnorm101010Normal(__3__36__0__0__g_sceneNormal.Load(int3(rrc_probe.x, rrc_probe.y, 0)));
+      const float rrc_probe_depth = max(1.0000000116860974e-07f, (((float)((uint)((uint)((((uint)(__3__36__0__0__g_depthOpaque.Load(int3(rrc_probe.x, rrc_probe.y, 0)))).x) & 16777215)))) * 5.960465188081798e-08f));
+      const float3 rrc_probe_pos = RRLadder_ReconstructPosition(_invViewProjRelative, RRLadder_PixelToNdc(float2(float(rrc_probe.x), float(rrc_probe.y)), _bufferSizeAndInvSize.zw), rrc_probe_depth);
+      rrc_probe_imp *= max(RRFID_CGNS_SCORE_FLOOR,
+                           RRLadder_CompatScore(rrc_probe_pos - rrc_center_pos, rrc_center_normal,
+                                                rrc_probe_normal, rrc_compat_scale, RRB_COMPAT_NORMAL_BETA));
+      // RenoDX: <<< [Patch: SPMISCGNSPoolScoring]
+#endif
+      rrc_conf_sum += rrc_probe_conf;
+      rrc_imp_total += rrc_probe_imp;
+      if (rrc_probe_imp > 0.0f) {
+        const uint rrc_packed = (((uint)rrc_probe.y) << 16) | ((uint)rrc_probe.x);
+        [unroll] for (uint rrc_s2 = 0u; rrc_s2 < RRC_EVAL_COUNT; ++rrc_s2) {
+          rrc_slot_rng[rrc_s2] *= 48271u;  // advance on every positive-importance probe
+          if (((((float)((uint)(rrc_slot_rng[rrc_s2] & 16777215u))) * 5.960464477539063e-08f) * rrc_imp_total) <= rrc_probe_imp) {
+            rrc_slot_coord[rrc_s2] = rrc_packed;  // P(i) = imp_i / impTotal, with replacement
+            rrc_slot_imp[rrc_s2] = rrc_probe_imp;
+          }
+        }
+      }
+      if (rrc_i == rrc_canon_index) {
+        rrc_canon_coord = rrc_probe;
+        rrc_canon_conf = rrc_probe_conf;
+      }
+    }
+    const float rrc_conf_sum_adj = rrc_conf_sum * rrc_adjust;  // Sec. 4.3 scaled cS
+
+    // ---- canonical MIS weight, stochastic with Ntilde_c = 1 (paper Eq. 18/19) ----
+    float rrc_mis_canon = ((rrc_center_conf + rrc_conf_sum_adj) > 0.0f)
+                              ? (rrc_center_conf / (rrc_center_conf + rrc_conf_sum_adj))
+                              : 1.0f;  // all-empty pool: canonical keeps full weight
+    if ((_300 > 0.0f) && (rrc_canon_conf > 0.0f)) {
+      // Reverse shift: the center's sample seen from the canonical probe's surface.
+      const float3 rrc_cn_normal = RRLadder_DecodeUnorm101010Normal(__3__36__0__0__g_sceneNormal.Load(int3(rrc_canon_coord.x, rrc_canon_coord.y, 0)));
+      const float rrc_cn_depth = max(1.0000000116860974e-07f, (((float)((uint)((uint)((((uint)(__3__36__0__0__g_depthOpaque.Load(int3(rrc_canon_coord.x, rrc_canon_coord.y, 0)))).x) & 16777215)))) * 5.960465188081798e-08f));
+      const float3 rrc_cn_pos = RRLadder_ReconstructPosition(_invViewProjRelative, RRLadder_PixelToNdc(float2(float(rrc_canon_coord.x), float(rrc_canon_coord.y)), _bufferSizeAndInvSize.zw), rrc_cn_depth);
+      float rrc_ph_from_c = 0.0f;
+      // Role-swapped vanilla gates: if the shift of the center sample to the probe would
+      // fail validation, the shifted target is 0 and the canonical weight keeps that share.
+      const bool rrc_plane_ok = !(abs(dot(rrc_cn_normal, rrc_center_pos - rrc_cn_pos)) > max(0.5f, (_nearFarProj.x / rrc_cn_depth)));
+      const bool rrc_face_ok = !(dot(rrc_cn_normal, rrc_center_normal) < 0.0f);
+      if (rrc_plane_ok && rrc_face_ok) {
+        const float rrc_jac_cj = RRLadder_ReconnectJacobianClamped(rrc_center_pos, rrc_cn_pos, rrc_center_hit, rrc_center_hitnormal);  // J_{c->j}
+        rrc_ph_from_c = RRLadder_ReconnectTargetLum(_284, rrc_cn_pos, rrc_cn_normal, rrc_center_hit) * rrc_jac_cj;
+      }
+      rrc_mis_canon += ((float)RRC_POOL_COUNT) * RRLadder_PairwiseCanonicalBeta(rrc_canon_conf * rrc_adjust, rrc_center_conf, rrc_conf_sum_adj, rrc_ph_from_c, _300);
+    }
+
+    // ---- phase 2: WRS merge — canonical incumbent first, then slots in fixed order ----
+    float rrc_wsum = (rrc_mis_canon * _300) * rrc_center_ucw;  // w~_c = m~_c * phat_c * UCW_c
+    float rrc_lum_sel = _284;
+    float3 rrc_hit_sel = rrc_center_hit;
+    float rrc_phat_sel = _300;
+    bool rrc_donor_sel = false;
+    // RenoDX: >>> [Patch: RRLadderLift] [Version: 1.13.00]
+    // Description: Counts donors that pass EVERY vanilla shift-validation gate
+    // (receiver-plane, backface, reconnection-Jacobian) in the merge loop this frame.
+    // Consumed only by the RT_QUALITY==3 lift's accept_conf signal — donors must
+    // actually agree with the center surface for the energy lift to arm. Pure counter;
+    // no effect on selection, weights, or writes.
+    uint rrc_accept_count = 0u;
+    // RenoDX: <<< [Patch: RRLadderLift]
+    uint rrc_merge_rng = rrc_seed_merge.x | 1u;  // forced odd
+    for (uint rrc_s3 = 0u; rrc_s3 < RRC_EVAL_COUNT; ++rrc_s3) {
+      rrc_merge_rng *= 3438826159u;  // vanilla acceptance multiplier; advances EVERY slot
+      if (rrc_slot_coord[rrc_s3] == 0xFFFFFFFFu) continue;
+      const int2 rrc_donor = int2((int)(rrc_slot_coord[rrc_s3] & 65535u), (int)(rrc_slot_coord[rrc_s3] >> 16));
+      // Full vanilla donor loads/decodes (identical forms, loop coordinate substituted).
+      const float3 rrc_d_raw = RRLadder_DecodeUnorm101010Raw(__3__36__0__0__g_sceneNormal.Load(int3(rrc_donor.x, rrc_donor.y, 0)));
+      const float rrc_d_depth = max(1.0000000116860974e-07f, (((float)((uint)((uint)((((uint)(__3__36__0__0__g_depthOpaque.Load(int3(rrc_donor.x, rrc_donor.y, 0)))).x) & 16777215)))) * 5.960465188081798e-08f));
+      const float3 rrc_d_pos = RRLadder_ReconstructPosition(_invViewProjRelative, RRLadder_PixelToNdc(float2(float(rrc_donor.x), float(rrc_donor.y)), _bufferSizeAndInvSize.zw), rrc_d_depth);
+      // Vanilla gate 1: receiver-plane test.
+      if (abs(dot(rrc_center_normal, rrc_d_pos - rrc_center_pos)) > max(0.5f, (_nearFarProj.x / _205))) continue;
+      // Vanilla gate 2: neighbor-normal backface test (requantized normal, vanilla chain).
+      const float3 rrc_d_normal = RRLadder_RequantUnorm101010Normal(rrc_d_raw);
+      if (dot(rrc_center_normal, rrc_d_normal) < 0.0f) continue;
+      const uint4 rrc_d_hitgeom = __3__36__0__0__g_diffuseGIReservoirHitGeometry.Load(int3(rrc_donor.x, rrc_donor.y, 0));
+      const uint2 rrc_d_rad = __3__36__0__0__g_diffuseGIReservoirRadiance.Load(int3(rrc_donor.x, rrc_donor.y, 0));
+      const float3 rrc_d_hit = float3(asfloat(rrc_d_hitgeom.x), asfloat(rrc_d_hitgeom.y), asfloat(rrc_d_hitgeom.z));
+      const float3 rrc_d_hitnormal = RRLadder_DecodeUnorm101010Normal(rrc_d_hitgeom.w);
+      // Vanilla gates 3+4: reconnection Jacobian sign/degeneracy tests (0 == reject).
+      const float rrc_jac = RRLadder_ReconnectJacobianClamped(rrc_d_pos, rrc_center_pos, rrc_d_hit, rrc_d_hitnormal);  // J_{i->c}
+      if (!(rrc_jac > 0.0f)) continue;
+      rrc_accept_count += 1u;  // all vanilla gates passed ([Patch: RRLadderLift] signal)
+      const float rrc_d_lum = f16tof32(((uint)((uint)(rrc_d_rad.x)) >> 16));
+      const float rrc_d_m = (float)((uint)(rrc_d_rad.x & 1023));
+      const float rrc_d_ucw = asfloat(rrc_d_rad.y);
+      const float rrc_ph_at_c = RRLadder_ReconnectTargetLum(rrc_d_lum, rrc_center_pos, rrc_center_normal, rrc_d_hit);  // vanilla neighbor-target form
+      const float rrc_ph_own = RRLadder_ReconnectTargetLum(rrc_d_lum, rrc_d_pos, rrc_d_normal, rrc_d_hit);             // donor's own target
+      const float rrc_d_conf = min(RRC_CONFIDENCE_CAP, rrc_d_m) * rrc_adjust;  // Sec. 4.3
+      const float rrc_mis = (rrc_imp_total / (((float)RRC_EVAL_COUNT) * rrc_slot_imp[rrc_s3]))  // 1 / (Ntilde * P(i))
+                            * RRLadder_PairwiseNonCanonical(rrc_d_conf, rrc_center_conf, rrc_conf_sum_adj, rrc_ph_own / rrc_jac, rrc_ph_at_c);
+      const float rrc_w = ((rrc_mis * rrc_ph_at_c) * rrc_d_ucw) * rrc_jac;  // Eq. 14
+      if (!(rrc_w > 0.0f)) continue;
+      rrc_wsum += rrc_w;
+      if (((((float)((uint)(rrc_merge_rng & 16777215u))) * 5.960464477539063e-08f) * rrc_wsum) <= rrc_w) {
+        rrc_lum_sel = rrc_d_lum;
+        rrc_hit_sel = rrc_d_hit;
+        rrc_phat_sel = rrc_ph_at_c;
+        rrc_donor_sel = true;
+      }
+    }
+
+    // ---- final normalization + guarded writes (guide-buffer laws) ----
+    // RenoDX: >>> [Patch: RRLadderFidelity] [Version: 1.13.00]
+    // Description: Confidence-gated de-clamp of the resolve weight for the SPMIS Balanced
+    // (RT_QUALITY==2) and SPMIS Boosted (RT_QUALITY==3) tiers only; the unexposed RT_QUALITY==1 tier
+    // (RT_QUALITY==1) forces rrc_knee_tier=0 below so its splat stays vanilla-clamped
+    // (noise-only, no energy change). The MIS ratio W = wsum / p-hat_selected is kept RAW
+    // (un-saturated): the hard saturate here was an asymmetric energy clip — resampling
+    // ratios above 1 (bright stable indirect light whose luminance-only target model
+    // locally underestimates) lost energy while ratios below 1 kept theirs. On the
+    // de-clamping tiers the splatted energy uses RRLadder_SoftKneeW (C1-continuous at 1,
+    // bounded by 1 + k_eff <= 4), with k_eff scaled by the CENTER reservoir's pre-merge
+    // convergence (RRLadder_ReservoirConfidence of the same packed radiance word this
+    // shader already loaded for the center pixel), so freshly reset / disoccluded
+    // pixels splat exactly the vanilla-saturated value, AND by the pool-luminance
+    // agreement factor (RRLadder_PoolAgreement over the phase-1 probes' luminance
+    // sum/sum-of-squares, sharpness RRFID_VARIANCE_K): when the probe pool's
+    // reservoir luminances disagree — the wide kernel importing sparse bright donors
+    // into locally dim pixels drives the honest W above 1, and the knee then releases
+    // energy the vanilla saturate used to swallow, seen in-game as tiny fireflies at
+    // indoor window light on this pooling path — agreement falls toward 0 and k_eff
+    // collapses the knee back to the vanilla saturate; agreeing pools (dense-bright
+    // terrain, open sky) keep the full knee. The inverse-PDF guide UAV
+    // keeps a vanilla-saturated W in [0,1] (RR-internal range expectations are
+    // unknown; also keeps the energy A/B unconfounded) — for the Lift lane it is
+    // recomputed from the final splat for splat/guide coherence, still in [0,1].
+    // Firefly protection stays layered wherever the saturate ceiling is lifted: the
+    // confidence gate, the knee bound, the pre-existing RRC_MAX_GROWTH clamp against
+    // the center reservoir's own contribution, and the RRFID_SPLAT_CEILING
+    // f16-headroom ceiling below.
+    const float rrc_w_raw = ((rrc_phat_sel > 0.0f) && (rrc_wsum > 0.0f)) ? (rrc_wsum / rrc_phat_sel) : 0.0f;  // W = wsum/phat, NO /M
+    float rrc_w_out = saturate(rrc_w_raw);  // vanilla-clamped W: guide-buffer contract value
+    const float rrc_knee_agree = RRLadder_PoolAgreement(rrc_lum_sum, rrc_lum_sq_sum, (float)RRC_POOL_COUNT, RRFID_VARIANCE_K);
+    // TIER GATE (shipping ladder): the variance-gated de-clamp knee is the SPMIS Balanced
+    // (RT_QUALITY==2) and SPMIS Boosted (RT_QUALITY==3) energy change. The unexposed RT_QUALITY==1 tier
+    // (RT_QUALITY==1) must be noise-only with vanilla brightness, so its k_eff is forced
+    // to 0 here — RRLadder_SoftKneeW(w, 0) returns saturate(w) exactly (see the helper),
+    // i.e. the vanilla resolve clamp. Tiers 2/3 keep the full confidence x agreement knee.
+    const float rrc_knee_tier = (RT_QUALITY >= 2.f) ? 1.0f : 0.0f;
+    const float rrc_k_eff = ((RRFID_KNEE_KMAX_RESOLVE * rrc_knee_tier) * rrc_knee_agree) * RRLadder_ConfidenceRamp(RRLadder_ReservoirConfidence(_251.x));
+    float rrc_splat = max(0.0f, rrc_lum_sel * RRLadder_SoftKneeW(rrc_w_raw, rrc_k_eff));
+    // RenoDX: <<< [Patch: RRLadderFidelity]
+#if RRLIFT_ENABLE
+    // RenoDX: >>> [Patch: RRLadderLift] [Version: 1.13.00]
+    // Description: RT_QUALITY==3 "Fidelity Lift" energy-character layer, applied after
+    // the pairwise-MIS merge and de-clamp knee, before the firefly clamp and the
+    // guarded writes. lambda multiplies five slow-moving convergence statistics —
+    // m_conf (center reservoir confidence through the shared declamp
+    // RRLadder_ConfidenceRamp: zero through the first RRFID_CONF_FLOOR frames, so
+    // fresh/disoccluded pixels get zero lift; NOTE: the confidence uses the min of
+    // the leapfrogged M/age counter pair rather than M alone, strictly more
+    // conservative on disocclusion), pool_conf (phase-1 probe confidence sum),
+    // accept_conf (donors that passed every vanilla gate this frame), light_conf
+    // (exposure-scaled center luminance ramp, full lift in bright stable light,
+    // RRLIFT_DIM_FLOOR fraction in dim scenes), and agree_conf (a variance gate:
+    // saturate(1 - rel_std * RRLIFT_VARIANCE_K) over the phase-1 pool probes' decoded
+    // luminances, mechanically the coefficient of variation of the neighborhood's
+    // reservoir brightness — dense-bright surfaces where the probes agree, e.g. sunlit
+    // cliffs or open-sky visibility, score ~1 and pass the strong lift through, while
+    // sparse bright hits where a few bright probes sit among dark neighbors, e.g. an
+    // indoor window light pool, score ~0 and suppress it; added after a user report of
+    // visible lift noise on indoor window light, which this statistic isolates without
+    // touching the dense-bright cases the lift exists for) — and pulls the
+    // below-ceiling part of
+    // W toward the vanilla saturate ceiling by that fraction (RRLadder_LiftWeight),
+    // with the ADDED energy compressed through a Reinhard knee on the delta only
+    // (RRLadder_LiftSoftKnee). lambda has no dedicated RNG term; its inputs are
+    // bounded confidence averages over the probe/donor sets, so its frame-to-frame
+    // variance is low and shrinks with pool size — not zero. Where the de-clamp knee
+    // already exceeds the lifted value (w_raw > 1) the
+    // delta is zero and the lift no-ops, so the two layers never double-apply. When
+    // the write-guard below reverts the pixel, every lift/knee output is discarded
+    // with it (whole-pixel revert to center-only vanilla-equivalent values).
+    if (RT_QUALITY == 3.f) {
+      const float rrl_m_conf = RRLadder_ConfidenceRamp(RRLadder_ReservoirConfidence(_251.x));  // shared declamp ramp: 0 through conf 4, 1 at 32
+      const float rrl_pool_conf = saturate(rrc_conf_sum / (((float)RRC_POOL_COUNT) * RRLIFT_POOL_NORM));
+      const float rrl_accept_conf = saturate(((float)rrc_accept_count) / RRLIFT_ACCEPT_NORM);
+      const float rrl_light_conf = saturate((_284 - RRLIFT_LUM_LO) / (RRLIFT_LUM_HI - RRLIFT_LUM_LO));
+      const float rrl_agree_conf = RRLadder_PoolAgreement(rrc_lum_sum, rrc_lum_sq_sum, (float)RRC_POOL_COUNT, RRLIFT_VARIANCE_K);
+      const float rrl_lambda = rrl_agree_conf
+                               * RRLadder_LiftLambda(rrl_m_conf, rrl_pool_conf, rrl_accept_conf,
+                                                     rrl_light_conf, RRLIFT_STRENGTH, RRLIFT_DIM_FLOOR);
+      rrc_splat = RRLadder_LiftSoftKnee(rrc_splat,
+                                        max(0.0f, rrc_lum_sel * RRLadder_LiftWeight(rrc_w_raw, rrl_lambda)),
+                                        RRLIFT_KNEE_STRENGTH);
+    }
+    // RenoDX: <<< [Patch: RRLadderLift]
+#endif
+    // RenoDX: >>> [Patch: RRLadderFidelity] [Version: 1.13.00]
+    // Description: Mandatory firefly guard + f16-headroom ceiling on the de-clamped
+    // (and possibly lifted) splat, then the guide-coherence W for the Lift lane (the
+    // stored inverse-PDF mirrors the final splat / selected-luminance ratio, saturated
+    // to the [0,1] guide contract; the Fidelity lane keeps the vanilla-saturated W).
+    rrc_splat = min(RRFID_SPLAT_CEILING, RRLadder_FireflyClampScalar(rrc_splat, _284 * saturate(rrc_center_ucw), RRC_MAX_GROWTH));
+    float rrc_w_written = rrc_w_out;
+#if RRLIFT_ENABLE
+    if (RT_QUALITY == 3.f) {
+      rrc_w_written = (rrc_lum_sel > 9.999999974752427e-07f) ? saturate(rrc_splat / rrc_lum_sel) : rrc_w_out;
+    }
+#endif
+    // RenoDX: <<< [Patch: RRLadderFidelity]
+    float3 rrc_dir = rrc_hit_sel - rrc_center_pos;  // ALWAYS center-relative
+    float rrc_dist = sqrt(dot(rrc_dir, rrc_dir));
+    if (rrc_donor_sel && !((rrc_dist >= 9.999999974752427e-07f) && (dot(rrc_center_normal, rrc_dir) > 0.0f))) {
+      // Guide write-guard failed: revert the WHOLE pixel to center-only
+      // vanilla-equivalent outputs (no mixed state, no unvalidated donor geometry,
+      // no residual knee/lift energy).
+      const float rrc_w_center = (_300 > 0.0f) ? saturate(rrc_center_ucw) : 0.0f;
+      rrc_splat = max(0.0f, _284 * rrc_w_center);
+      rrc_w_out = rrc_w_center;
+      rrc_w_written = rrc_w_center;
+      rrc_dir = rrc_center_hit - rrc_center_pos;
+      rrc_dist = sqrt(dot(rrc_dir, rrc_dir));
+    }
+    const float rrc_dist_safe = max(9.999999974752427e-07f, rrc_dist);
+    const half rrc_out = (half)(rrc_splat);
+    __3__38__0__1__g_diffuseResultUAV[rrc_pixel] = float4(rrc_out, rrc_out, rrc_out, 0.0f);
+    __3__38__0__1__g_raytracingHitResultUAV[rrc_pixel] = float4(rrc_dir.x / rrc_dist_safe, rrc_dir.y / rrc_dist_safe, rrc_dir.z / rrc_dist_safe, rrc_dist);
+    __3__38__0__1__g_raytracingDiffuseRayInversePDFUAV[rrc_pixel] = rrc_w_written;
+    return;  // off-gate falls through to the untouched vanilla loop + writes below
+  }
+  // RenoDX: <<< [Patch: SPMISWidePooling]
   if (!(_311 == 0)) {
     _316 = _285;
     _317 = _284;
@@ -480,12 +864,37 @@ void main(
   }
   _588 = _585 * ((float)((uint)((uint)(_584))));
   _592 = saturate(select((_588 == 0.0f), 0.0f, (_586 / _588)));  // [sem: expr_sat]
+  // RenoDX: >>> [Patch: RRLadderResolvePassthrough] [Version: 1.13.00]
+  // Description: RETIRED de-clamp on the vanilla narrow-reuse resolve path. This site
+  // used to host the old RT_QUALITY==1 "Declamp" lane (a confidence-gated soft-knee
+  // de-clamp of the vanilla resolve weight _592). Under the shipping SPMIS ladder the de-
+  // clamp is delivered exclusively inside the wide-pooling branch above (the
+  // [Patch: RRLadderFidelity] resolve knee, gated to SPMIS Balanced/Boosted via
+  // rrc_knee_tier), and that branch is TERMINAL — it writes all three output UAVs and
+  // returns before control can reach this code. Control-flow proof that no tier reaches a
+  // de-clamp here: (Off, RT_QUALITY==0) never satisfies the wide-pooling gate and arrives
+  // here as the pure vanilla resolve, which must stay bit-exact; (the conditioning tiers,
+  // Boosted, RT_QUALITY==1/2/3, RR enabled) all satisfy the wide-pooling gate above and
+  // return there, so they NEVER execute this block. Retiring the de-clamp here therefore
+  // (a) leaves Off bit-exact vanilla and (b) guarantees there is exactly ONE code path per
+  // SPMIS tier — the wide-pooling branch — with the de-clamp gated correctly, and no
+  // residual vanilla-reuse de-clamp that a future control-flow change could accidentally
+  // revive. The splat operand is now unconditionally the vanilla product _583 * _592.
+  const float rr_fid_splat = _583 * _592;  // vanilla splat operand (bit-exact; de-clamp retired to the wide-pooling branch)
+  // RenoDX: <<< [Patch: RRLadderResolvePassthrough]
   _593 = _582 - _226;
   _594 = _581 - _235;
   _595 = _580 - _244;
   _601 = sqrt(((_594 * _594) + (_595 * _595)) + (_593 * _593));
   _602 = max(1e-06f, _601);
-  _607 = -0.0h - (half)(half(min(0.0f, (-0.0f - (_583 * _592)))));
+  // RenoDX: >>> [Patch: RRLadderResolvePassthrough] [Version: 1.16.00]
+  // Description: The native splat store, re-formed to consume the rr_fid_splat local declared in the
+  //              preceding RRLadderResolvePassthrough block. rr_fid_splat is unconditionally the
+  //              vanilla product _583 * _592 (the de-clamp was retired to the terminal wide-pooling
+  //              branch above), so this line is bit-exact vanilla behavior with the operand routed
+  //              through a named local for auditability.
+  _607 = -0.0h - (half)(half(min(0.0f, (-0.0f - (rr_fid_splat)))));
+  // RenoDX: <<< [Patch: RRLadderResolvePassthrough]
   __3__38__0__1__g_diffuseResultUAV[int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y))] = float4(_607, _607, _607, 0.0f);
   __3__38__0__1__g_raytracingHitResultUAV[int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y))] = float4((_593 / _602), (_594 / _602), (_595 / _602), _601);
   __3__38__0__1__g_raytracingDiffuseRayInversePDFUAV[int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y))] = _592;

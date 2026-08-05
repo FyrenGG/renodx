@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared option and helper declarations consumed by this shader's annotated RenoDX patches. This dependency-only prefix replaces no native executable statement; removing the block restores successor A byte-for-byte.
+#include "../shared.h"
+#include "../common.hlsl"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct anon {
   float4 _voxelParams;
   float4 _invClipmapExtent;
@@ -157,6 +162,19 @@ SamplerState __0__4__0__0__g_staticVoxelSampler : register(s12, space4);
 uint firstbithigh_msb(int value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
 uint firstbithigh_msb(uint value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
 
+// RenoDX: >>> [Patch: PerceptualAEAdaptingField] [Version: 1.12.02]
+// Description: The auto-exposure histogram stores luminance in a log2 domain that is normalised to the
+// 0..255 bin range by a per-frame scale/bias pair (_param0.x / _param0.y). The vanilla shader only ever
+// converts a bin back to linear luminance via exp2(), so there is no reusable inverse. The perceptual
+// auto-exposure path below needs the *log2* luminance of a bin so it can average the adapting field
+// geometrically instead of arithmetically; this helper is that missing inverse and performs no
+// conversion of its own beyond undoing the bin normalisation.
+float DecodeHistogramLog2Luminance(float histogram_bin, float histogram_scale, float histogram_bias) {
+  float normalized_bin = histogram_bin * 0.00390625f;
+  float shifted_bin = normalized_bin - histogram_bias;
+  return shifted_bin / histogram_scale;
+}
+// RenoDX: <<< [Patch: PerceptualAEAdaptingField]
 groupshared uint _global_0[256];
 groupshared uint _global_1[256];
 groupshared uint _global_2[768];
@@ -520,9 +538,174 @@ void main(
             continue;
           }
           _185 = _176 * 0.00390625f;
-          _191 = min(max((_174 / max(_175, 0.0001f)), _param1.z), _param1.w);
+          // RenoDX: >>> [Patch: AutoExposureEnvironmentBias] [Version: 1.12.02]
+          // Description: The game clamps the metered histogram mean into a per-scene luminance window
+          // (_param1.z / _param1.w) that the environment author picked. Those clamps are tuned for the
+          // game's own SDR exposure placement curve and, in the perceptual auto-exposure mode, they
+          // truncate the measured scene statistics before the perceptual solve ever sees them, which
+          // pins indoor/outdoor transitions to the authored window instead of the real scene. This block
+          // turns the clamp pair into a blendable pair: at Environment Bias 1 the authored window is used
+          // unchanged (identical to vanilla), at 0 the window is opened to 0..65536 so the perceptual path
+          // meters the visible scene directly. Only the perceptual mode reads the blend; every other mode
+          // keeps the authored clamps verbatim. The histogram-mean clamp line at the end of the block is
+          // the vanilla expression with the inline _param1.z/_param1.w clamps replaced by the blendable
+          // _ae_min_lum/_ae_max_lum locals; that identifier substitution is its only change.
+          float _ae_min_lum = _param1.z;
+          float _ae_max_lum = _param1.w;
+          if (IMPROVED_AUTO_EXPOSURE == 2) {
+            float _psychov17_environment_bias = saturate(AE_ENVIRONMENT_BIAS);
+            _ae_min_lum = lerp(0.0f, _ae_min_lum, _psychov17_environment_bias);
+            _ae_max_lum = lerp(65536.0f, _ae_max_lum, _psychov17_environment_bias);
+          }
+          _191 = min(max((_174 / max(_175, 9.999999747378752e-05f)), _ae_min_lum), _ae_max_lum);
+          // RenoDX: <<< [Patch: AutoExposureEnvironmentBias]
           _196 = sqrt(max(1e-09f, ((_178 * 0.00390625f) - (_185 * _185))));
           _197 = max(1e-06f, _191);
+          // RenoDX: >>> [Patch: AutoExposureTargetLuminanceFilter] [Version: 1.12.02]
+          // Description: _197 is the raw per-frame histogram mean. It jitters frame to frame because the
+          // histogram is rebuilt from a jittered, temporally-reprojected frame, and that jitter is
+          // amplified by the exponential exposure placement curve further down, producing visible
+          // exposure and bloom shimmer on otherwise static scenes. This introduces a separate filtered
+          // target that the exposure curve consumes instead of the raw mean. It is initialised to the raw
+          // mean, so with every RenoDX auto-exposure option off it is bit-identical to vanilla; the
+          // smoothing blocks below only overwrite it for the improved auto-exposure modes. The raw mean
+          // _197 is still what gets published to the exposure buffer slots that other passes read as the
+          // unfiltered meter. This and the bloom-side GlareSourcePreFilter are partial mitigations of
+          // the same TAA-jitter bloom shimmer; neither removes it entirely, and the improved
+          // auto-exposure modes benefit most.
+          float _smoothed_target_yf = _197;
+          // RenoDX: <<< [Patch: AutoExposureTargetLuminanceFilter]
+
+          // RenoDX: >>> [Patch: AutoExposureModeMatchedHistory] [Version: 1.12.02]
+          // Description: Slot 13 stores both history validity and the AE mode that wrote the exposure state as 1 + IMPROVED_AUTO_EXPOSURE. Treating the slot as a boolean lets Perceptual AE reuse Vanilla or Custom AE history slots with incompatible meanings, which can seed stale fast/slow adaptation state after mode or preset changes. This validates the marker and only reuses history when the stored mode matches the active mode.
+          float _ae_history_state_raw = __3__39__0__1__g_exposureUAV[13];
+          bool _ae_history_valid =
+              (_ae_history_state_raw > 0.5f) && !isnan(_ae_history_state_raw) && !isinf(_ae_history_state_raw);
+          float _ae_previous_mode = _ae_history_valid ? (floor(_ae_history_state_raw + 0.5f) - 1.0f) : -1.0f;
+          bool _ae_mode_matches_history = abs(_ae_previous_mode - IMPROVED_AUTO_EXPOSURE) < 0.5f;
+          bool _ae_temporal_continuity = !(_temporalReprojectionParams.w > 0.5f);
+          bool _ae_can_reuse_history = _ae_history_valid && _ae_temporal_continuity && _ae_mode_matches_history;
+          // RenoDX: <<< [Patch: AutoExposureModeMatchedHistory]
+
+          // RenoDX: >>> [Patch: PerceptualAEAdaptingField] [Version: 1.12.02]
+          // Description: The vanilla meter is a single arithmetic mean over the whole histogram, so a
+          // small very bright or very dark region drags the exposure target away from what the viewer is
+          // actually adapted to. Perceptual AE instead needs a "sustained background" estimate. This
+          // block walks the histogram, discards the darkest 20% and brightest 20% of the accumulated
+          // weight, and averages the remaining central band in log2 luminance (a geometric mean), which
+          // is the domain visual adaptation actually operates in. Bin 0 is skipped because it collects
+          // clamped/black pixels. Kraft & Brainard (1999, PNAS 96:307-312) show simple local-surround,
+          // spatial-mean or max-flux rules are individually insufficient under natural viewing, so this
+          // stays an engineering background estimate rather than a claim of a full appearance model.
+          // The block only runs in the perceptual mode; every other mode leaves the field at the raw mean.
+          float _psychov17_field_yf = _197;
+          [branch]
+          if (IMPROVED_AUTO_EXPOSURE == 2) {
+            float _psychov17_band_lo = _139 * 0.20000000298023224f;
+            float _psychov17_band_hi = _139 * 0.800000011920929f;
+            int _psychov17_bin = 0;
+            float _psychov17_sum_log = 0.0f;
+            float _psychov17_sum_weight = 0.0f;
+            float _psychov17_remaining_lo = _psychov17_band_lo;
+            float _psychov17_remaining_hi = _psychov17_band_hi;
+            while (true) {
+              int _psychov17_count_i = __3__37__0__0__g_histogram[_psychov17_bin];
+              float _psychov17_count = float((uint)_psychov17_count_i) * _130;
+              float _psychov17_skip = min(_psychov17_remaining_lo, _psychov17_count);
+              float _psychov17_after_skip = _psychov17_count - _psychov17_skip;
+              float _psychov17_next_lo = _psychov17_remaining_lo - _psychov17_skip;
+              float _psychov17_window = max(0.0f, _psychov17_remaining_hi - _psychov17_skip);
+              float _psychov17_take = min(_psychov17_window, _psychov17_after_skip);
+              float _psychov17_next_hi = _psychov17_window - _psychov17_take;
+              if ((_psychov17_take > 0.0f) && (_psychov17_bin != 0)) {
+                float _psychov17_log_yf = DecodeHistogramLog2Luminance(float((uint)_psychov17_bin), _param0.x, _param0.y);
+                _psychov17_sum_log = (_psychov17_take * _psychov17_log_yf) + _psychov17_sum_log;
+                _psychov17_sum_weight = _psychov17_take + _psychov17_sum_weight;
+              }
+              int _psychov17_next_bin_index = _psychov17_bin + 1;
+              bool _psychov17_done = (_psychov17_next_bin_index == 256);
+              if (!_psychov17_done) {
+                _psychov17_bin = _psychov17_next_bin_index;
+                _psychov17_remaining_lo = _psychov17_next_lo;
+                _psychov17_remaining_hi = _psychov17_next_hi;
+                continue;
+              }
+              if (_psychov17_sum_weight <= 0.0f) {
+                _psychov17_field_yf = 0.0f;
+              } else {
+                float _psychov17_weight_safe = max(_psychov17_sum_weight, 9.999999747378752e-05f);
+                float _psychov17_log_mean = _psychov17_sum_log / _psychov17_weight_safe;
+                _psychov17_field_yf = exp2(_psychov17_log_mean);
+              }
+              break;
+            }
+          }
+          // RenoDX: <<< [Patch: PerceptualAEAdaptingField]
+
+          // RenoDX: >>> [Patch: PerceptualAEFieldSmoothing] [Version: 1.12.02]
+          // Description: Perceptual AE computes a central 20-80% geometric field in the branch above, but the shared target smoothing block was chained as an else-if and was therefore unreachable for IMPROVED_AUTO_EXPOSURE == 2. Run the smoothing block independently so Perceptual AE feeds the filtered PsychoV17 field into the exposure solve instead of falling back to the raw histogram mean. Slot 19 of the exposure buffer carries the previous frame's filtered target; it is only reused when the mode-matched history check above says the stored state belongs to the active mode.
+          [branch]
+          if ((IMPROVED_AUTO_EXPOSURE == 1) || (IMPROVED_AUTO_EXPOSURE == 2)) {
+            float _prevFilteredTarget = __3__39__0__1__g_exposureUAV[19];
+            bool _prevFilteredTargetValid =
+                _ae_can_reuse_history && (_prevFilteredTarget > 0.0001f) && !isnan(_prevFilteredTarget) &&
+                !isinf(_prevFilteredTarget);
+            float _targetSmoothAlpha = 1.0f;
+            if (AE_TARGET_SMOOTHING_TIME > 0.0f) {
+              float _targetSmoothTau = max(AE_TARGET_SMOOTHING_TIME, 9.999999747378752e-05f);
+              _targetSmoothAlpha = 1.0f - exp(-_timeNoScale.z / _targetSmoothTau);
+            }
+            if (IMPROVED_AUTO_EXPOSURE == 1) {
+              // Smoothed AE only: low-pass the raw histogram target before the
+              // legacy exposure shaping below.
+              if (_prevFilteredTargetValid) {
+                float _logPrev = log2(_prevFilteredTarget);
+                float _logCur = log2(_197);
+                float _logSmooth = lerp(_logPrev, _logCur, _targetSmoothAlpha);
+                _smoothed_target_yf = exp2(_logSmooth);
+              }
+            } else {
+              // Perceptual AE keeps the scalar target dynamic, but filters the
+              // target field in log space so low outdoor gains do not twitch
+              // frame-to-frame from raw histogram noise.
+              _smoothed_target_yf = max(_psychov17_field_yf, 9.999999747378752e-05f);
+              if (_prevFilteredTargetValid) {
+                float _logPrev = log2(_prevFilteredTarget);
+                float _logCur = log2(_smoothed_target_yf);
+                float _logSmooth = lerp(_logPrev, _logCur, _targetSmoothAlpha);
+                _smoothed_target_yf = exp2(_logSmooth);
+              }
+            }
+          }
+          // RenoDX: <<< [Patch: PerceptualAEFieldSmoothing]
+
+          // RenoDX: >>> [Patch: PerceptualAETargetBounds] [Version: 1.12.02]
+          // Description: Perceptual AE drives exposure from a measured adaptation state, which by design
+          // has no fixed anchor - a uniformly dark or uniformly bright scene will be pulled back toward
+          // mid grey no matter how dark or bright it really was. These two optional user bounds put a
+          // floor and a ceiling on the perceptual *target* luminance so scenes that should stay dark stay
+          // dark and scenes that should stay bright stay bright. A bound of 0 means "unset". When both are
+          // set the maximum is raised to at least the minimum so an inverted pair cannot produce an empty
+          // interval. The bounds are read here and applied to the target further down; no other mode
+          // observes them.
+          float _psychov17_min_target_yf = 0.0f;
+          float _psychov17_max_target_yf = 0.0f;
+          bool _psychov17_has_min_target = false;
+          bool _psychov17_has_max_target = false;
+          bool _psychov17_has_target_bounds = false;
+          if (IMPROVED_AUTO_EXPOSURE == 2) {
+            _psychov17_min_target_yf = AE_PERCEPTUAL_MIN_BRIGHTNESS;
+            _psychov17_max_target_yf = AE_PERCEPTUAL_MAX_BRIGHTNESS;
+            _psychov17_has_min_target = _psychov17_min_target_yf > 0.0f;
+            _psychov17_has_max_target = _psychov17_max_target_yf > 0.0f;
+            _psychov17_has_target_bounds = _psychov17_has_min_target || _psychov17_has_max_target;
+            if (_psychov17_has_target_bounds) {
+              if (_psychov17_has_min_target && _psychov17_has_max_target) {
+                _psychov17_max_target_yf = max(_psychov17_max_target_yf, _psychov17_min_target_yf);
+              }
+            }
+          }
+          // RenoDX: <<< [Patch: PerceptualAETargetBounds]
           _199 = 1;
           while(true) {
             _201 = __3__35__0__0__VoxelGlobalIlluminationConstantBuffer_raw[((int)((int)(_199) + (int)(20)))];
@@ -549,31 +732,184 @@ void main(
               }
             }
             _286 = sqrt(_285);
-            _296 = (saturate((2.0f / (exp2(_197 * -144.2695f) + 1.0f)) + -1.0f) * (_286 + 2.0f)) + (-1.5f - _286);
-            _298 = log2(saturate(_197));
+            // RenoDX: >>> [Patch: PerceptualAESkyVisibilityBias] [Version: 1.12.02]
+            // Description: _286 is a sky-visibility term sampled from the voxel sky-occlusion clipmap; the
+            // game uses it to reshape its exposure placement curve, so indoor spaces are metered
+            // differently from open sky. In perceptual AE that heuristic fights the measured adaptation
+            // state, because the exposure scalar is already derived from what the viewer is adapted to
+            // rather than from the game's authored placement. Richer environmental context can help colour
+            // constancy beyond reduced-cue setups (Gegenfurtner et al. 2024, PMCID: PMC10910556), so the
+            // term is faded toward a neutral 0.5 rather than removed: at Environment Bias 1 the sampled
+            // value is used unchanged (vanilla behaviour) and at 0 the placement curve sees a constant
+            // half-open-sky context. Only the perceptual mode is affected.
+            if (IMPROVED_AUTO_EXPOSURE == 2) {
+              float _psychov17_environment_bias = saturate(AE_ENVIRONMENT_BIAS);
+              _286 = lerp(0.5f, _286, _psychov17_environment_bias);
+            }
+            // RenoDX: <<< [Patch: PerceptualAESkyVisibilityBias]
+            // RenoDX: >>> [Patch: AutoExposureTargetLuminanceFilter] [Version: 1.12.02]
+            // Description: Consumption sites for the filtered exposure target introduced by the
+            // [Patch: AutoExposureTargetLuminanceFilter] block above: the exposure placement curve
+            // inputs (_296, _298, _307, _330) read _smoothed_target_yf in place of the raw per-frame
+            // histogram mean _197, so the exponential placement curve no longer amplifies TAA-jitter
+            // frame-to-frame meter noise into exposure and bloom shimmer. Only that identifier
+            // substitution differs from vanilla on those four lines; the interleaved lines without a
+            // _smoothed_target_yf reference are unmodified vanilla code kept inside the block for
+            // contiguity. With every RenoDX auto-exposure option off the filtered target equals the
+            // raw mean and the whole cluster is bit-identical to vanilla.
+            _296 = (saturate((2.0f / (exp2(_smoothed_target_yf * -144.26950073242188f) + 1.0f)) + -1.0f) * (_286 + 2.0f)) + (-1.5f - _286);
+            _298 = log2(saturate(_smoothed_target_yf));
             _299 = _286 * 2.5f;
-            _302 = (_196 * 10.0f) / max(1e-09f, _191);
+            _302 = (_196 * 10.0f) / max(9.999999717180685e-10f, _191);
             _305 = __3__39__0__1__g_autoWhiteBalanceColorUAV[1].w;
-            _307 = min(max(_197, 0.0001f), 7.0f);
-            _310 = saturate((_307 + -0.01f) * 0.14306152f);  // [sem: expr_sat]
-            _313 = saturate((_307 + -0.0001f) * 101.0101f);  // [sem: expr_sat]
+            _307 = min(max(_smoothed_target_yf, 9.999999747378752e-05f), 7.0f);
+            _310 = saturate((_307 + -0.009999999776482582f) * 0.14306151866912842f);  // [sem: expr_sat]
+            _313 = saturate((_307 + -9.999999747378752e-05f) * 101.01010131835938f);  // [sem: expr_sat]
             _314 = _313 * 2.0f;
             _316 = (_313 * 3.0f) + -3.0f;
             _318 = _316 - (_316 * _310);
-            _330 = (log2(_197 * 8.0f) - _318) - ((((_314 + -3.5f) + ((3.0f - _314) * _310)) - _318) * sqrt(saturate(_286)));
+            _330 = (log2(_smoothed_target_yf * 8.0f) - _318) - ((((_314 + -3.5f) + ((3.0f - _314) * _310)) - _318) * sqrt(saturate(_286)));
+            // RenoDX: <<< [Patch: AutoExposureTargetLuminanceFilter]
             _331 = exp2(_330);
-            _332 = 0.8333333f / _331;
-            if (!(_temporalReprojectionParams.w > 0.5f)) {
-              _339 = __3__39__0__1__g_exposureUAV[1];
-              if (_332 > _339) {
-                _345 = 1.0f / _339;
-                _366 = (1.0f / (((1.0f - exp2(-0.0f - (_param2.x * _timeNoScale.z))) * ((_331 * 1.2f) - _345)) + _345));
+            // RenoDX: >>> [Patch: PerceptualAEHistoryReset] [Version: 1.12.02]
+            // Description: The game's exposure target is a static placement curve: it maps the current
+            // meter straight to a gain with no memory, and all temporal behaviour comes from the
+            // asymmetric filter further down. Perceptual AE instead models the viewer's adaptation state
+            // explicitly and derives the gain from the ratio between where the viewer is adapted and where
+            // the scene wants them to be. This block predicts that state.
+            //
+            // The state chases the filtered field exponentially in log luminance,
+            //   alpha = 1 - exp(-dt / tau),
+            // with tau selected by direction. Brightening uses the short-term constant directly.
+            // Darkening is weighted by Rushton-Henry steady-state cone bleaching of the *previous* state:
+            //   p_bleached = I / (I + I0), I0 ~= 10^4.3 troland,
+            // so a dim preadaptation recovers on the short branch while a bright preadaptation drags the
+            // long branch in. Reference direction: Webster (2011) on multi-timescale visual adaptation and
+            // Stockman et al. (JOV 2006) on bleaching-dominated high-light regulation.
+            //
+            // Slots 9/10/11 hold the signed fast carryover, the adapted field and the signed slow
+            // carryover. Those slots mean different things in the other AE modes, so every read is gated
+            // by the mode-matched history check; on a mismatch or a temporal reset the state snaps to the
+            // current field instead of inheriting an incompatible one. Nothing here is read outside the
+            // perceptual mode.
+            float _psychov17_predicted_fast_eqbg = 0.0f;
+            float _psychov17_predicted_slow_eqbg = 0.0f;
+            float _psychov17_predicted_current_state_yf = max(_smoothed_target_yf, 9.999999747378752e-05f);
+            if (IMPROVED_AUTO_EXPOSURE == 2) {
+              float _psychov17_predicted_field_yf = max(_smoothed_target_yf, 9.999999974752427e-07f);
+              float _psychov17_prev_fast_eqbg = __3__39__0__1__g_exposureUAV[9];
+              float _psychov17_prev_field_raw = __3__39__0__1__g_exposureUAV[10];
+              float _psychov17_prev_field_yf = max(_psychov17_prev_field_raw, 9.999999974752427e-07f);
+              float _psychov17_prev_slow_eqbg = __3__39__0__1__g_exposureUAV[11];
+              bool _psychov17_prev_fast_valid =
+                  _ae_can_reuse_history && !isnan(_psychov17_prev_fast_eqbg) && !isinf(_psychov17_prev_fast_eqbg);
+              bool _psychov17_prev_field_valid =
+                  _ae_can_reuse_history && (_psychov17_prev_field_raw > 0.0f) && !isnan(_psychov17_prev_field_raw) &&
+                  !isinf(_psychov17_prev_field_raw);
+              bool _psychov17_prev_slow_valid =
+                  _ae_can_reuse_history && !isnan(_psychov17_prev_slow_eqbg) && !isinf(_psychov17_prev_slow_eqbg);
+              float _psychov17_prev_current_state_yf = _psychov17_prev_field_yf;
+              if (_psychov17_prev_fast_valid) {
+                _psychov17_prev_current_state_yf += _psychov17_prev_fast_eqbg;
+              }
+              if (_psychov17_prev_slow_valid) {
+                _psychov17_prev_current_state_yf += _psychov17_prev_slow_eqbg;
+              }
+              _psychov17_prev_current_state_yf = max(_psychov17_prev_current_state_yf, 9.999999747378752e-05f);
+              float _psychov17_tau_fast = max(AE_DARK_TO_LIGHT_TIME, 0.10000000149011612f);
+              float _psychov17_tau_slow = max(AE_LIGHT_TO_DARK_TIME, 0.10000000149011612f);
+              if (!_ae_can_reuse_history) {
+                _psychov17_predicted_current_state_yf = _psychov17_predicted_field_yf;
+              } else if (!_psychov17_prev_field_valid) {
+                _psychov17_predicted_current_state_yf = _psychov17_predicted_field_yf;
+              } else if ((_psychov17_predicted_field_yf <= 0.0f) || isnan(_psychov17_predicted_field_yf) || isinf(_psychov17_predicted_field_yf)) {
+                _psychov17_predicted_current_state_yf = _psychov17_prev_current_state_yf;
               } else {
-                _366 = (((1.0f - exp2(-0.0f - (_param2.y * _timeNoScale.z))) * (_332 - _339)) + _339);
+                bool _psychov17_brightening = _psychov17_predicted_field_yf > _psychov17_prev_current_state_yf;
+                float _psychov17_tau_state = _psychov17_tau_fast;
+                if (!_psychov17_brightening) {
+                  float _psychov17_prev_state_td =
+                      max(_psychov17_prev_current_state_yf, 0.0f) * RENODX_DIFFUSE_WHITE_NITS * 4.0f;
+                  float _psychov17_bleached_fraction =
+                      _psychov17_prev_state_td / (_psychov17_prev_state_td + 20000.0f);
+                  _psychov17_tau_state =
+                      lerp(_psychov17_tau_fast, _psychov17_tau_slow, saturate(_psychov17_bleached_fraction));
+                }
+                float _psychov17_alpha_state =
+                    1.0f - exp((-_timeNoScale.z) / _psychov17_tau_state);
+                float _psychov17_log_prev_state = log2(_psychov17_prev_current_state_yf);
+                float _psychov17_log_target_state = log2(_psychov17_predicted_field_yf);
+                float _psychov17_log_current_state =
+                    lerp(_psychov17_log_prev_state, _psychov17_log_target_state, _psychov17_alpha_state);
+                _psychov17_predicted_current_state_yf = exp2(_psychov17_log_current_state);
+              }
+              float _psychov17_state_delta_yf =
+                  _psychov17_predicted_current_state_yf - _psychov17_predicted_field_yf;
+              _psychov17_predicted_fast_eqbg = min(_psychov17_state_delta_yf, 0.0f);
+              _psychov17_predicted_slow_eqbg = max(_psychov17_state_delta_yf, 0.0f);
+              _psychov17_predicted_current_state_yf = max(
+                  _psychov17_predicted_field_yf + _psychov17_predicted_fast_eqbg + _psychov17_predicted_slow_eqbg,
+                  9.999999747378752e-05f);
+            }
+            // RenoDX: <<< [Patch: PerceptualAEHistoryReset]
+            _332 = 0.8333333f / _331;
+            // RenoDX: >>> [Patch: PerceptualAETargetGain] [Version: 1.12.02]
+            // Description: Replaces the game's exposure-placement gain with a perceptual one in
+            // IMPROVED_AUTO_EXPOSURE == 2 only. The consuming tonemap builds
+            //   current_average = adapted field + residual carryover
+            //   target_average  = current_average * exposure_gain
+            // so the gain has to encode the ratio between the predicted live adaptation anchor computed
+            // above and the desired perceptual target average, rather than the game's authored curve. The
+            // target average starts as the filtered field and is then constrained by the optional
+            // perceptual min/max brightness bounds. The final ratio is clamped to 1e-4..16 so a
+            // near-zero adaptation anchor cannot produce an unbounded exposure spike.
+            if (IMPROVED_AUTO_EXPOSURE == 2) {
+              float _ae2_target_field_yf = max(_smoothed_target_yf, 9.999999747378752e-05f);
+              float _ae2_target_average_yf = _ae2_target_field_yf;
+              if (_psychov17_has_min_target) {
+                _ae2_target_average_yf = max(_ae2_target_average_yf, _psychov17_min_target_yf);
+              }
+              if (_psychov17_has_max_target) {
+                _ae2_target_average_yf = min(_ae2_target_average_yf, _psychov17_max_target_yf);
+              }
+              _332 = clamp(
+                  _ae2_target_average_yf / _psychov17_predicted_current_state_yf,
+                  9.999999747378752e-05f,
+                  16.0f);
+            }
+            // RenoDX: <<< [Patch: PerceptualAETargetGain]
+
+            // RenoDX: >>> [Patch: AutoExposureAdaptationSpeed] [Version: 1.12.02]
+            // Description: Two changes to the game's asymmetric temporal exposure filter.
+            // (1) The reuse gate was the raw temporal-reprojection flag; it is now the mode-matched
+            //     history check, so a mode or preset change also forces the same clean re-seed that a
+            //     loading screen does instead of blending against state written under different
+            //     semantics. With every option off the check reduces to the original flag.
+            // (2) The perceptual mode already performs its own adaptation in log luminance when it builds
+            //     the adaptation state, so running this second filter on top would double-filter and
+            //     stall the response; it takes the target gain directly. The smoothed mode keeps the
+            //     game's filter but scales the timestep by the user Adaptation Speed control, up to 3x.
+            // The vanilla asymmetric behaviour is unchanged otherwise: brightening is interpolated in
+            // reciprocal-exposure space, darkening in linear space.
+            if (_ae_can_reuse_history) {
+              _339 = __3__39__0__1__g_exposureUAV[1];
+              [branch]
+              if (IMPROVED_AUTO_EXPOSURE == 2) {
+                _366 = _332;
+              } else {
+                float time_scale = _timeNoScale.z;
+                if (IMPROVED_AUTO_EXPOSURE == 1.0f) time_scale = lerp(time_scale, time_scale * 3.0f, AE_SPEED);
+                if (_332 > _339) {
+                  _345 = 1.0f / _339;
+                  _366 = (1.0f / (((1.0f - exp2(-0.0f - (_param2.x * time_scale))) * ((_331 * 1.2000000476837158f) - _345)) + _345));
+                } else {
+                  _366 = (((1.0f - exp2(-0.0f - (_param2.y * time_scale))) * (_332 - _339)) + _339);
+                }
               }
             } else {
               _366 = _332;
             }
+            // RenoDX: <<< [Patch: AutoExposureAdaptationSpeed]
             _368 = 0.0f;
             _369 = 0.0f;
             _370 = 0;
@@ -590,21 +926,85 @@ void main(
                 continue;
               }
               _391 = _385 / max(_386, 0.0001f);
-              _392 = max(_391, _197);
+              // RenoDX: >>> [Patch: AutoExposureAdaptedFieldWrite] [Version: 1.12.02]
+              // Description: Slot 10 is the adapted-field history the next frame reads back. Vanilla
+              // seeds it from max(unclipped mean, raw histogram mean). In perceptual AE that raw
+              // histogram jitter is exactly what the adaptation model must not inherit - the fast/slow
+              // carryover already models adaptation memory, so feeding unfiltered per-frame noise into
+              // the stored field makes scripted flashes, intro cards and lightning pulse even when the
+              // configured adaptation times are very long. Perceptual AE therefore stores the filtered
+              // field; the other modes keep the vanilla expression with the filtered target substituted,
+              // which is bit-identical to vanilla when no smoothing is active.
+              [branch]
+              if (IMPROVED_AUTO_EXPOSURE == 2) {
+                _392 = max(_smoothed_target_yf, 9.999999747378752e-05f);
+              } else {
+                _392 = max(_391, _smoothed_target_yf);
+              }
+              // RenoDX: <<< [Patch: AutoExposureAdaptedFieldWrite]
               _395 = __3__39__0__1__g_exposureUAV[11];
+              // RenoDX: >>> [Patch: PerceptualAECarryoverWrite] [Version: 1.12.02]
+              // Description: Vanilla treats slot 11 as a single low-passed field history and slot 9 as the
+              // previous exposure scalar. Perceptual AE needs a signed two-branch carryover instead, so in
+              // that mode slot 9 carries the fast (negative) residual and slot 11 the slow (positive)
+              // residual produced by the adaptation-state model above; together with slot 10 they let the
+              // next frame reconstruct the exact adaptation anchor. Every other mode keeps the vanilla
+              // 1/8 low pass into slot 11. The two layouts are distinguished by the mode marker in slot 13,
+              // so a mode change never reinterprets one layout as the other.
+              float _ae_slow_history_write;
+              [branch]
+              if (IMPROVED_AUTO_EXPOSURE == 2) {
+                __3__39__0__1__g_exposureUAV[9] = _psychov17_predicted_fast_eqbg;
+                _ae_slow_history_write = _psychov17_predicted_slow_eqbg;
+              } else {
+                _ae_slow_history_write = (lerp(_395, _392, 0.125f));
+              }
+              // RenoDX: <<< [Patch: PerceptualAECarryoverWrite]
               _398 = !(_param3.x == 1.0f);
               _400 = __3__39__0__1__g_exposureUAV[0];
               if (_398) {
                 _419 = _param3.y;
               } else {
-                _403 = __3__39__0__1__g_exposureUAV[4];
-                if (_403 > 0.001f) {
-                  _414 = exp2(_param2.z + (saturate(_305) * _param3.z));
+                // RenoDX: >>> [Patch: PerceptualAEExposureCompensationBypass] [Version: 1.12.02]
+                // Description: Vanilla multiplies the filtered exposure by an auto-white-balance driven
+                // compensation term (built from the AWB confidence in _305 and the authored
+                // _param2.z/_param3.z pair) before publishing it. That term is another authored placement
+                // heuristic layered on top of the meter. Perceptual AE already produced an absolute gain
+                // from the adaptation state, so applying the compensation again double-counts it and
+                // makes the exposure drift with white-balance confidence. The perceptual mode publishes
+                // the filtered gain directly; all other modes take the vanilla path unchanged.
+                [branch]
+                if (IMPROVED_AUTO_EXPOSURE == 2) {
+                  _419 = _366;
                 } else {
-                  _414 = 1.0f;
+                  _403 = __3__39__0__1__g_exposureUAV[4];
+                  if (_403 > 0.0010000000474974513f) {
+                    _414 = exp2((saturate(_305) * _param3.z) + _param2.z);
+                  } else {
+                    _414 = 1.0f;
+                  }
+                  _419 = (_414 * _366);
                 }
-                _419 = (_414 * _366);
+                // RenoDX: <<< [Patch: PerceptualAEExposureCompensationBypass]
               }
+              // RenoDX: >>> [Patch: AutoExposureDynamismShaping] [Version: 1.12.02]
+              // Description: Smoothed AE (mode 1) exposes two user controls that reshape how far the
+              // final exposure scalar is allowed to travel away from a 0.1 pivot: one for the bright side
+              // and one for the dark side. The reshaping is a Naka-Rushton compression anchored so the
+              // pivot maps to itself, which means a response exponent of 1 is an exact identity and the
+              // controls are neutral at their defaults. Above the pivot the high-dynamism exponent is
+              // applied directly; below it the low control is mirrored as 2 - value so that both sliders
+              // increase contrast in the same direction. Only mode 1 is affected.
+              [branch]
+              if (IMPROVED_AUTO_EXPOSURE == 1) {
+                const float pivot = 0.1f;
+                if (_419 > pivot) {
+                  _419 = NakaRushton(_419, 10000.f, pivot, pivot, AE_DYNAMISM_HIGH).x;
+                } else {
+                  _419 = NakaRushton(_419, 10000.f, pivot, pivot, 2.f - AE_DYNAMISM_LOW).x;
+                }
+              }
+              // RenoDX: <<< [Patch: AutoExposureDynamismShaping]
               __3__39__0__1__g_exposureUAV[0] = _419;
               __3__39__0__1__g_exposureUAV[1] = select(_398, _param3.y, _366);
               __3__39__0__1__g_exposureUAV[2] = _param0.x;
@@ -612,12 +1012,35 @@ void main(
               __3__39__0__1__g_exposureUAV[4] = _128;
               __3__39__0__1__g_exposureUAV[5] = _330;
               __3__39__0__1__g_exposureUAV[8] = _197;
-              __3__39__0__1__g_exposureUAV[9] = _400;
+              // RenoDX: >>> [Patch: PerceptualAECarryoverWrite] [Version: 1.12.02]
+              // Description: Companion to the carryover block above. Slot 9 is the previous exposure
+              // scalar in every mode except perceptual AE, where it was already written with the fast
+              // adaptation residual; this guard stops the vanilla write from immediately overwriting it.
+              if (IMPROVED_AUTO_EXPOSURE != 2) {
+                __3__39__0__1__g_exposureUAV[9] = _400;
+              }
+              // RenoDX: <<< [Patch: PerceptualAECarryoverWrite]
               __3__39__0__1__g_exposureUAV[10] = _392;
-              __3__39__0__1__g_exposureUAV[11] = (lerp(_395, _392, 0.125f));
+              // RenoDX: >>> [Patch: PerceptualAECarryoverWrite] [Version: 1.12.02]
+              // Description: Store site for the slow-carryover local selected by the
+              // [Patch: PerceptualAECarryoverWrite] block above: slot 11 receives the slow
+              // (positive) adaptation residual in perceptual AE and the vanilla 1/8 low-passed
+              // field history in every other mode. Substituting the _ae_slow_history_write local
+              // for the inline vanilla low-pass expression is this line's only change; in the
+              // non-perceptual modes the stored value is bit-identical to vanilla.
+              __3__39__0__1__g_exposureUAV[11] = _ae_slow_history_write;
+              // RenoDX: <<< [Patch: PerceptualAECarryoverWrite]
               _441 = __3__39__0__1__g_exposureUAV[12];
               __3__39__0__1__g_exposureUAV[12] = (((((saturate(_391 * 100000.0f) * saturate(_302 * _302)) * (((((-2.0f - _299) - _296) + (exp2(_298 * 0.25f) * (_299 + 2.5f))) * exp2(_298 * 0.1f)) + _296)) - _441) * 0.1f) + _441);
-              __3__39__0__1__g_exposureUAV[13] = 1.0f;
+              // RenoDX: >>> [Patch: AutoExposureModeMatchedHistory] [Version: 1.12.02]
+              // Description: Companion write for the mode-matched history check at the top of this
+              // shader. Vanilla stores a plain 1.0 "history is valid" flag in slot 13. Storing
+              // 1 + IMPROVED_AUTO_EXPOSURE instead makes the slot carry which AE mode produced the
+              // surrounding history slots, which is what lets the next frame refuse to reuse state whose
+              // slot meanings do not match the active mode. With every option off this writes 1.0, the
+              // vanilla value.
+              __3__39__0__1__g_exposureUAV[13] = 1.0f + IMPROVED_AUTO_EXPOSURE;
+              // RenoDX: <<< [Patch: AutoExposureModeMatchedHistory]
               __3__39__0__1__g_exposureUAV[14] = _196;
               __3__39__0__1__g_exposureUAV[15] = _197;
               _467 = __3__39__0__1__g_exposureUAV[16];
@@ -628,6 +1051,58 @@ void main(
               }
               __3__39__0__1__g_exposureUAV[16] = _474;
               __3__39__0__1__g_exposureUAV[17] = (_474 / max(1e-09f, _467));
+              // RenoDX: >>> [Patch: SlowExposureForGlare] [Version: 1.12.02]
+              // Description: Bloom, lens flare and histogram-driven auto white balance all read the live
+              // exposure scalar. Because that scalar is itself derived from the frame those effects
+              // brighten, the loop is self-reinforcing: glare raises measured luminance, exposure reacts,
+              // glare changes again, and foggy or interior scenes end up shimmering. This publishes a
+              // heavily low-passed copy of the exposure into slot 18 and a low-passed copy of the target
+              // luminance into slot 19; the glare consumers read slot 18 instead of the fast state, which
+              // breaks the feedback path while leaving the actual scene exposure untouched. Slot 19 is
+              // also the previous-target source for the target smoothing block near the top of this
+              // shader. Both slots are only seeded from history when the mode-matched history check says
+              // the stored state belongs to the active mode; otherwise they start from the current value.
+              // Neither slot is written in vanilla mode, so consumers fall back to the fast state there.
+              // alongside the target-luminance log-space filter as part of the bloom-jitter/glare-shimmer
+              // campaign. The author's original comment: "This stops vanilla exposure + glare feedback
+              // loop that causes bloom shimmer." (The unpredictable flaring of bright glare sources in
+              // fog is later analysis of the same loop, not the author's wording.)
+              // Frame-rate independence (1.16.00): both filters below convert a time constant into a
+              // per-frame blend weight with 1 - exp(-dt / tau), using the engine frame delta
+              // _timeNoScale.z. The same form is used by native code in this shader and by the target
+              // smoothing block earlier in this file. Previously these were fixed per-frame weights
+              // (0.05 and 0.08), which made the settling time depend on frame rate: the same scene
+              // reached ~63% of a step in 0.65 s at 30 FPS but 0.16 s at 120 FPS, so glare bloomed in
+              // and out at visibly different speeds on different hardware and the low-pass stopped
+              // suppressing the feedback loop it exists to damp once frame rates got high. The time
+              // constants are chosen so the response is unchanged at 60 FPS (0.325 s reproduces 0.05
+              // and 0.2 s reproduces 0.08 to within 0.1%); above and below 60 FPS the filter now holds
+              // that same wall-clock response instead of scaling with frame rate. The weights are
+              // saturated because these values persist in the exposure UAV across frames, so a
+              // negative or out-of-range weight from a bad delta would corrupt the filter state
+              // permanently rather than for one frame.
+              [branch]
+              if ((IMPROVED_AUTO_EXPOSURE == 1) || (IMPROVED_AUTO_EXPOSURE == 2)) {
+                float prevSlowExp = __3__39__0__1__g_exposureUAV[18];
+                float slowSeed =
+                    (_ae_can_reuse_history && prevSlowExp > 0.0001f && !isnan(prevSlowExp) && !isinf(prevSlowExp))
+                        ? prevSlowExp
+                        : _419;
+                float slowTau = saturate(1.0f - exp(-_timeNoScale.z / 0.325f));
+                float slowExp = lerp(slowSeed, _419, slowTau);
+                __3__39__0__1__g_exposureUAV[18] = slowExp;
+                float targetSource = _smoothed_target_yf;
+                float prevSlowTarget = __3__39__0__1__g_exposureUAV[19];
+                float targetSeed =
+                    (_ae_can_reuse_history && prevSlowTarget > 0.0001f && !isnan(prevSlowTarget) &&
+                     !isinf(prevSlowTarget))
+                        ? prevSlowTarget
+                        : targetSource;
+                float slowTargetTau = saturate(1.0f - exp(-_timeNoScale.z / 0.2f));
+                float slowTarget = lerp(targetSeed, targetSource, slowTargetTau);
+                __3__39__0__1__g_exposureUAV[19] = slowTarget;
+              }
+              // RenoDX: <<< [Patch: SlowExposureForGlare]
               break;
             }
             break;

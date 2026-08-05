@@ -33,8 +33,6 @@ float MoonBrightnessMultiplier(float aeDynamismHigh, float moonBrightness) {
   return moonBrightness * aeCompensation;
 }
 
-// RenoDX: >>> [Patch: StylizedMoonPhase] [Version: 1.10-family]
-// Description: Adds a stylized, entirely unrealistic phase/eclipse treatment for the visible moon disk. The game provides sun/moon directions for physical shading, but those vectors can collapse to an always-full moon for lighting; this block maps the Stylized Lunar Phase / Eclipse slider from 0 = no crescent to 200 = full eclipse by sweeping a curved overlapping-disc shadow across the moon. It softens the curved terminator, adds restrained violet earthshine on the shadowed side, and turns the final 180..200 range into a stylized eclipse silhouette with a blood-copper lunar tint, pearly rim, faint chromosphere color, and brief edge beads.
 float3 RenoDXApplyStylizedMoonPhase(
     float3 sunDir,
     float3 moonDir,
@@ -122,6 +120,5 @@ float3 RenoDXApplyStylizedMoonPhase(
 
   return lerp(float3(litLight, litLight, litLight), stylizedRgb, phaseStrength);
 }
-// RenoDX: <<< [Patch: StylizedMoonPhase]
 
 #endif  // SRC_CRIMSONDESERT_SKY_ATMOSPHERIC_MOON_COMMON_HLSLI_

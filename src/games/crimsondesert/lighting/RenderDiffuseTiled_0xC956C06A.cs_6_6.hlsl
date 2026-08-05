@@ -5402,6 +5402,30 @@ void main(
     _4003 = (((_3985 * 0.61312f) + (_3991 * 0.33951f)) + (_3997 * 0.04737f)) * _3800;
     _4009 = (((_3985 * 0.0702f) + (_3991 * 0.91636f)) + (_3997 * 0.01345f)) * _3800;
     _4015 = (((_3985 * 0.02062f) + (_3991 * 0.10958f)) + (_3997 * 0.8698f)) * _3800;
+    // RenoDX: >>> [Patch: DawnDuskDirectLightTint] [Version: 1.16.00]
+    // Description: Applies the weather-driven dawn/dusk hue shift to the active sun or moon colour. Vanilla
+    //              reddens direct light only through atmospheric transmittance, which leaves twilight
+    //              sunlight closer to neutral than the sky it arrives through, so lit surfaces read cool
+    //              against a warm horizon. This shifts the direct light in LMS toward the current dawn/dusk
+    //              weather preset. The helper attenuates that shift to a tenth of the inscatter shift
+    //              because direct light is high energy and feeds the BRDF on every surface, and it clamps
+    //              the result to non-negative.
+    //              Placed immediately before the Purkinje shift and after the native cloud and atmosphere
+    //              transforms, so the ordering is physical: the atmosphere colours the light, then the
+    //              scotopic response reacts to the light that actually arrives. It is also before the scene
+    //              shadow and ambient-occlusion channels are consumed, matching the Purkinje placement.
+    //              Triple-gated and inert by default: DAWN_DUSK_IMPROVEMENTS here, the helper returns its
+    //              input unchanged when DawnDuskFactor is 0 (outside the twilight window) or when the
+    //              weather preset is identity, and CUSTOM_WEATHER_EDITING additionally requires Ray
+    //              Reconstruction (shared.h). Off is bit-exact vanilla.
+    if (DAWN_DUSK_IMPROVEMENTS == 1.f) {
+      float3 _rndx_dd_direct = WeatherDirectLightCorrection(
+          float3(_4003, _4009, _4015), DawnDuskFactor(_sunDirection.y));
+      _4003 = _rndx_dd_direct.x;
+      _4009 = _rndx_dd_direct.y;
+      _4015 = _rndx_dd_direct.z;
+    }
+    // RenoDX: <<< [Patch: DawnDuskDirectLightTint]
     // RenoDX: >>> [Patch: PurkinjeDirectLight] [Version: 1.16.00]
     // Description: Applies the scotopic direct-light shift only after the active sun or moon color has
     //              passed through the native cloud and atmosphere transforms and before scene shadow or

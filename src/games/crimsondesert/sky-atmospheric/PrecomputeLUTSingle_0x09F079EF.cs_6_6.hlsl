@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared spectral and/or Dawn/Dusk helpers required by this shader's owned patch families.
+#include "sky_spectral_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<float2> __3__36__0__0__g_texNetDensity : register(t36, space36);
 
 RWTexture3D<float4> __3__48__0__1__g_texPrecomputedLUTSingleRayleighUAV : register(u0, space48);
@@ -346,9 +350,19 @@ void main(
       // [sem: _3__36__0__0__g_texNetDensity_sampleLod]
       _198 = __3__36__0__0__g_texNetDensity.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(((exp2(log2(saturate((_157 + -16.0f) / _37)) * 0.5f) * 0.96875f) + 0.015625f), _187), 0.0f);
       _206 = ((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * _198.y;  // [sem: _3__36__0__0__g_texNetDensity_sampleLod_derived]
-      _220 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f)) * _198.x) + _206) * -1.442695f);
-      _230 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f)) * _198.x) + _206) * -1.442695f);
-      _239 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f)) * _198.x) + _206) * -1.442695f);
+      // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+      // Description: Hoists the fused order-1 packed Rayleigh coefficients into exact RGB locals, gates red/green reconstruction from blue, and routes the same three native extinction rows through the gated ozone constants.
+      float _rndx_rayleigh_r = ((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f;
+      float _rndx_rayleigh_g = ((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f;
+      float _rndx_rayleigh_b = ((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f;
+      if (SKY_SCATTERING) {
+        _rndx_rayleigh_r = _rndx_rayleigh_b * SKY_RAYLEIGH_CH1;
+        _rndx_rayleigh_g = _rndx_rayleigh_b * SKY_RAYLEIGH_CH2;
+      }
+      _220 = exp2((((_rndx_rayleigh_r + (_ozoneRatio * SKY_OZONE_1)) * _198.x) + _206) * -1.442695f);
+      _230 = exp2((((_rndx_rayleigh_g + (_ozoneRatio * SKY_OZONE_2)) * _198.x) + _206) * -1.442695f);
+      _239 = exp2((((_rndx_rayleigh_b + (_ozoneRatio * SKY_OZONE_3)) * _198.x) + _206) * -1.442695f);
+      // RenoDX: <<< [Patch: SkySpectralRayleigh]
       _247 = 0.0f;
       _248 = 0.0f;
       _249 = 0.0f;
@@ -393,11 +407,21 @@ void main(
         _356 = ((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f;
         _360 = ((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f;
         _363 = ((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f;
+        // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+        // Description: Overwrites only loop-site red and green coefficients from the exact native blue reference under the Sky Scattering gate; Off leaves the three preceding native unpack assignments untouched.
+        if (SKY_SCATTERING) {
+          _356 = _363 * SKY_RAYLEIGH_CH1;
+          _360 = _363 * SKY_RAYLEIGH_CH2;
+        }
+        // RenoDX: <<< [Patch: SkySpectralRayleigh]
         _365 = _mieAerosolDensity * 2e-05f;
         _370 = ((_mieAerosolAbsorption + 1.0f) * _365) * (_349 + _336.y);
-        _378 = exp2((((_356 + (_ozoneRatio * 2.0556001e-06f)) * _350) + _370) * -1.442695f);
-        _384 = exp2((((_360 + (_ozoneRatio * 4.9788005e-06f)) * _350) + _370) * -1.442695f);
-        _390 = exp2((((_363 + (_ozoneRatio * 2.1360002e-07f)) * _350) + _370) * -1.442695f);
+        // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.16.00]
+        // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
+        _378 = exp2((((_356 + (_ozoneRatio * SKY_OZONE_1)) * _350) + _370) * -1.442695f);
+        _384 = exp2((((_360 + (_ozoneRatio * SKY_OZONE_2)) * _350) + _370) * -1.442695f);
+        _390 = exp2((((_363 + (_ozoneRatio * SKY_OZONE_3)) * _350) + _370) * -1.442695f);
+        // RenoDX: <<< [Patch: SkySpectralOzone]
         _391 = _378 * _281;
         _392 = _384 * _281;
         _393 = _390 * _281;

@@ -34,6 +34,10 @@ float hdr_settings_toggle = 0.f;
 
 bool debug = false;
 
+// Master state for the Off preset. While this is 0 the addon declines every shader replacement, so
+// the game's own pipelines run and the few hooks that are not replacements stand down as well.
+float renodx_active = 1.f;
+
 // VRS is always disabled — forces full resolution 1x1 shading rate
 // Decomp breaks shaders that use VRS so we hardcode to avoid issues
 // with missing or transparent shaders like foliage
@@ -57,6 +61,10 @@ static std::mutex vrs_resolve_mutex;
 
 // Pre draw hook: inject RSSetShadingRate(1X1, {OVERRIDE, OVERRIDE}) to disable per primitive VRS
 static void OnVRSPreDraw(reshade::api::command_list* cmd_list) {
+  // Not a shader replacement, so the master gate has to be checked here. Ceasing to issue the
+  // override is enough to restore native VRS: a reset command list defaults to 1X1 with
+  // {PASSTHROUGH, PASSTHROUGH}, which forwards the game's per-primitive and per-tile rates.
+  if (renodx_active == 0.f) return;
   if (cmd_list->get_device()->get_api() != reshade::api::device_api::d3d12) return;
   if (disable_vrs == 0.f) return;
 
@@ -288,9 +296,25 @@ void AttachUIShaderDrawGate(renodx::mods::shader::CustomShaders& shaders, uint32
 
   auto previous_on_draw = std::move(it->second.on_draw);
   it->second.on_draw = [previous_on_draw = std::move(previous_on_draw)](reshade::api::command_list* cmd_list) {
-    if (disable_ui_shaders != 0.f) return false;
+    // on_draw runs before on_replace and can skip the draw outright, so the master gate cannot
+    // reach this through the replacement veto and is checked directly.
+    if (renodx_active != 0.f && disable_ui_shaders != 0.f) return false;
     return previous_on_draw == nullptr || previous_on_draw(cmd_list);
   };
+}
+
+// Declines every replacement while the master is off, which leaves the game's own pipeline bound and
+// its native shader running. Applied last so it wraps the draw detectors rather than the reverse: the
+// inner callback still runs, so Ray Reconstruction and night-transition detection keep tracking while
+// off and the scene comes back as it was instead of re-converging over several seconds.
+void AttachReplacementMasterGate(renodx::mods::shader::CustomShaders& shaders) {
+  for (auto& [hash, shader] : shaders) {
+    auto previous_on_replace = std::move(shader.on_replace);
+    shader.on_replace = [previous_on_replace = std::move(previous_on_replace)](reshade::api::command_list* cmd_list) {
+      const bool replace = previous_on_replace == nullptr || previous_on_replace(cmd_list);
+      return renodx_active != 0.f && replace;
+    };
+  }
 }
 
 renodx::mods::shader::CustomShaders custom_shaders = [] {
@@ -583,6 +607,8 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
        }) {
     AttachUIShaderDrawGate(shaders, hash);
   }
+
+  AttachReplacementMasterGate(shaders);
 
   return shaders;
 }();
@@ -2039,10 +2065,25 @@ renodx::utils::settings::Settings settings = {
         .section = "About",
         .is_visible = []() { return current_settings_mode == basic_group; },
     },
+    // Master state, kept last on purpose: loading a preset writes settings in list order, so every
+    // feature is restored before this reopens the gate and no frame sees a half-loaded preset.
+    // Presets written before this key existed fall back to the active default.
+    new renodx::utils::settings::Setting{
+        .key = "RenoDXActive",
+        .binding = &renodx_active,
+        .value_type = renodx::utils::settings::SettingValueType::BOOLEAN,
+        .default_value = 1.f,
+        .can_reset = false,
+        .label = "RenoDX Active",
+        .is_visible = []() { return false; },
+    },
 };
 
 void OnPresetOff() {
   renodx::utils::settings::UpdateSettings({
+      // First in the batch so replacements stop before the individual values are neutralized;
+      // otherwise draw threads briefly see active replacements running against vanilla values.
+      {"RenoDXActive", 0.f},
       {"ToneMapType", 0.f},
       {"ToneMapPeakNits", 1000.f},
       {"ToneMapGameNits", 203.f},
@@ -2287,6 +2328,13 @@ BOOL APIENTRY DllMain(HMODULE h_module, DWORD fdw_reason, LPVOID lpv_reserved) {
 
       renodx::mods::shader::allow_multiple_push_constants = true;
       renodx::mods::shader::force_pipeline_cloning = true;
+
+      // Replacement must be owned by the per-draw path, which is the only one that consults
+      // on_replace and therefore the only one the master gate can reach. The bind-time path applies
+      // replacements straight from OnBindPipeline. mods::shader::Use clears this itself, but only
+      // after utils::shader::Use has already published the value to cross-addon shared state, so
+      // setting it here — before either runs — is what actually takes effect.
+      renodx::utils::shader::use_replace_on_bind = false;
 
       break;
     case DLL_PROCESS_DETACH:

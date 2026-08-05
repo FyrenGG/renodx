@@ -1,0 +1,254 @@
+Texture2D<float4> __3__36__0__0__g_sceneColor : register(t11, space36);
+
+cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
+  float4 _time;
+  float4 _timeNoScale;
+  uint4 _frameNumber;
+  float4 _screenSizeAndInvSize;
+  float4 _bufferSizeAndInvSize;
+  float4 _hiZUVScaleAndInvScale;
+  float4 _resolutionScale;
+  float4 _temporalReprojectionParams;
+  float4 _viewPos;
+  float4 _viewDir;
+  column_major float4x4 _viewProj;
+  column_major float4x4 _viewProjNoJitter;
+  column_major float4x4 _viewProjRelative;
+  column_major float4x4 _viewProjRelativeNoJitter;
+  column_major float4x4 _invViewProj;
+  column_major float4x4 _invViewProjRelative;
+  column_major float4x4 _invViewProjRelativeNoJitter;
+  column_major float4x4 _viewProjRelativeOrtho;
+  float4 _sunDirection;
+  float4 _moonDirection;
+  float4 _moonRight;
+  float4 _moonUp;
+  float4 _ssaoRandomDirection[16];
+  column_major float4x4 _view;
+  column_major float4x4 _viewRelative;
+  column_major float4x4 _viewRelativePrev;
+  column_major float4x4 _proj;
+  column_major float4x4 _projNoJitter;
+  float4 _viewPosPrev;
+  column_major float4x4 _viewProjNoJitterPrev;
+  column_major float4x4 _viewProjRelativePrev;
+  column_major float4x4 _viewProjRelativeNoJitterPrev;
+  column_major float4x4 _invViewProjPrev;
+  column_major float4x4 _invViewProjRelativePrev;
+  column_major float4x4 _projToPrevProj;
+  column_major float4x4 _projToPrevProjNoTranslation;
+  column_major float4x4 _viewProjectionTexScale;
+  float4 _temporalAAJitter;
+  float4 _temporalAAJitterParams;
+  float4 _frustumPlanes[6];
+  float4 _frustumPlanesPrev[6];
+  float4 _frustumCornerDirs[4];
+  float4 _screenPercentage;
+  float4 _nearFarProj;
+  float4 _renderingOriginPos;
+  float4 _renderingOriginPosPrev;
+  float4 _lodMaskRenderRate;
+  float4 _terrainNormalParams;
+  int4 _hiZMapInfo;
+  int4 _hiZMapInfoCurrent;
+  float4 _treeParams;
+  uint4 _clusterSize;
+  uint4 _globalLightParams;
+  float4 _bevelParams;
+  float4 _variableRateShadingParams;
+  float4 _cavityParams;
+  float4 _customRenderPassSizeInvSize;
+  uint4 _impostorParams;
+  float4 _clusterDecalSizeAndInvSize;
+  uint4 _globalWindParams;
+  float4 _windFluidVolumeParams;
+  float4 _windFluidTextureParams;
+  float4 _raytracingAccelerationStructureOrigin;
+  float4 _debugBaseColor;
+  float4 _debugNormal;
+  float4 _debugMaterial;
+  float4 _debugMultiplier;
+  half4 _debugBaseColor16;
+  half4 _debugNormal16;
+  half4 _debugMaterial16;
+  half4 _debugMultiplier16;
+  float4 _debugCursorWorldPos;
+  uint4 _debugRenderToggle01;
+  uint4 _debugTreeShapeVariation;
+  float4 _positionBasedDynamicsParameter;
+  float _effectiveMetallicForVelvet;
+  float _debugCharacterSnowRate;
+  uint _systemRandomSeed;
+  uint _skinnedMeshDebugFlag;
+  float4 _viewPosShifted;
+  float4 _viewPosShiftedPrev;
+  float4 _viewTileRelativePos;
+  float4 _viewTileRelativePosPrev;
+  int2 _viewTileIndex;
+  int2 _viewTileIndexPrev;
+  float4 _worldVolume;
+  float3 _diffViewPosAccurate;
+  uint _isPhotosensitiveMode_isAllolwBlood;
+  float _earthRadius;
+  float3 _sceneConstantDummy;
+};
+
+cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
+  float4 _postProcessParams : packoffset(c000.x);
+  float4 _postProcessParams1 : packoffset(c001.x);
+  float4 _toneMapParams0 : packoffset(c002.x);
+  float4 _toneMapParams1 : packoffset(c003.x);
+  float4 _colorGradingParams : packoffset(c004.x);
+  float4 _colorCorrectionParams : packoffset(c005.x);
+  float4 _localToneMappingParams : packoffset(c006.x);
+  float4 _etcParams : packoffset(c007.x);
+  float4 _userImageAdjust : packoffset(c008.x);
+  float4 _slopeParams : packoffset(c009.x);
+  float4 _offsetParams : packoffset(c010.x);
+  float4 _powerParams : packoffset(c011.x);
+  int _nightToneParm : packoffset(c012.x);
+  int3 _padding : packoffset(c012.y);
+};
+
+cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
+  float4 _colorBlind0 : packoffset(c000.x);
+  float4 _colorBlind1 : packoffset(c001.x);
+  float4 _colorBlind2 : packoffset(c002.x);
+};
+
+SamplerState __0__4__0__0__g_staticBilinearClamp : register(s3, space4);
+
+SamplerState __0__4__0__0__g_staticPointBlackBorder : register(s11, space4);
+
+// DXIL FirstbitHi: returns bit position counting from MSB (leading zeros count)
+uint firstbithigh_msb(int value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
+uint firstbithigh_msb(uint value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
+
+float4 main(
+  precise noperspective float4 SV_Position : SV_Position,
+  linear float2 TEXCOORD : TEXCOORD
+) : SV_Target {
+  float4 SV_Target;
+  float4 _15;
+  float _38;
+  float _39;
+  float _83;
+  float _84;
+  float _85;
+  float _145;
+  float _146;
+  float _147;
+  float _216;
+  float _272;
+  float _273;
+  float _274;
+  float _49;
+  float _50;
+  float _52;
+  float _53;
+  float _55;
+  float _68;
+  float _70;
+  float _78;
+  float _89;
+  float _90;
+  float _101;
+  float _112;
+  float _123;
+  float _128;
+  float _150;
+  float _152;
+  float _155;
+  float _158;
+  float _161;
+  float _167;
+  float _169;
+  float _170;
+  float _171;
+  float _183;
+  float _193;
+  float _203;
+  float _217;
+  float _219;
+  float _225;
+  _15 = __3__36__0__0__g_sceneColor.Sample(__0__4__0__0__g_staticPointBlackBorder, float2(TEXCOORD.x, TEXCOORD.y));  // [sem: _3__36__0__0__g_sceneColor_sample]
+  if (_postProcessParams.w > 0.0f) {
+    _38 = (((float4)(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(TEXCOORD.x, ((_postProcessParams.w * ((TEXCOORD.y * 0.003f) + -0.0015f)) + TEXCOORD.y)), 0.0f))).z);
+    _39 = (((float4)(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(((_postProcessParams.w * ((TEXCOORD.x * 0.003f) + -0.0015f)) + TEXCOORD.x), TEXCOORD.y), 0.0f))).x);
+  } else {
+    _38 = _15.z;
+    _39 = _15.x;
+  }
+  if (_slopeParams.w > 0.0f) {
+    _49 = ((TEXCOORD.y + 4.0f) * (TEXCOORD.x + 4.0f)) * _time.x;
+    _50 = _49 * 0.7692308f;
+    _52 = frac(abs(_50));
+    _53 = _49 * 0.08130081f;
+    _55 = frac(abs(_53));
+    _68 = ((select((_53 >= (-0.0f - _53)), _55, (-0.0f - _55)) * 1230.0f) + 10.0f) * ((select((_50 >= (-0.0f - _50)), _52, (-0.0f - _52)) * 13.0f) + 1.0f);
+    _70 = frac(abs(_68));
+    _78 = ((0.0075000525f - (select((_68 >= (-0.0f - _68)), _70, (-0.0f - _70)) * 0.15f)) * _slopeParams.w) + 1.0f;
+    _83 = (_78 * _38);
+    _84 = (_78 * _15.y);
+    _85 = (_78 * _39);
+  } else {
+    _83 = _38;
+    _84 = _15.y;
+    _85 = _39;
+  }
+  _89 = 1.0f - abs(_etcParams.w);
+  _90 = saturate(_etcParams.w);  // [sem: expr_sat]
+  _101 = (saturate(select((_85 < 0.04045f), (_85 * 0.07739938f), exp2(log2((_85 + 0.055f) * 0.94786733f) * 2.4f))) * _89) + _90;
+  _112 = (saturate(select((_84 < 0.04045f), (_84 * 0.07739938f), exp2(log2((_84 + 0.055f) * 0.94786733f) * 2.4f))) * _89) + _90;
+  _123 = (saturate(select((_83 < 0.04045f), (_83 * 0.07739938f), exp2(log2((_83 + 0.055f) * 0.94786733f) * 2.4f))) * _89) + _90;
+  if (_colorGradingParams.w > 0.0f) {
+    _128 = saturate(_colorGradingParams.w);  // [sem: expr_sat]
+    _145 = (((max(0.0f, (1.0f - _123)) - _123) * _128) + _123);
+    _146 = (((max(0.0f, (1.0f - _112)) - _112) * _128) + _112);
+    _147 = (((max(0.0f, (1.0f - _101)) - _101) * _128) + _101);
+  } else {
+    _145 = _123;
+    _146 = _112;
+    _147 = _101;
+  }
+  _150 = _userImageAdjust.y + 1.0f;
+  _152 = _userImageAdjust.x + 0.5f;
+  _155 = (_150 * (_147 + -0.5f)) + _152;
+  _158 = (_150 * (_146 + -0.5f)) + _152;
+  _161 = (_150 * (_145 + -0.5f)) + _152;
+  _167 = 2.2f / ((min(max(_userImageAdjust.w, -1.0f), 1.0f) * 0.8f) + 2.2f);
+  _169 = (TEXCOORD.x * 2.0f) + -1.0f;
+  _170 = TEXCOORD.y * 2.0f;
+  _171 = 1.0f - _170;
+  _183 = (_projToPrevProj[3].w) + mad((_projToPrevProj[3].z), 1e-07f, mad((_projToPrevProj[3].y), _171, ((_projToPrevProj[3].x) * _169)));
+  _193 = ((mad((_projToPrevProj[0].z), 1e-07f, mad((_projToPrevProj[0].y), _171, ((_projToPrevProj[0].x) * _169))) + (_projToPrevProj[0].w)) / _183) - _169;
+  _203 = ((mad((_projToPrevProj[1].z), 1e-07f, mad((_projToPrevProj[1].y), _171, ((_projToPrevProj[1].x) * _169))) + (_projToPrevProj[1].w)) / _183) - _171;
+  if (_localToneMappingParams.w > 0.0f) {
+    _216 = saturate(1.0f - (sqrt((_203 * _203) + (_193 * _193)) * 2.0f));  // [sem: expr_sat]
+  } else {
+    _216 = 1.0f;  // [sem: expr_sat]
+  }
+  _217 = abs(_169);
+  _219 = abs(_170 + -1.0f);
+  _225 = saturate(1.0f - ((_216 * _postProcessParams.x) * dot(float2(_217, _219), float2(_217, _219))));  // [sem: expr_sat]
+  if (!(SV_Position.y < _viewDir.w)) {
+    if (!(SV_Position.y >= (_screenSizeAndInvSize.y - _viewDir.w))) {
+      _272 = (exp2(log2(saturate(mad(_colorBlind0.z, _161, mad(_colorBlind0.y, _158, (_colorBlind0.x * _155))))) * _167) * _225);
+      _273 = (exp2(log2(saturate(mad(_colorBlind1.z, _161, mad(_colorBlind1.y, _158, (_colorBlind1.x * _155))))) * _167) * _225);
+      _274 = (exp2(log2(saturate(mad(_colorBlind2.z, _161, mad(_colorBlind2.y, _158, (_colorBlind2.x * _155))))) * _167) * _225);
+    } else {
+      _272 = 0.0f;
+      _273 = 0.0f;
+      _274 = 0.0f;
+    }
+  } else {
+    _272 = 0.0f;
+    _273 = 0.0f;
+    _274 = 0.0f;
+  }
+  SV_Target.x = _272;
+  SV_Target.y = _273;
+  SV_Target.z = _274;
+  SV_Target.w = _15.w;
+  return SV_Target;
+}

@@ -1,0 +1,380 @@
+struct TemplatePostProcessStruct {
+  float _parameter;
+};
+
+struct BindlessParameters_TemplatePostProcess {
+  TemplatePostProcessStruct BindlessParameters_TemplatePostProcess;
+};
+
+
+Texture2D<uint2> __3__36__0__0__g_stencil : register(t19, space36);
+
+cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
+  float4 _time : packoffset(c000.x);
+  float4 _timeNoScale : packoffset(c001.x);
+  uint4 _frameNumber : packoffset(c002.x);
+  float4 _screenSizeAndInvSize : packoffset(c003.x);
+  float4 _bufferSizeAndInvSize : packoffset(c004.x);
+  float4 _hiZUVScaleAndInvScale : packoffset(c005.x);
+  float4 _resolutionScale : packoffset(c006.x);
+  float4 _temporalReprojectionParams : packoffset(c007.x);
+  float4 _viewPos : packoffset(c008.x);
+  float4 _viewDir : packoffset(c009.x);
+  column_major float4x4 _viewProj : packoffset(c010.x);
+  column_major float4x4 _viewProjNoJitter : packoffset(c014.x);
+  column_major float4x4 _viewProjRelative : packoffset(c018.x);
+  column_major float4x4 _viewProjRelativeNoJitter : packoffset(c022.x);
+  column_major float4x4 _invViewProj : packoffset(c026.x);
+  column_major float4x4 _invViewProjRelative : packoffset(c030.x);
+  column_major float4x4 _invViewProjRelativeNoJitter : packoffset(c034.x);
+  column_major float4x4 _viewProjRelativeOrtho : packoffset(c038.x);
+  float4 _sunDirection : packoffset(c042.x);
+  float4 _moonDirection : packoffset(c043.x);
+  float4 _moonRight : packoffset(c044.x);
+  float4 _moonUp : packoffset(c045.x);
+  float4 _ssaoRandomDirection[16] : packoffset(c046.x);
+  column_major float4x4 _view : packoffset(c062.x);
+  column_major float4x4 _viewRelative : packoffset(c066.x);
+  column_major float4x4 _viewRelativePrev : packoffset(c070.x);
+  column_major float4x4 _proj : packoffset(c074.x);
+  column_major float4x4 _projNoJitter : packoffset(c078.x);
+  float4 _viewPosPrev : packoffset(c082.x);
+  column_major float4x4 _viewProjNoJitterPrev : packoffset(c083.x);
+  column_major float4x4 _viewProjRelativePrev : packoffset(c087.x);
+  column_major float4x4 _viewProjRelativeNoJitterPrev : packoffset(c091.x);
+  column_major float4x4 _invViewProjPrev : packoffset(c095.x);
+  column_major float4x4 _invViewProjRelativePrev : packoffset(c099.x);
+  column_major float4x4 _projToPrevProj : packoffset(c103.x);
+  column_major float4x4 _projToPrevProjNoTranslation : packoffset(c107.x);
+  column_major float4x4 _viewProjectionTexScale : packoffset(c111.x);
+  float4 _temporalAAJitter : packoffset(c115.x);
+  float4 _temporalAAJitterParams : packoffset(c116.x);
+  float4 _frustumPlanes[6] : packoffset(c117.x);
+  float4 _frustumPlanesPrev[6] : packoffset(c123.x);
+  float4 _frustumCornerDirs[4] : packoffset(c129.x);
+  float4 _screenPercentage : packoffset(c133.x);
+  float4 _nearFarProj : packoffset(c134.x);
+  float4 _renderingOriginPos : packoffset(c135.x);
+  float4 _renderingOriginPosPrev : packoffset(c136.x);
+  float4 _lodMaskRenderRate : packoffset(c137.x);
+  float4 _terrainNormalParams : packoffset(c138.x);
+  int4 _hiZMapInfo : packoffset(c139.x);
+  int4 _hiZMapInfoCurrent : packoffset(c140.x);
+  float4 _treeParams : packoffset(c141.x);
+  uint4 _clusterSize : packoffset(c142.x);
+  uint4 _globalLightParams : packoffset(c143.x);
+  float4 _bevelParams : packoffset(c144.x);
+  float4 _variableRateShadingParams : packoffset(c145.x);
+  float4 _cavityParams : packoffset(c146.x);
+  float4 _customRenderPassSizeInvSize : packoffset(c147.x);
+  uint4 _impostorParams : packoffset(c148.x);
+  float4 _clusterDecalSizeAndInvSize : packoffset(c149.x);
+  uint4 _globalWindParams : packoffset(c150.x);
+  float4 _windFluidVolumeParams : packoffset(c151.x);
+  float4 _windFluidTextureParams : packoffset(c152.x);
+  float4 _raytracingAccelerationStructureOrigin : packoffset(c153.x);
+  float4 _debugBaseColor : packoffset(c154.x);
+  float4 _debugNormal : packoffset(c155.x);
+  float4 _debugMaterial : packoffset(c156.x);
+  float4 _debugMultiplier : packoffset(c157.x);
+  uint2 _debugBaseColor16 : packoffset(c158.x);
+  uint2 _debugNormal16 : packoffset(c158.z);
+  uint2 _debugMaterial16 : packoffset(c159.x);
+  uint2 _debugMultiplier16 : packoffset(c159.z);
+  float4 _debugCursorWorldPos : packoffset(c160.x);
+  uint4 _debugRenderToggle01 : packoffset(c161.x);
+  uint4 _debugTreeShapeVariation : packoffset(c162.x);
+  float4 _positionBasedDynamicsParameter : packoffset(c163.x);
+  float _effectiveMetallicForVelvet : packoffset(c164.x);
+  float _debugCharacterSnowRate : packoffset(c164.y);
+  uint _systemRandomSeed : packoffset(c164.z);
+  uint _skinnedMeshDebugFlag : packoffset(c164.w);
+  float4 _viewPosShifted : packoffset(c165.x);
+  float4 _viewPosShiftedPrev : packoffset(c166.x);
+  float4 _viewTileRelativePos : packoffset(c167.x);
+  float4 _viewTileRelativePosPrev : packoffset(c168.x);
+  int2 _viewTileIndex : packoffset(c169.x);
+  int2 _viewTileIndexPrev : packoffset(c169.z);
+  float4 _worldVolume : packoffset(c170.x);
+  float3 _diffViewPosAccurate : packoffset(c171.x);
+  uint _isPhotosensitiveMode_isAllolwBlood : packoffset(c171.w);
+  float _earthRadius : packoffset(c172.x);
+  float3 _sceneConstantDummy : packoffset(c172.y);
+};
+
+cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
+  float4 _exposure0 : packoffset(c000.x);
+  float4 _exposure1 : packoffset(c001.x);
+  float4 _exposure2 : packoffset(c002.x);
+  float4 _exposure3 : packoffset(c003.x);
+  float4 _exposure4 : packoffset(c004.x);
+};
+
+cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
+  float4 _postProcessParams : packoffset(c000.x);
+  float4 _postProcessParams1 : packoffset(c001.x);
+  float4 _toneMapParams0 : packoffset(c002.x);
+  float4 _toneMapParams1 : packoffset(c003.x);
+  float4 _colorGradingParams : packoffset(c004.x);
+  float4 _colorCorrectionParams : packoffset(c005.x);
+  float4 _localToneMappingParams : packoffset(c006.x);
+  float4 _etcParams : packoffset(c007.x);
+  float4 _userImageAdjust : packoffset(c008.x);
+  float4 _slopeParams : packoffset(c009.x);
+  float4 _offsetParams : packoffset(c010.x);
+  float4 _powerParams : packoffset(c011.x);
+  int _nightToneParm : packoffset(c012.x);
+  int3 _padding : packoffset(c012.y);
+};
+
+cbuffer __3__1__0__0__PostProcessMaterialIndex : register(b2, space1) {
+  int _materialIndex : packoffset(c000.x);
+  int _passIndex : packoffset(c000.y);
+};
+
+cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
+  float4 _colorBlind0 : packoffset(c000.x);
+  float4 _colorBlind1 : packoffset(c001.x);
+  float4 _colorBlind2 : packoffset(c002.x);
+};
+
+typedef BindlessParameters_TemplatePostProcess BindlessParameters_TemplatePostProcess_t;
+ConstantBuffer<BindlessParameters_TemplatePostProcess_t> BindlessParameters_TemplatePostProcess[] : register(b0, space100);
+
+// DXIL FirstbitHi: returns bit position counting from MSB (leading zeros count)
+uint firstbithigh_msb(int value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
+uint firstbithigh_msb(uint value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
+
+float4 main(
+  precise noperspective float4 SV_Position : SV_Position,
+  linear float2 TEXCOORD : TEXCOORD
+) : SV_Target {
+  float4 SV_Target;
+  int _17;
+  float _25;
+  uint _26;
+  float _45;
+  float _237;
+  float _238;
+  float _239;
+  float _332;
+  float _333;
+  float _334;
+  float _388;
+  float _389;
+  float _390;
+  float _409;
+  float _410;
+  float _411;
+  float _441;
+  float _442;
+  float _443;
+  float _457;
+  float _458;
+  float _459;
+  bool _48;
+  float _54;
+  float _68;
+  float _80;
+  float _92;
+  float _93;
+  float _97;
+  float _100;
+  float _103;
+  float _110;
+  float _117;
+  float _124;
+  float _125;
+  float _126;
+  float _127;
+  float _128;
+  float _129;
+  float _130;
+  float _146;
+  float _162;
+  float _178;
+  float _179;
+  float _180;
+  float _181;
+  float _182;
+  float _199;
+  float _200;
+  float _201;
+  float _202;
+  float _205;
+  float _208;
+  float _212;
+  float _216;
+  float _220;
+  float _240;
+  float _252;
+  float _264;
+  float _276;
+  float _283;
+  float _290;
+  float _297;
+  float _303;
+  float _304;
+  float _306;
+  float _308;
+  float _310;
+  float _315;
+  float _336;
+  float _338;
+  float _341;
+  float _344;
+  float _347;
+  float _353;
+  float _395;
+  float _398;
+  float _404;
+  float _446;
+  float _463;
+  float _467;
+  float _471;
+  _17 = WaveReadLaneFirst(_materialIndex);
+  _25 = WaveReadLaneFirst(BindlessParameters_TemplatePostProcess[((int)((uint)((uint)(select(((uint)_17 < (uint)170000), _17, 0))) + (uint)(0)))].BindlessParameters_TemplatePostProcess._parameter);
+  _26 = (uint)(SV_Position.y);
+  if (_etcParams.y == 1.0f) {
+    _45 = (((float)((uint)((uint)((((uint2)(__3__36__0__0__g_stencil.Load(int3(((int)((uint)(SV_Position.x))), _26, 0)))).x) & 127)))) + 0.5f);
+  } else {
+    _45 = select(isnan(_postProcessParams.x), 0.0f, 1.0f);
+  }
+  _48 = (_localToneMappingParams.w > 0.0f);
+  if (_48) {
+    _54 = _exposure0.x * _userImageAdjust.z;
+    _68 = exp2(_powerParams.x * log2(max(0.0f, (((_54 * max(0.0f, _25)) * _slopeParams.x) + _offsetParams.x))));
+    _80 = exp2(log2(max(0.0f, (((_slopeParams.y * _54) * max(0.0f, (_25 * 0.99999f))) + _offsetParams.y))) * _powerParams.y);
+    _92 = exp2(log2(max(0.0f, (((_slopeParams.z * _54) * max(0.0f, (_25 * 0.99999994f))) + _offsetParams.z))) * _powerParams.z);
+    _93 = dot(float3(_68, _80, _92), float3(0.212671f, 0.71516f, 0.072169f));
+    _97 = ((_68 - _93) * _powerParams.w) + _93;
+    _100 = ((_80 - _93) * _powerParams.w) + _93;
+    _103 = ((_92 - _93) * _powerParams.w) + _93;
+    _110 = min(max(log2(mad(_103, 0.079223745f, mad(_100, 0.0784336f, (_97 * 0.84247905f)))), -12.47393f), 4.026069f) + 12.47393f;
+    _117 = min(max(log2(mad(_103, 0.07916613f, mad(_100, 0.87846863f, (_97 * 0.042328242f)))), -12.47393f), 4.026069f) + 12.47393f;
+    _124 = min(max(log2(mad(_103, 0.879143f, mad(_100, 0.0784336f, (_97 * 0.042375654f)))), -12.47393f), 4.026069f) + 12.47393f;
+    _125 = _110 * 0.060606062f;
+    _126 = _117 * 0.060606062f;
+    _127 = _124 * 0.060606062f;
+    _128 = _125 * _125;
+    _129 = _126 * _126;
+    _130 = _127 * _127;
+    _146 = min(0.0f, (-0.0f - (((_110 * 0.0072181816f) + ((_128 * 0.4298f) + (((_128 * _128) * ((31.96f - (_110 * 2.4327273f)) + (_128 * 15.5f))) - ((_110 * 0.41624245f) * _128)))) + -0.00232f)));
+    _162 = min(0.0f, (-0.0f - (((_117 * 0.0072181816f) + ((_129 * 0.4298f) + (((_129 * _129) * ((31.96f - (_117 * 2.4327273f)) + (_129 * 15.5f))) - ((_117 * 0.41624245f) * _129)))) + -0.00232f)));
+    _178 = min(0.0f, (-0.0f - (((_124 * 0.0072181816f) + ((_130 * 0.4298f) + (((_130 * _130) * ((31.96f - (_124 * 2.4327273f)) + (_130 * 15.5f))) - ((_124 * 0.41624245f) * _130)))) + -0.00232f)));
+    _179 = -0.0f - _146;
+    _180 = -0.0f - _162;
+    _181 = -0.0f - _178;
+    _182 = dot(float3(_179, _180, _181), float3(0.2126f, 0.7152f, 0.0722f));
+    if (_nightToneParm == 1) {
+      _199 = exp2(exp2(log2(abs((_time.w * 0.11666667f) + -1.4f)) * 8.0f) * -1.442695f) + 1.0f;
+      _200 = -0.79999995f / _199;
+      _201 = -1.2f / _199;
+      _202 = 0.20000005f / _199;
+      _205 = saturate((_exposure2.x + -0.6f) * 0.10638298f);  // [sem: expr_sat]
+      _208 = saturate((_exposure2.x + -0.1f) * 2.0f);  // [sem: expr_sat]
+      _212 = (_200 + 1.4f) + (_208 * (-0.39999998f - _200));
+      _216 = (_201 + 1.6f) + (_208 * (-0.6f - _201));
+      _220 = (_202 + 0.9f) + (_208 * (0.5f - _202));
+      _237 = (lerp(_220, 1.4f, _205));  // [sem: blended]
+      _238 = (lerp(_212, 1.0f, _205));  // [sem: blended]
+      _239 = (lerp(_216, 1.2f, _205));  // [sem: blended]
+    } else {
+      _237 = 1.4f;  // [sem: blended]
+      _238 = 1.0f;  // [sem: blended]
+      _239 = ((saturate((_exposure2.x + -3.0f) * 0.14285715f) * 0.20000005f) + 1.0f);  // [sem: blended]
+    }
+    _240 = 1.0f - _239;
+    _252 = ((exp2(log2(((saturate((_146 * _146) * _179) * _240) + _239) * _179) * _238) - _182) * _237) + _182;
+    _264 = ((exp2(log2(((saturate((_162 * _162) * _180) * _240) + _239) * _180) * _238) - _182) * _237) + _182;
+    _276 = ((exp2(log2(((saturate((_178 * _178) * _181) * _240) + _239) * _181) * _238) - _182) * _237) + _182;
+    _283 = saturate(exp2(log2(mad(_276, -0.09902974f, mad(_264, -0.09802088f, (_252 * 1.196879f)))) * 2.2f));  // [sem: expr_sat]
+    _290 = saturate(exp2(log2(mad(_276, -0.098961174f, mad(_264, 1.1519032f, (_252 * -0.052896854f)))) * 2.2f));  // [sem: expr_sat]
+    _297 = saturate(exp2(log2(mad(_276, 1.1510737f, mad(_264, -0.09804345f, (_252 * -0.052971635f)))) * 2.2f));  // [sem: expr_sat]
+    if (_etcParams.z == 0.0f) {
+      _303 = 1.0f - abs(_etcParams.w);
+      _304 = saturate(_etcParams.w);  // [sem: expr_sat]
+      _306 = (_303 * _283) + _304;
+      _308 = (_303 * _290) + _304;
+      _310 = (_303 * _297) + _304;
+      if (_colorGradingParams.w > 0.0f) {
+        _315 = saturate(_colorGradingParams.w);  // [sem: expr_sat]
+        _332 = (((max(0.0f, (1.0f - _310)) - _310) * _315) + _310);
+        _333 = (((max(0.0f, (1.0f - _308)) - _308) * _315) + _308);
+        _334 = (((max(0.0f, (1.0f - _306)) - _306) * _315) + _306);
+      } else {
+        _332 = _310;
+        _333 = _308;
+        _334 = _306;
+      }
+      _336 = _userImageAdjust.y + 1.0f;
+      _338 = _userImageAdjust.x + 0.5f;
+      _341 = ((_334 + -0.5f) * _336) + _338;
+      _344 = ((_333 + -0.5f) * _336) + _338;
+      _347 = ((_332 + -0.5f) * _336) + _338;
+      _353 = 2.2f / ((min(max(_userImageAdjust.w, -1.0f), 1.0f) * 0.8f) + 2.2f);
+      _388 = exp2(log2(saturate(mad(_colorBlind2.z, _347, mad(_colorBlind2.y, _344, (_colorBlind2.x * _341))))) * _353);
+      _389 = exp2(log2(saturate(mad(_colorBlind1.z, _347, mad(_colorBlind1.y, _344, (_colorBlind1.x * _341))))) * _353);
+      _390 = exp2(log2(saturate(mad(_colorBlind0.z, _347, mad(_colorBlind0.y, _344, (_colorBlind0.x * _341))))) * _353);
+    } else {
+      _388 = _297;
+      _389 = _290;
+      _390 = _283;
+    }
+  } else {
+    _388 = _25;
+    _389 = _25;
+    _390 = _25;
+  }
+  if (_etcParams.y > 1.0f) {
+    _395 = abs((TEXCOORD.x * 2.0f) + -1.0f);
+    _398 = abs((TEXCOORD.y * 2.0f) + -1.0f);
+    _404 = saturate(1.0f - (saturate(_etcParams.y + -1.0f) * dot(float2(_395, _398), float2(_395, _398))));  // [sem: expr_sat]
+    _409 = (_404 * _388);
+    _410 = (_404 * _389);
+    _411 = (_404 * _390);
+  } else {
+    _409 = _388;
+    _410 = _389;
+    _411 = _390;
+  }
+  if (_48 && (_etcParams.z > 0.0f)) {
+    _441 = select((_411 <= 0.0031308f), (_411 * 12.92f), (((pow(_411, 0.41666666f)) * 1.055f) + -0.055f));
+    _442 = select((_410 <= 0.0031308f), (_410 * 12.92f), (((pow(_410, 0.41666666f)) * 1.055f) + -0.055f));
+    _443 = select((_409 <= 0.0031308f), (_409 * 12.92f), (((pow(_409, 0.41666666f)) * 1.055f) + -0.055f));
+  } else {
+    _441 = _411;
+    _442 = _410;
+    _443 = _409;
+  }
+  if (!(!(_etcParams.y >= 1.0f))) {
+    _446 = (float)((uint)((uint)(_26)));
+    if (!(_446 < _viewDir.w)) {
+      if (!(!(_446 >= (_screenSizeAndInvSize.y - _viewDir.w)))) {
+        _457 = 0.0f;
+        _458 = 0.0f;
+        _459 = 0.0f;
+      } else {
+        _457 = _441;
+        _458 = _442;
+        _459 = _443;
+      }
+    } else {
+      _457 = 0.0f;
+      _458 = 0.0f;
+      _459 = 0.0f;
+    }
+  } else {
+    _457 = _441;
+    _458 = _442;
+    _459 = _443;
+  }
+  _463 = exp2(log2(_457 * 0.0001f) * 0.15930176f);
+  _467 = exp2(log2(_458 * 0.0001f) * 0.15930176f);
+  _471 = exp2(log2(_459 * 0.0001f) * 0.15930176f);
+  SV_Target.x = exp2(log2((1.0f / ((_463 * 18.6875f) + 1.0f)) * ((_463 * 18.851562f) + 0.8359375f)) * 78.84375f);
+  SV_Target.y = exp2(log2((1.0f / ((_467 * 18.6875f) + 1.0f)) * ((_467 * 18.851562f) + 0.8359375f)) * 78.84375f);
+  SV_Target.z = exp2(log2((1.0f / ((_471 * 18.6875f) + 1.0f)) * ((_471 * 18.851562f) + 0.8359375f)) * 78.84375f);
+  SV_Target.w = _45;
+  return SV_Target;
+}

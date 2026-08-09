@@ -12,6 +12,7 @@
 
 #include <d3d12.h>
 #include <deps/imgui/imgui.h>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <include/reshade.hpp>
@@ -612,6 +613,39 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
 
   return shaders;
 }();
+
+bool IsRunningUnderWine() {
+  const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  return ntdll != nullptr
+         && GetProcAddress(ntdll, "wine_get_version") != nullptr;
+}
+
+void DisableWineWorldLoadingReplacements() {
+  if (!IsRunningUnderWine()) return;
+
+  // Wine/vkd3d crashes while creating replacement pipelines for these 1.18
+  // WorldLoading variants. Keep them packaged for Windows, but use vanilla under Wine.
+  constexpr std::array<uint32_t, 8> world_loading_hashes = {
+      0xB24E719Bu,
+      0x19CCC020u,
+      0x8D4BAC55u,
+      0x498E286Cu,
+      0x4CFCB0B2u,
+      0xCB9283C4u,
+      0x7AFF85FBu,
+      0x9D80489Au,
+  };
+
+  std::size_t removed_count = 0;
+  for (const uint32_t hash : world_loading_hashes) {
+    removed_count += custom_shaders.erase(hash);
+  }
+
+  std::stringstream message;
+  message << "Wine detected: disabled " << removed_count
+          << " WorldLoading shader replacements";
+  reshade::log::message(reshade::log::level::info, message.str().c_str());
+}
 
 const std::string build_date = __DATE__;
 const std::string build_time = __TIME__;
@@ -2359,6 +2393,7 @@ BOOL APIENTRY DllMain(HMODULE h_module, DWORD fdw_reason, LPVOID lpv_reserved) {
   switch (fdw_reason) {
     case DLL_PROCESS_ATTACH:
       if (!reshade::register_addon(h_module)) return FALSE;
+      DisableWineWorldLoadingReplacements();
       // while (IsDebuggerPresent() == 0) Sleep(100);
 
       reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);  // Vendor detection

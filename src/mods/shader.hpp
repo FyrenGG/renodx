@@ -192,7 +192,27 @@ struct __declspec(uuid("018e7b9c-23fd-7863-baf8-a8dad2a6db9d")) DeviceData {
   uint32_t expected_constant_buffer_space = 0;
   std::vector<reshade::api::descriptor_range> injected_descriptor_ranges;
   std::optional<reshade::api::pipeline_layout_param> injected_descriptor_param = std::nullopt;
+
+  // D3D12 binds the shader injection block through a root constant buffer view instead of root
+  // constants. A root descriptor costs two dwords whatever the payload holds, so the size of
+  // ShaderInjectData stops competing with the game for the 64-dword root signature budget. Left
+  // null on every other API, which keeps their existing push-constant path unchanged.
+  reshade::api::resource injection_buffer = {0u};
+  // Last contents written to that buffer. The upload runs once per present and only when this
+  // differs, so a frame that changes no setting does no work.
+  std::vector<float> injection_buffer_contents;
+  bool injection_buffer_upload_failed = false;
 };
+
+// Root descriptors are two dwords; root constants are one per float.
+static constexpr uint32_t INJECTION_DESCRIPTOR_DWORD_COST = 2u;
+
+// Constant buffer views must start on a 256 byte boundary.
+static constexpr uint64_t INJECTION_BUFFER_ALIGNMENT = 256u;
+
+inline bool UsesInjectionBuffer(const DeviceData* data) {
+  return data != nullptr && data->injection_buffer.handle != 0u;
+}
 
 static void OnInitDevice(reshade::api::device* device) {
   std::stringstream s;
@@ -284,6 +304,39 @@ static void OnInitDevice(reshade::api::device* device) {
       // Guard against unsupported APIs
       break;
   }
+
+  // Only D3D12 has the 64-dword root signature budget that the injection block can exhaust, and
+  // only D3D12 reaches the root-constant path at all: D3D9 through D3D11 already have push
+  // constants emulated over a buffer, and Vulkan keeps its own push-constant path.
+  if (device->get_api() == reshade::api::device_api::d3d12 && shader_injection_size != 0u) {
+    const uint64_t byte_size = ((static_cast<uint64_t>(shader_injection_size) * sizeof(float))
+                                + (INJECTION_BUFFER_ALIGNMENT - 1u))
+                             & ~(INJECTION_BUFFER_ALIGNMENT - 1u);
+    const reshade::api::resource_desc desc(
+        byte_size,
+        reshade::api::memory_heap::cpu_to_gpu,
+        reshade::api::resource_usage::constant_buffer);
+
+    if (device->create_resource(desc, nullptr, reshade::api::resource_usage::cpu_access, &data->injection_buffer)) {
+      // Force the first present to upload, whatever the settings happen to be.
+      data->injection_buffer_contents.assign(shader_injection_size, std::numeric_limits<float>::quiet_NaN());
+      std::stringstream s;
+      s << "mods::shader::OnInitDevice(shader injection bound as a constant buffer";
+      s << ", floats: " << shader_injection_size;
+      s << ", bytes: " << byte_size;
+      s << ")";
+      reshade::log::message(reshade::log::level::info, s.str().c_str());
+    } else {
+      // Without the buffer there is nothing to bind, so the layout stays on root constants and
+      // the original dword-budget truncation applies again. Loud, because every setting whose
+      // slot falls outside the budget silently stops responding.
+      data->injection_buffer = {0u};
+      reshade::log::message(
+          reshade::log::level::error,
+          "mods::shader::OnInitDevice(failed to create the shader injection constant buffer; "
+          "falling back to root constants, which are subject to the 64-dword root signature budget)");
+    }
+  }
 }
 
 static void OnDestroyDevice(reshade::api::device* device) {
@@ -292,6 +345,13 @@ static void OnDestroyDevice(reshade::api::device* device) {
   s << reinterpret_cast<uintptr_t>(device);
   s << ")";
   reshade::log::message(reshade::log::level::info, s.str().c_str());
+
+  if (auto* data = renodx::utils::data::Get<DeviceData>(device); data != nullptr) {
+    if (data->injection_buffer.handle != 0u) {
+      device->destroy_resource(data->injection_buffer);
+      data->injection_buffer = {0u};
+    }
+  }
   device->destroy_private_data<DeviceData>();
 }
 
@@ -670,37 +730,52 @@ static bool OnCreatePipelineLayout(
     const uint32_t slots = shader_injection_size;
     const uint32_t used_dword_count = dword_count + descriptor_injection_cost;
     const uint32_t remaining_dword_count = used_dword_count >= 64u ? 0u : 64u - used_dword_count;
-    if (remaining_dword_count == 0u) {
+
+    // Where a buffer is available the injection block is bound as a root constant buffer view,
+    // which costs two dwords no matter how many floats it carries. Shaders are unaffected: the
+    // register reads identically whether it is backed by root constants or a root descriptor,
+    // so this needs no shader change and no change to any game's injection struct.
+    const bool use_buffer = UsesInjectionBuffer(data);
+    const uint32_t required_dword_count = use_buffer ? INJECTION_DESCRIPTOR_DWORD_COST : slots;
+
+    if (remaining_dword_count < required_dword_count) {
+      // A layout with no room even for a root descriptor. Nothing can be injected here, so every
+      // setting is inert for the shaders bound to it. Reported as an error because the symptom is
+      // a feature that silently stops responding rather than anything that fails visibly.
       std::stringstream s;
       s << "mods::shader::OnCreatePipelineLayout(";
       s << "no dword budget left for constant injection";
+      s << ", required: " << required_dword_count;
+      s << ", remaining: " << remaining_dword_count;
       s << ", root_dwords: " << dword_count;
       s << ", descriptor_injection_cost: " << descriptor_injection_cost;
       s << ")";
-      reshade::log::message(reshade::log::level::warning, s.str().c_str());
+      reshade::log::message(reshade::log::level::error, s.str().c_str());
       free(new_params);
       return false;
     }
 
-    constant_injection_cost = std::min(slots, remaining_dword_count);
-    new_params[injection_index] = reshade::api::pipeline_layout_param(
-        reshade::api::constant_range{
-            .binding = 0,
-            .dx_register_index = cbv_index,
-            .dx_register_space = data->expected_constant_buffer_space,
-            .count = constant_injection_cost,
-            .visibility = reshade::api::shader_stage::all,
-        });
-
-    if (slots > remaining_dword_count) {
-      std::stringstream s;
-      s << "mods::shader::OnCreatePipelineLayout(";
-      s << "shader injection oversized: ";
-      s << slots << "/" << remaining_dword_count;
-      s << ", root_dwords: " << dword_count;
-      s << ", descriptor_injection_cost: " << descriptor_injection_cost;
-      s << " )";
-      reshade::log::message(reshade::log::level::warning, s.str().c_str());
+    constant_injection_cost = required_dword_count;
+    if (use_buffer) {
+      new_params[injection_index] = reshade::api::pipeline_layout_param(
+          reshade::api::descriptor_range{
+              .binding = 0,
+              .dx_register_index = cbv_index,
+              .dx_register_space = data->expected_constant_buffer_space,
+              .count = 1,
+              .visibility = reshade::api::shader_stage::all,
+              .array_size = 1,
+              .type = reshade::api::descriptor_type::constant_buffer,
+          });
+    } else {
+      new_params[injection_index] = reshade::api::pipeline_layout_param(
+          reshade::api::constant_range{
+              .binding = 0,
+              .dx_register_index = cbv_index,
+              .dx_register_space = data->expected_constant_buffer_space,
+              .count = constant_injection_cost,
+              .visibility = reshade::api::shader_stage::all,
+          });
     }
   }
 
@@ -1182,11 +1257,21 @@ static void OnInitPipelineLayout(
             }
             break;
           case reshade::api::pipeline_layout_param_type::push_descriptors:
-            if (has_descriptor_injection
-                && params[param_index].push_descriptors.type == descriptor_type
-                && params[param_index].push_descriptors.dx_register_index == static_cast<uint32_t>(descriptor_register_index)
-                && params[param_index].push_descriptors.dx_register_space == descriptor_register_space
-                && params[param_index].push_descriptors.count == descriptor_count) {
+            // With an injection buffer the constant injection is a root constant buffer view, so it
+            // arrives here instead of in the push_constants case above. Matched on the buffer being
+            // in use plus the reserved space, which is what separates it from the unrelated
+            // descriptor injection handled below.
+            if (has_constant_injection
+                && UsesInjectionBuffer(data)
+                && params[param_index].push_descriptors.type == reshade::api::descriptor_type::constant_buffer
+                && params[param_index].push_descriptors.dx_register_space == data->expected_constant_buffer_space) {
+              injection_index = static_cast<int32_t>(param_index);
+              cbv_index = params[param_index].push_descriptors.dx_register_index;
+            } else if (has_descriptor_injection
+                       && params[param_index].push_descriptors.type == descriptor_type
+                       && params[param_index].push_descriptors.dx_register_index == static_cast<uint32_t>(descriptor_register_index)
+                       && params[param_index].push_descriptors.dx_register_space == descriptor_register_space
+                       && params[param_index].push_descriptors.count == descriptor_count) {
               descriptor_injection_index = static_cast<int32_t>(param_index);
             }
             break;
@@ -1512,6 +1597,13 @@ inline DrawResponse HandleStatesAndBypass(
       return response;
     }
 
+    // Null on every API except D3D12, and on D3D12 only once the buffer exists, so this selects
+    // the constant-buffer bind or the original inline push without a second branch here.
+    auto* device_data = renodx::utils::data::Get<DeviceData>(cmd_list->get_device());
+    const auto injection_buffer = device_data == nullptr
+                                      ? reshade::api::resource{0u}
+                                      : device_data->injection_buffer;
+
     renodx::utils::constants::PushShaderInjections(
         cmd_list,
         state.pipeline_details->injection_layout,
@@ -1520,7 +1612,8 @@ inline DrawResponse HandleStatesAndBypass(
         {shader_injection, shader_injection_size},
         constant_buffer_offset,
         resource_tag_float,
-        resource_tag);
+        resource_tag,
+        injection_buffer);
     if (revert_constant_buffer_ranges) {
       switch (cmd_list->get_device()->get_api()) {
         case reshade::api::device_api::d3d10:
@@ -1840,8 +1933,40 @@ inline void OnPresent(
     const reshade::api::rect* /*dest_rect*/,
     uint32_t /*dirty_rect_count*/,
     const reshade::api::rect* /*dirty_rects*/) {
-  auto* data = renodx::utils::data::Get<DeviceData>(swapchain->get_device());
+  auto* device = swapchain->get_device();
+  auto* data = renodx::utils::data::Get<DeviceData>(device);
   if (data == nullptr) return;
+
+  // Refresh the injection buffer here rather than in the draw path. Command lists record on
+  // several threads and mapping one resource from more than one of them is not safe, whereas
+  // present is single threaded. A settings change therefore reaches shaders on the following
+  // frame, which is not observable. No double buffering is needed: the contents are a snapshot
+  // of user settings, so the worst a torn read can produce is one frame mixing values from
+  // either side of a slider drag.
+  if (data->injection_buffer.handle != 0u && shader_injection_size != 0u) {
+    const std::span<const float> current(shader_injection, shader_injection_size);
+    if (!std::equal(current.begin(), current.end(), data->injection_buffer_contents.begin(),
+                    data->injection_buffer_contents.end())) {
+      void* mapped = nullptr;
+      if (device->map_buffer_region(data->injection_buffer, 0ull,
+                                    static_cast<uint64_t>(shader_injection_size) * sizeof(float),
+                                    reshade::api::map_access::write_only, &mapped)
+          && mapped != nullptr) {
+        std::memcpy(mapped, shader_injection, shader_injection_size * sizeof(float));
+        device->unmap_buffer_region(data->injection_buffer);
+        data->injection_buffer_contents.assign(current.begin(), current.end());
+      } else if (!data->injection_buffer_upload_failed) {
+        // Reported once, and as an error, because the buffer keeps whatever it last held: every
+        // setting silently stops responding while the image still renders. Without this the only
+        // symptom is "the sliders do nothing", with nothing in the log to explain it.
+        data->injection_buffer_upload_failed = true;
+        reshade::log::message(
+            reshade::log::level::error,
+            "mods::shader::OnPresent(failed to map the shader injection constant buffer; "
+            "settings will not reach shaders)");
+      }
+    }
+  }
 
   if (using_counted_shaders) {
     counted_shaders.clear();
@@ -1858,7 +1983,11 @@ inline void OnPresent(
             details->injection_layout,
             static_cast<uint32_t>(details->injection_index),
             false,
-            {shader_injection, shader_injection_size});
+            {shader_injection, shader_injection_size},
+            constant_buffer_offset,
+            nullptr,
+            0.f,
+            data->injection_buffer);
       }
     }
   }
@@ -1903,7 +2032,13 @@ static void Use(DWORD fdw_reason, const CustomShaderList& new_custom_shaders, T*
 
       custom_shaders.rehash(custom_shaders.size());
 
-      if (using_counted_shaders || push_injections_on_present) {
+      // Present also refreshes the injection constant buffer, so it has to run whenever there is an
+      // injection at all, not only for the two features that originally needed it. Everything in the
+      // handler is individually guarded, so addons that use neither cost one lookup per frame.
+      //
+      // Keyed on new_injections rather than shader_injection_size: the size is not assigned until
+      // further down this same function, so reading it here would always see zero.
+      if (using_counted_shaders || push_injections_on_present || new_injections != nullptr) {
         reshade::register_event<reshade::addon_event::present>(OnPresent);
       }
 

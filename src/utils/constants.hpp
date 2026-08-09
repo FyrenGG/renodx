@@ -275,9 +275,9 @@ inline void PushShaderInjections(
     std::span<float> shader_injection = {},
     uint32_t offset = 0.f,
     float* resource_tag_float = nullptr,
-    float resource_tag = 0.f) {
+    float resource_tag = 0.f,
+    reshade::api::resource injection_buffer = {0u}) {
   auto device_api = cmd_list->get_device()->get_api();
-  bool use_root_constants = (device_api == reshade::api::device_api::d3d12 || device_api == reshade::api::device_api::vulkan);
 
 #ifdef DEBUG_LEVEL_2
   std::stringstream s;
@@ -304,13 +304,33 @@ inline void PushShaderInjections(
   }
 
   // const std::shared_lock lock(renodx::utils::mutex::global_mutex);
-  cmd_list->push_constants(
-      shader_stage,
-      layout,
-      layout_param,
-      offset,
-      shader_injection.size(),
-      shader_injection.data());
+  if (injection_buffer.handle == 0u) {
+    cmd_list->push_constants(
+        shader_stage,
+        layout,
+        layout_param,
+        offset,
+        shader_injection.size(),
+        shader_injection.data());
+    return;
+  }
+
+  // The layout declares a root constant buffer view at this parameter, so bind the buffer holding
+  // the injection block rather than pushing its contents inline. The buffer's contents are
+  // refreshed once per present; here we only rebind the address, which is what keeps the payload
+  // size off the root signature budget.
+  const reshade::api::buffer_range buffer_range = {
+      .buffer = injection_buffer,
+      .offset = 0ull,
+      .size = static_cast<uint64_t>(shader_injection.size()) * sizeof(float),
+  };
+  reshade::api::descriptor_table_update update = {};
+  update.binding = 0;
+  update.count = 1;
+  update.type = reshade::api::descriptor_type::constant_buffer;
+  update.descriptors = &buffer_range;
+
+  cmd_list->push_descriptors(shader_stage, layout, layout_param, update);
 }
 
 static bool RevertBufferRange(

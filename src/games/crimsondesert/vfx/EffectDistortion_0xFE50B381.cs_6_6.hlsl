@@ -128,10 +128,14 @@ void main(
   uint3 SV_GroupThreadID : SV_GroupThreadID,
   uint SV_GroupIndex : SV_GroupIndex
 ) {
-  // RenoDX: >>> [Patch: EffectDistortionCompositeNoOp] [Version: 1.16.00]
-  // Description: While RenoDX is active, returns before the half- and quarter-resolution distortion composite to avoid
-  //              upsampled particle noise. With RenoDX off, execution falls through into the untouched native function body.
-  return;
+  // RenoDX: >>> [Patch: EffectDistortionCompositeNoOp] [Version: 1.17.00]
+  // Description: Returns before the half- and quarter-resolution distortion composite. The composite upsamples
+  //              those lower-resolution buffers into the scene, which reads as particle noise around distortion
+  //              sources. Gated by the Disable Distortion setting; on Vanilla this falls through into the
+  //              untouched native function body and the game's distortion pass runs unchanged.
+  if (DISABLE_DISTORTION == 1.f) {
+    return;
+  }
   // RenoDX: <<< [Patch: EffectDistortionCompositeNoOp]
   uint _19;
   uint _30;

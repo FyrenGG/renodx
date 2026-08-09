@@ -40,6 +40,7 @@
 #define CUSTOM_FLAGS__FOLIAGE_SPEEDTREE_WIND_COHERENCE  0b10000000000000000000000000000u
 #define CUSTOM_FLAGS__SHADOW_EDGE_NOISE_FIX             0x20000000u
 #define CUSTOM_FLAGS__MILKY_WAY_ALPHA_OCCLUSION         0x40000000u
+#define CUSTOM_FLAGS__DISABLE_DISTORTION                0x80000000u
 
 #define CUSTOM_FLAGS                               shader_injection.custom_flags
 
@@ -189,6 +190,9 @@
 #define AURORA_NIGHT_SEED                      shader_injection.aurora_night_seed
 #define MILKY_WAY_LIGHT_INTENSITY              shader_injection.milky_way_light_intensity
 #define MILKY_WAY_ALPHA_OCCLUSION              ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__MILKY_WAY_ALPHA_OCCLUSION) != 0u ? 1.f : 0.f)
+// Skips the distortion composite, which upsamples half- and quarter-resolution buffers and shows as
+// particle noise. Clear leaves the game's distortion pass running unchanged.
+#define DISABLE_DISTORTION                     ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__DISABLE_DISTORTION) != 0u ? 1.f : 0.f)
 #define NIGHT_SKY_ATTENUATION                  ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__NIGHT_SKY_ATTENUATION) != 0u ? 1.f : 0.f)
 #define PURKINJE_EFFECT                        ((RR_ENABLED == 1.f && (CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__PURKINJE_EFFECT) != 0u) ? 1.f : 0.f)
 #define CUSTOM_WEATHER_EDITING                 ((RR_ENABLED == 1.f && (CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__CUSTOM_WEATHER_EDITING) != 0u) ? 1.f : 0.f)

@@ -1959,6 +1959,22 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == experimental_group; },
     },
     new renodx::utils::settings::Setting{
+        .key = "DisableDistortion",
+        .binding = &shader_injection.custom_flags,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 1.f,
+        .packed_values = {0u, CUSTOM_FLAGS__DISABLE_DISTORTION},
+        .can_reset = true,
+        .label = "Disable Distortion",
+        .section = "Effects",
+        .tooltip = "The game's screen distortion pass, used for heat haze and similar particle effects.\n"
+                   "Vanilla = upsamples from half- and quarter-resolution buffers, which looks like\n"
+                   "particle noise around distortion sources.\n"
+                   "Disabled = skips the distortion pass, removing that noise.",
+        .labels = {"Vanilla", "Disabled"},
+        .is_visible = []() { return current_settings_mode == experimental_group; },
+    },
+    new renodx::utils::settings::Setting{
         .key = "DisableUIShaders",
         .binding = &disable_ui_shaders,
         .value_type = renodx::utils::settings::SettingValueType::BOOLEAN,
@@ -2137,6 +2153,7 @@ void OnPresetOff() {
       {"MilkyWayLightIntensity", 1.f},
       {"PurkinjeEffect", 0.f},
       {"DisableUIShaders", 0.f},
+      {"DisableDistortion", 0.f},
 
       {"ImprovedAutoExposure", 0.f},
       {"AE_PerceptualMinBrightness", 1.f},

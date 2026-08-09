@@ -745,6 +745,13 @@ void main(
   _81 = (uint)((uint)(_79.x)) >> 24;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
   _84 = ((float)((uint)((uint)(_79.x & 16777215)))) * 5.960465e-08f;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
   _85 = _81 & 127;
+  // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
+  // Description: Per-pixel connected-patch relief state. Evaluated lazily at most once, and only
+  // if the far march produces a suppression candidate, so pixels without one pay nothing.
+  bool _rndxCpeReady = false;
+  bool _rndxCpeEst = false;
+  float _rndxCpeE = 0.0f;
+  // RenoDX: <<< [Patch: ConnectedPatchEnvelope]
   _87 = __3__36__0__0__g_sceneNormal.Load(int3(_57, _64, 0));  // [sem: _3__36__0__0__g_sceneNormal_load]
   _93 = min(1.0f, ((((float)((uint)((uint)(_87.x & 1023)))) * 0.0019569471f) + -1.0f));  // [sem: _3__36__0__0__g_sceneNormal_load_derived]
   _99 = min(1.0f, ((((float)((uint)((uint)(((uint)((uint)(_87.x)) >> 10) & 1023)))) * 0.0019569471f) + -1.0f));  // [sem: _3__36__0__0__g_sceneNormal_load_derived]
@@ -1659,6 +1666,25 @@ void main(
         _2617 = _2273;
         _2618 = _2096;
         _2619 = 0;
+        // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+        // Description: Builds camera- and light-facing receiver tangent-plane slopes once for the far contact
+        // march. The plane is anchored to the receiver's stored device depth, making receiver identity exact
+        // while leaving cross-class and degenerate-plane samples on the native path.
+        // This body reconstructs position as M . v (row dots), so the plane is transformed with the
+        // transpose - column dots. Verify this against the native position reconstruction after any
+        // decompiler change; the two conventions are silent mirror images of each other.
+        float _rndxSiPlaneW = -mad(_110, _159, mad(_109, _150, (_108 * _141)));
+        float _rndxSiPlaneA = mad(_rndxSiPlaneW, (_invViewProjRelative[3].x), mad(_110, (_invViewProjRelative[2].x), mad(_109, (_invViewProjRelative[1].x), (_108 * (_invViewProjRelative[0].x)))));
+        float _rndxSiPlaneB = mad(_rndxSiPlaneW, (_invViewProjRelative[3].y), mad(_110, (_invViewProjRelative[2].y), mad(_109, (_invViewProjRelative[1].y), (_108 * (_invViewProjRelative[0].y)))));
+        float _rndxSiPlaneC = mad(_rndxSiPlaneW, (_invViewProjRelative[3].z), mad(_110, (_invViewProjRelative[2].z), mad(_109, (_invViewProjRelative[1].z), (_108 * (_invViewProjRelative[0].z)))));
+        bool _rndxSiReceiverVulnerable = (((uint)(_85 - 1) < 3u) || (_85 == 15) || (_85 == 97));
+        float _rndxSiNdotL = mad(_110, _2061, mad(_109, _2056, (_108 * _2050)));
+        bool _rndxSiPlaneValid = _rndxSiReceiverVulnerable && (_rndxSiNdotL > 0.0f) && (_rndxSiPlaneW > 0.0f) && (abs(_rndxSiPlaneC) >= 1.1754943508222875e-38f);
+        float _rndxSiInvC = select(_rndxSiPlaneValid, rcp(_rndxSiPlaneC), 0.0f);
+        float _rndxSiQx = -_rndxSiPlaneA * _rndxSiInvC;
+        float _rndxSiQy = -_rndxSiPlaneB * _rndxSiInvC;
+        float _rndxSiPlaneSide = select((_rndxSiPlaneC >= 0.0f), 1.0f, -1.0f);
+        // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
         while(true) {
           // [sem: _3__36__0__0__g_depthStencil_load]
           // RenoDX: >>> [Patch: ShadowEdgeNoiseFix] [Version: 1.16.00]
@@ -1668,7 +1694,12 @@ void main(
           //              column and smears or flickers the shadow it produces there. The macro keeps the
           //              vanilla clamp when the fix is off and passes X through unclamped when it is on, so the
           //              out-of-bounds sample fails instead of stretching the edge column.
-          _2631 = __3__36__0__0__g_depthStencil.Load(int3(int(SHADOW_CONTACT_SAMPLE_X(_2616, _2421) * _bufferSizeAndInvSize.x), int(_2615 * _bufferSizeAndInvSize.y), 0));
+          // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+          // Description: Materializes the exact integer texel used by the far depth load so the
+          // receiver-plane test evaluates that raster sample rather than the continuous march coordinate.
+          int2 _rndxSiSampleTexel = int2(int(SHADOW_CONTACT_SAMPLE_X(_2616, _2421) * _bufferSizeAndInvSize.x), int(_2615 * _bufferSizeAndInvSize.y));
+          // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
+          _2631 = __3__36__0__0__g_depthStencil.Load(int3(_rndxSiSampleTexel, 0));
           // RenoDX: <<< [Patch: ShadowEdgeNoiseFix]
           _2633 = (uint)((uint)(_2631.x)) >> 24;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _2636 = ((float)((uint)((uint)(_2631.x & 16777215)))) * 5.960465e-08f;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
@@ -1692,6 +1723,10 @@ void main(
           } else {
             _2697 = _2651;
           }
+          // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+          // Description: Only a natively accepted sample can be reclassified as a self-intersection miss.
+          bool _rndxSiReject = false;
+          // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
           if (!(_2697 == 0)) {
             if ((uint)_2637 > (uint)11) {
               if (!((uint)_2637 < (uint)16)) {
@@ -1716,6 +1751,152 @@ void main(
             }
             _2723 = saturate(_2643 * 0.015625f);  // [sem: expr_sat]
             _2726 = (1.0f - _2723) + (_2723 * _2721);
+            // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+            // Description: Reclassifies only strict same-class samples that are not provably in front of the
+            // anchored receiver plane. The finite envelope is fixed by the D24 depth and 10-bit normal
+            // representation; a rejected sample takes the native miss state and preserves the previous owner.
+            if (_rndxSiPlaneValid && (_2637 == _85)) {
+              float _rndxSiNdcX = mad(2.0f, (float(_rndxSiSampleTexel.x) + 0.5f) * _bufferSizeAndInvSize.z, -1.0f);
+              float _rndxSiNdcY = mad(-2.0f, (float(_rndxSiSampleTexel.y) + 0.5f) * _bufferSizeAndInvSize.w, 1.0f);
+              float _rndxSiPlaneZ = mad(_rndxSiQy, (_rndxSiNdcY - _77), mad(_rndxSiQx, (_rndxSiNdcX - _72), _117));
+              float _rndxSiEps = 1.7881395564245394e-07f + (0.001956947147846222f * abs(_rndxSiPlaneZ - _117));
+              float _rndxSiFront = _rndxSiPlaneSide * (_2636 - _rndxSiPlaneZ);
+              _rndxSiReject = isfinite(_rndxSiPlaneZ) && (_rndxSiPlaneZ >= 0.0f) && (_rndxSiPlaneZ <= 1.0f) && (_rndxSiFront <= _rndxSiEps);
+            }
+            // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
+            // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
+            // Description: Suppresses far contact hits finer than the receiver surface's own measured relief.
+            // E is the maximum nearer-side deviation, in unorm24 depth codes, of the depth-continuous
+            // same-class pixel run along the march direction from that run's fitted slope; a per-step code
+            // jump above the window-span bound is a real discontinuity and ends the run, so crests and
+            // silhouettes bound E instead of inflating it. A surface cannot cast contact shadows finer than
+            // its own representable relief, so hits within E plus one quantization code are LOD/quantization
+            // self-structure while genuine occluders sit far outside it. Scope is deliberately narrow: only
+            // vulnerable receivers, only same-class samples the native march accepts with no linear
+            // separation bound, and only when the run establishes a connected surface - depth-chaotic
+            // geometry such as foliage yields no surface evidence and stays fully native. A fully suppressed
+            // sample takes the native miss path, preserving the previous owner and accumulator and never
+            // terminalizing.
+            float _rndxCpeFactor = 1.0f;
+            if (!_rndxSiReject) {
+              bool _rndxCpeListA = ((uint)((int)(_2637) + (int)(-19)) < (uint)2) || ((_2637 == 18) || (((_2633 & 125) == 105) || ((_2637 == 106) || (((uint)((int)(_2637) + (int)(-27)) < (uint)2) || ((_2637 == 26) || ((_2637 == 107) || (((uint)((int)(_2637) + (int)(-5)) < (uint)2) || (((_2633 & 126) == 66) || ((_2637 == 7) || (_2637 == 53))))))))));
+              bool _rndxCpeTerrain = (_2637 != 67) && ((uint)((int)(_2637) + (int)(-52)) < (uint)16);
+              if ((_rndxSiReceiverVulnerable) && ((_2637 == _85) && ((!_rndxCpeListA) && (!_rndxCpeTerrain)))) {
+                if (!_rndxCpeReady) {
+                  _rndxCpeReady = true;
+                  float2 _rndxCpeDirPx = float2((_2410) * _bufferSizeAndInvSize.x, (_2412) * _bufferSizeAndInvSize.y);
+                  float _rndxCpeLen = max(abs(_rndxCpeDirPx.x), abs(_rndxCpeDirPx.y));
+                  float2 _rndxCpeStep = select((_rndxCpeLen > 9.999999974752427e-07f), (_rndxCpeDirPx / _rndxCpeLen), float2(1.0f, 0.0f));
+                  float _rndxCpeC0 = (float)((uint)(_79.x & 16777215));
+                  int _rndxCpeW = ((int)(_bufferSizeAndInvSize.x)) - 1;
+                  int _rndxCpeH = ((int)(_bufferSizeAndInvSize.y)) - 1;
+                  float _rndxCpePlaneStep = (mad(((_rndxSiQy * -2.0f) * _bufferSizeAndInvSize.w), _rndxCpeStep.y, (((_rndxSiQx * 2.0f) * _bufferSizeAndInvSize.z) * _rndxCpeStep.x))) * 16777216.0f;
+                  float _rndxCpePlaneMag = select((_rndxSiPlaneValid && isfinite(_rndxCpePlaneStep)), abs(_rndxCpePlaneStep), 0.0f);
+                  float _rndxCpeCm2 = _rndxCpeC0;
+                  float _rndxCpeCp2 = _rndxCpeC0;
+                  bool _rndxCpeVm2 = false;
+                  bool _rndxCpeVp2 = false;
+                  {
+                    int _rndxCpeRx = ((int)(_57)) - ((int)(round(_rndxCpeStep.x * 2.0f)));
+                    int _rndxCpeRy = ((int)(_64)) - ((int)(round(_rndxCpeStep.y * 2.0f)));
+                    bool _rndxCpeOn = ((_rndxCpeRx >= 0) && ((_rndxCpeRx <= _rndxCpeW) && ((_rndxCpeRy >= 0) && (_rndxCpeRy <= _rndxCpeH))));
+                    uint _rndxCpeWd = __3__36__0__0__g_depthStencil.Load(int3(min(max(_rndxCpeRx, 0), _rndxCpeW), min(max(_rndxCpeRy, 0), _rndxCpeH), 0)).x;
+                    if ((_rndxCpeOn) && ((((int)((_rndxCpeWd >> 24) & 127)) == _85))) {
+                      _rndxCpeCm2 = (float)((uint)(_rndxCpeWd & 16777215));
+                      _rndxCpeVm2 = true;
+                    }
+                  }
+                  {
+                    int _rndxCpeRx = ((int)(_57)) + ((int)(round(_rndxCpeStep.x * 2.0f)));
+                    int _rndxCpeRy = ((int)(_64)) + ((int)(round(_rndxCpeStep.y * 2.0f)));
+                    bool _rndxCpeOn = ((_rndxCpeRx >= 0) && ((_rndxCpeRx <= _rndxCpeW) && ((_rndxCpeRy >= 0) && (_rndxCpeRy <= _rndxCpeH))));
+                    uint _rndxCpeWd = __3__36__0__0__g_depthStencil.Load(int3(min(max(_rndxCpeRx, 0), _rndxCpeW), min(max(_rndxCpeRy, 0), _rndxCpeH), 0)).x;
+                    if ((_rndxCpeOn) && ((((int)((_rndxCpeWd >> 24) & 127)) == _85))) {
+                      _rndxCpeCp2 = (float)((uint)(_rndxCpeWd & 16777215));
+                      _rndxCpeVp2 = true;
+                    }
+                  }
+                  float _rndxCpeSp = (_rndxCpeCp2 - _rndxCpeC0) * 0.5f;
+                  float _rndxCpeSm = (_rndxCpeC0 - _rndxCpeCm2) * 0.5f;
+                  float _rndxCpeSaneCap = mad(4.0f, _rndxCpePlaneMag, 2.0f);
+                  bool _rndxCpeVp2s = (_rndxCpeVp2) && (abs(_rndxCpeSp) <= _rndxCpeSaneCap);
+                  bool _rndxCpeVm2s = (_rndxCpeVm2) && (abs(_rndxCpeSm) <= _rndxCpeSaneCap);
+                  float _rndxCpeSmag;
+                  float _rndxCpeSfit;
+                  if ((_rndxCpeVp2s) && (_rndxCpeVm2s)) {
+                    _rndxCpeSmag = min(abs(_rndxCpeSp), abs(_rndxCpeSm));
+                    _rndxCpeSfit = (_rndxCpeCp2 - _rndxCpeCm2) * 0.25f;
+                  } else {
+                    if (_rndxCpeVp2s) {
+                      _rndxCpeSmag = abs(_rndxCpeSp);
+                      _rndxCpeSfit = _rndxCpeSp;
+                    } else {
+                      if (_rndxCpeVm2s) {
+                        _rndxCpeSmag = abs(_rndxCpeSm);
+                        _rndxCpeSfit = _rndxCpeSm;
+                      } else {
+                        _rndxCpeSmag = _rndxCpePlaneMag;
+                        _rndxCpeSfit = select(_rndxSiPlaneValid, _rndxCpePlaneStep, 0.0f);
+                      }
+                    }
+                  }
+                  float _rndxCpeSref = max(_rndxCpeSmag, _rndxCpePlaneMag);
+                  float _rndxCpeSlim = _rndxCpeSref + 2.0f;
+                  _rndxCpeSfit = min(max(_rndxCpeSfit, (-0.0f - _rndxCpeSlim)), _rndxCpeSlim);
+                  float _rndxCpeB = mad(8.0f, _rndxCpeSref, 2.0f);
+                  float _rndxCpePrev = _rndxCpeC0;
+                  bool _rndxCpeRun = true;
+                  {
+                    int _rndxCpeRx = ((int)(_57)) + ((int)(round(_rndxCpeStep.x * 1.0f)));
+                    int _rndxCpeRy = ((int)(_64)) + ((int)(round(_rndxCpeStep.y * 1.0f)));
+                    bool _rndxCpeOn = ((_rndxCpeRx >= 0) && ((_rndxCpeRx <= _rndxCpeW) && ((_rndxCpeRy >= 0) && (_rndxCpeRy <= _rndxCpeH))));
+                    uint _rndxCpeWd = __3__36__0__0__g_depthStencil.Load(int3(min(max(_rndxCpeRx, 0), _rndxCpeW), min(max(_rndxCpeRy, 0), _rndxCpeH), 0)).x;
+                    float _rndxCpeC = (float)((uint)(_rndxCpeWd & 16777215));
+                    if ((_rndxCpeOn) && ((((int)((_rndxCpeWd >> 24) & 127)) == _85) && (abs(_rndxCpeC - _rndxCpePrev) <= _rndxCpeB))) {
+                      _rndxCpeE = max(_rndxCpeE, (_rndxCpeC - (_rndxCpeC0 + (_rndxCpeSfit * 1.0f))));
+                      _rndxCpePrev = _rndxCpeC;
+                    } else {
+                      _rndxCpeRun = false;
+                    }
+                  }
+                  if (_rndxCpeRun) {
+                    if ((_rndxCpeVp2) && (abs(_rndxCpeCp2 - _rndxCpePrev) <= _rndxCpeB)) {
+                      _rndxCpeE = max(_rndxCpeE, (_rndxCpeCp2 - (_rndxCpeC0 + (_rndxCpeSfit * 2.0f))));
+                      _rndxCpePrev = _rndxCpeCp2;
+                      _rndxCpeEst = true;
+                    } else {
+                      _rndxCpeRun = false;
+                    }
+                  }
+                  [unroll] for (int _rndxCpeK = 0; _rndxCpeK < 4; _rndxCpeK++) {
+                    if (!_rndxCpeRun) { break; }
+                    float _rndxCpeD = ((_rndxCpeK == 0) ? 3.0f : ((_rndxCpeK == 1) ? 4.0f : ((_rndxCpeK == 2) ? 6.0f : 8.0f)));
+                    int _rndxCpeRx = ((int)(_57)) + ((int)(round(_rndxCpeStep.x * _rndxCpeD)));
+                    int _rndxCpeRy = ((int)(_64)) + ((int)(round(_rndxCpeStep.y * _rndxCpeD)));
+                    bool _rndxCpeOn = ((_rndxCpeRx >= 0) && ((_rndxCpeRx <= _rndxCpeW) && ((_rndxCpeRy >= 0) && (_rndxCpeRy <= _rndxCpeH))));
+                    uint _rndxCpeWd = __3__36__0__0__g_depthStencil.Load(int3(min(max(_rndxCpeRx, 0), _rndxCpeW), min(max(_rndxCpeRy, 0), _rndxCpeH), 0)).x;
+                    float _rndxCpeC = (float)((uint)(_rndxCpeWd & 16777215));
+                    if ((_rndxCpeOn) && ((((int)((_rndxCpeWd >> 24) & 127)) == _85) && (abs(_rndxCpeC - _rndxCpePrev) <= _rndxCpeB))) {
+                      _rndxCpeE = max(_rndxCpeE, (_rndxCpeC - (_rndxCpeC0 + (_rndxCpeSfit * _rndxCpeD))));
+                      _rndxCpePrev = _rndxCpeC;
+                    } else {
+                      _rndxCpeRun = false;
+                    }
+                  }
+                }
+                if (_rndxCpeEst) {
+                  float _rndxCpeCodeLin = ((_2643) * (_2643)) / (_nearFarProj.x * 16777216.0f);
+                  float _rndxCpeSepCodes = abs(_2646) / max(_rndxCpeCodeLin, 9.999999960041972e-13f);
+                  float _rndxCpeHalfW = _rndxCpeE + 1.0f;
+                  float _rndxCpeT = saturate((_rndxCpeSepCodes - _rndxCpeHalfW) / _rndxCpeHalfW);
+                  _rndxCpeFactor = ((_rndxCpeT * _rndxCpeT) * (3.0f - (2.0f * _rndxCpeT)));
+                }
+              }
+            }
+            if (_rndxCpeFactor <= 0.0f) {
+              _rndxSiReject = true;
+            }
+            // RenoDX: <<< [Patch: ConnectedPatchEnvelope]
             // [sem: expr_sat]
             // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
             // Description: Rewrites the contact-shadow accumulation so the occlusion term can be scaled
@@ -1729,15 +1910,31 @@ void main(
             //              contact result before the finer sub-pixel detail is composited on top of it. At the
             //              Off value the gain is exactly 1.0 and the expression reduces to the vanilla one bit
             //              for bit.
-            float _microFarAccum = (saturate(1.0f - ((_2726 * _2726) * _2721)) * (1.0f - _2611)) * saturate((-0.0f - _2646) / (_2617 * 0.004654859658330679f));
-            _2741 = saturate((_microFarAccum * lerp(1.0f, 0.7f, CONTACT_SHADOW_BASE_TUNING)) + _2611);
+            // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
+            // Description: Scales this accepted sample's occlusion by the connected-patch envelope factor.
+            // Every native factor already in the product is carried through unchanged and the envelope
+            // factor is appended, never substituted. A suppressed sample carries the prior accumulation.
+            if (!_rndxSiReject) {
+              float _microFarAccum = (saturate(1.0f - ((_2726 * _2726) * _2721)) * (1.0f - _2611)) * saturate((-0.0f - _2646) / (_2617 * 0.004654859658330679f)) * _rndxCpeFactor;
+              _2741 = saturate((_microFarAccum * lerp(1.0f, 0.7f, CONTACT_SHADOW_BASE_TUNING)) + _2611);
+            } else {
+              _2741 = _2611;
+            }
+            // RenoDX: <<< [Patch: ConnectedPatchEnvelope]
             // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
-            _2742 = _2637;
+            // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+            // Description: A suppressed sample keeps the previous owner class instead of claiming ownership.
+            _2742 = select(_rndxSiReject, _2613, _2637);
+            // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
           } else {
             _2741 = _2611;  // [sem: expr_sat]
             _2742 = _2613;
           }
-          if ((_2637 != 0) && (_2741 > 0.95f)) {
+          // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+          // Description: Prevents a suppressed sample from terminalizing on carried accumulation.
+          // Native-rejected, cross-class and genuine samples keep the original exit test.
+          if ((!_rndxSiReject) && ((_2637 != 0) && (_2741 > 0.95f))) {
+          // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
             if (!_2638) {
               _2755 = (saturate((_2612 - _2636) / (_2612 - _2614)) - min(_2617, _2639));
             } else {

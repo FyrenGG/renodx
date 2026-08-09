@@ -2809,16 +2809,17 @@ void main(
   //              needs a tighter budget); the two coefficients are a matched pair and must be
   //              retuned together. Gated by SNOW_FOG_FIX (UI "Snow / Fog Lighting Fixes (WIP)",
   //              default On per the addon.cpp settings list); when Off the branch is skipped
-  //              entirely and the output is bit-exact vanilla. ; this site historically carried no [SNOW_FOG_FIX] bracket tag (its
-  //              probe twin did). game version
-  //              1.16.00 added a below-sea-baseline inscatter suppression (_atmosphereSeaBaseline,
-  //              scaling inscatter down to 0.02x) that scales inscatter but not extinction; below
-  //              that baseline this clamp goes INERT, because the suppressed inscatter measurement
-  //              cannot exceed the unsuppressed extinction-derived threshold. This is deliberate and
-  //              believed harmless: fog/snow weather is not expected below the baseline, and vanilla
-  //              already crushes inscatter there. If gameplay evidence ever shows a playable fog
-  //              region below the baseline, scale the clamp threshold by the same suppression
-  //              factor. The ceiling is floored at zero. The extinction luminance can exceed 1.0 for
+  //              entirely and the output is bit-exact vanilla.
+  //              Game version 1.16.00 added a below-sea-baseline inscatter suppression
+  //              (_atmosphereSeaBaseline) that scales inscatter down to 0.02x but leaves extinction
+  //              alone, so below that baseline the clamp is measuring suppressed inscatter against
+  //              an unsuppressed threshold and its headroom widens by up to 50x. It still fires if
+  //              inscatter is high enough; it is not dead. This is deliberate and believed harmless:
+  //              fog and snow weather are not expected below the baseline, and vanilla already
+  //              crushes inscatter there. If gameplay evidence ever shows a playable fog region
+  //              below the baseline, scale the threshold by the same factor — hoist _4728 above the
+  //              suppression branch (both arms already assign it) and apply it to _sky_max_insc.
+  //              The ceiling is floored at zero. The extinction luminance can exceed 1.0 for
   //              near-unity transmittance, so an unfloored (1 - lum) would be negative and would flip
   //              positive inscatter to negative instead of capping it. The cause is not rounding: the
   //              vanilla BT.709-to-BT.2020 matrix applied just above has an un-normalized green row

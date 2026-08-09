@@ -42,10 +42,12 @@ static const float3x3 SKY_VANILLA_BT709_TO_BT2020 = float3x3(
 #define SKY_OZONE_3 renodx::math::Select(SKY_SCATTERING == 1.f, SKY_OZONE_CH3, 2.1360001767334325e-07f)
 
 // --- Transmittance matrix: always vanilla BT.709→BT.2020 ---
-// Transmittance is multiplicative (applied to display-space scene colour), so the
-// matrix must preserve row sums ≈ 1.0. The spectral matrix has row[0] sum = 1.62
-// which would create T > 1 (physically impossible for extinction).
-#define _sky_mtx SKY_VANILLA_BT709_TO_BT2020
+// Transmittance is multiplicative (applied to display-space scene colour), so its matrix must
+// preserve row sums of 1.0. SKY_SPECTRAL_TO_BT2020 does not: its rows sum to 1.62 / 1.00 / 0.88,
+// so using it on a transmittance would produce T > 1 in red, which extinction cannot do.
+// Transmittance sites therefore keep the vanilla matrix inline rather than routing through the
+// spectral one. Do not introduce an alias for this — the constraint has to be readable at the
+// call sites, and an alias defined here is where it stops being read.
 
 // --- In-scatter helper macros (Garcia Linan split path) ---
 // Rayleigh in scatter is TRUE spectral data → use spectral→BT.2020 matrix.

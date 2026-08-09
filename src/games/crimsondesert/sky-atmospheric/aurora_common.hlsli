@@ -22,7 +22,16 @@ float ComputeNightGate(float sunDirY) {
   return 1.f - smoothstep(-0.15f, 0.f, sunDirY);
 }
 
-// Simple transmittance for night only SkyMaterial since it has no extinction LUT
+// Simple transmittance for night only SkyMaterial since it has no extinction LUT.
+//
+// Deliberately monochrome and deliberately not wired to SKY_RAYLEIGH_CH1/CH2/CH3. It returns a
+// single float, so a per-channel coefficient has nowhere to go, and the aurora is an emissive
+// overlay whose own colour dominates — a grey attenuation is sufficient there. 5.8e-6 is the
+// red-channel Rayleigh coefficient, which is the weakest of the three, so this errs toward too
+// much transmittance and keeps the night sky readable rather than muddying it.
+//
+// Consequence to keep in mind: this constant does NOT follow the spectral Rayleigh coefficients.
+// Changing those leaves this unchanged, and that is intended, not an oversight.
 float ChapmanTransmittance(float altitude, float cosViewZenith,
                            float rayleighScaleHeight, float earthRadius) {
   float H = max(rayleighScaleHeight, 1.f);

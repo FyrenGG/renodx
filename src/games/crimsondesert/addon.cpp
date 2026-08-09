@@ -140,7 +140,7 @@ static bool OnVRSDrawOrDispatchIndirect(reshade::api::command_list* cmd_list, re
 }
 
 const std::unordered_map<std::string, float> VANILLA_VALUES = {
-    {"BlackCrushFix", 0.f},
+    {"SDRBlackCrushFix", 0.f},
     {"ToneMapType", 0.f},
 
     {"LocalLightHueCorrection", 0.f},

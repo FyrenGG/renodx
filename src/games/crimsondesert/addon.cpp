@@ -1513,7 +1513,9 @@ renodx::utils::settings::Settings settings = {
                    "On = Garcia Linan spectral rendering scattering.",
         .labels = {"Off", "On"},
         .tint = rendering,
-        .is_visible = []() { return current_settings_mode == rendering_group; },
+        // Hidden: SKY_SCATTERING is forced off in shared.h (see the comment there), so this toggle
+        // currently has no effect. The entry stays registered so saved configs keep loading.
+        .is_visible = []() { return false; },
     },
     new renodx::utils::settings::Setting{
         .key = "SunImprovements",

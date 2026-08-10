@@ -8,6 +8,16 @@
 // Spectral atmospheric scattering support
 // Based on Garcia Linan, "Real time spectral rendering of the atmospheric medium"
 // Adapted to 3 wavelength (630nm, 560nm, 490nm)
+//
+// WARNING — wrong basis, wrong gamut; do not re-enable as-is. Every constant below assumes the
+// game's three sky channels sit at (630, 560, 490)nm and that the working space is BT.2020.
+// Neither holds: the game's packed Rayleigh triple (29, 69, 169 = 0xFF1D45A9) is a 680/550/440nm
+// Rayleigh vector, and the "vanilla" matrix below is numerically sRGB->AP1, not BT.709->BT.2020 —
+// the working space is AP1-like. Applying these constants desaturates the sky, which is why
+// SKY_SCATTERING is forced to 0.f in shared.h. A replacement must be derived at 680/550/440 in the
+// real working space, with the spectral->display conversion fitted against full-spectrum reference
+// skies rather than built from three delta-function CMF samples (a correct monochromatic 440nm
+// column has negative green, so a raw 3-point matrix cannot be right).
 // ============================================================================
 
 // --- Rayleigh β ratios (Bucholtz 1995, relative to 490nm reference) ---

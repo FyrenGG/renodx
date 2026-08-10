@@ -41,6 +41,32 @@ static const float3x3 SKY_VANILLA_BT709_TO_BT2020 = float3x3(
 #define SKY_OZONE_2 renodx::math::Select(SKY_SCATTERING == 1.f, SKY_OZONE_CH2, 4.978800461685751e-06f)
 #define SKY_OZONE_3 renodx::math::Select(SKY_SCATTERING == 1.f, SKY_OZONE_CH3, 2.1360001767334325e-07f)
 
+// --- Rayleigh β assembly ---
+// The single definition of the Rayleigh β triple.
+//
+// The game packs its Rayleigh scattering colour as one uint, 8 bits per channel, scaled by
+// 1/255 × 5e-5. Spectral scattering keeps the native blue as the 490nm reference and rebuilds red
+// and green from the Bucholtz ratios; with scattering off, all three resolve to the native packed
+// values exactly.
+//
+// Every site that assembles β must call this. The shaders reconstruct β at a dozen separate points,
+// and open-coding the unpack at each one is what allowed some of them to receive the spectral
+// rebuild while others kept native red and green — the same physical quantity computed two ways
+// inside one shader.
+float3 SkySpectralRayleighBeta(uint packed_color) {
+  float3 beta = float3(
+      ((float)((packed_color >> 16u) & 255u)) * 1.9607843e-07f,
+      ((float)((packed_color >> 8u) & 255u)) * 1.9607843e-07f,
+      ((float)(packed_color & 255u)) * 1.9607843e-07f);
+
+  if (SKY_SCATTERING == 1.f) {
+    beta.r = beta.b * SKY_RAYLEIGH_CH1;
+    beta.g = beta.b * SKY_RAYLEIGH_CH2;
+  }
+
+  return beta;
+}
+
 // --- Transmittance matrix: always vanilla BT.709→BT.2020 ---
 // Transmittance is multiplicative (applied to display-space scene colour), so its matrix must
 // preserve row sums of 1.0. SKY_SPECTRAL_TO_BT2020 does not: its rows sum to 1.62 / 1.00 / 0.88,

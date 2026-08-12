@@ -3306,9 +3306,36 @@ void main(
       } else {
         _5611 = 1.0f;
       }
-      _5646 = (_5611 * (((_5579 * 0.10958f) + (_5572 * 0.02062f)) + (_5586 * 0.8698f)));
-      _5647 = (_5611 * (((_5579 * 0.91636f) + (_5572 * 0.0702f)) + (_5586 * 0.01345f)));
-      _5648 = (_5611 * (((_5579 * 0.33951f) + (_5572 * 0.61312f)) + (_5586 * 0.04737f)));
+      // RenoDX: >>> [Patch: SpectralAerialPerspective] [Version: 1.16.00]
+      // Description: Converts the aerial-perspective in-scatter this dome writes to
+      //              g_texSkyInscatterUAV with the spectral matrix instead of the vanilla RGB matrix.
+      //              The combined lanes _5572/_5579/_5586 mix two things: the precomputed-LUT aerial
+      //              term (_5507.._5512, already clamped at zero upstream) scaled by the segment
+      //              transmittances _5543/_5553/_5562, which is per-wavelength radiance at
+      //              680/550/440 nm and takes SKY_SPEC_DOT; and the ray-march accumulator
+      //              (_4914.._4919), which is already working space and which the native code
+      //              converts a second time here. Splitting the two lets the accumulator keep
+      //              SKY_VAN_DOT so that second conversion is reproduced exactly, while only the LUT
+      //              term changes matrix. The max(0, ...) clamps upstream are untouched, the split is
+      //              an exact re-association of the native sum, and the extinction write below stays
+      //              on the vanilla matrix permanently because a transmittance needs rows summing to
+      //              one.
+      float _rndx_aerial_680 = ((_5543 * _5512) * _precomputedAmbient7.y) + (_precomputedAmbient7.w * (_5543 * _5509));
+      float _rndx_aerial_550 = ((_5553 * _5511) * _precomputedAmbient7.y) + (_precomputedAmbient7.w * (_5553 * _5508));
+      float _rndx_aerial_440 = ((_5562 * _5510) * _precomputedAmbient7.y) + (_precomputedAmbient7.w * (_5562 * _5507));
+      float _rndx_march_row0 = _4919 + (_precomputedAmbient7.w * _4916);
+      float _rndx_march_row1 = _4918 + (_precomputedAmbient7.w * _4915);
+      float _rndx_march_row2 = _4917 + (_precomputedAmbient7.w * _4914);
+      _5646 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_5611 * (SKY_SPEC_DOT(2, _rndx_aerial_680, _rndx_aerial_550, _rndx_aerial_440) + SKY_VAN_DOT(2, _rndx_march_row0, _rndx_march_row1, _rndx_march_row2)))
+        : (_5611 * (((_5579 * 0.10958f) + (_5572 * 0.02062f)) + (_5586 * 0.8698f)));
+      _5647 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_5611 * (SKY_SPEC_DOT(1, _rndx_aerial_680, _rndx_aerial_550, _rndx_aerial_440) + SKY_VAN_DOT(1, _rndx_march_row0, _rndx_march_row1, _rndx_march_row2)))
+        : (_5611 * (((_5579 * 0.91636f) + (_5572 * 0.0702f)) + (_5586 * 0.01345f)));
+      _5648 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_5611 * (SKY_SPEC_DOT(0, _rndx_aerial_680, _rndx_aerial_550, _rndx_aerial_440) + SKY_VAN_DOT(0, _rndx_march_row0, _rndx_march_row1, _rndx_march_row2)))
+        : (_5611 * (((_5579 * 0.33951f) + (_5572 * 0.61312f)) + (_5586 * 0.04737f)));
+      // RenoDX: <<< [Patch: SpectralAerialPerspective]
       _5649 = (((_5588 * 0.10958f) + (_5587 * 0.02062f)) + (_5589 * 0.8698f));
       _5650 = (((_5588 * 0.91636f) + (_5587 * 0.0702f)) + (_5589 * 0.01345f));
       _5651 = (((_5588 * 0.33951f) + (_5587 * 0.61312f)) + (_5589 * 0.04737f));

@@ -80,4 +80,12 @@ float3 SkySpectralRayleighBeta(uint packed_color) {
    + SKY_VANILLA_RGB_TO_WORKING[row][1] * (T1)    \
    + SKY_VANILLA_RGB_TO_WORKING[row][2] * (T2))
 
+// Spectral working-space dot product over an arbitrary per-wavelength triple (for sites whose
+// Rayleigh radiance arrives pre-assembled, e.g. the LUT-driven aerial term). Ungated here; the
+// gate lives at the call site.
+#define SKY_SPEC_DOT(row, X0, X1, X2)             \
+  (SKY_SPECTRAL_TO_WORKING[row][0] * (X0)         \
+   + SKY_SPECTRAL_TO_WORKING[row][1] * (X1)       \
+   + SKY_SPECTRAL_TO_WORKING[row][2] * (X2))
+
 #endif  // SRC_CRIMSONDESERT_SKY_ATMOSPHERIC_SKY_SPECTRAL_COMMON_HLSLI_

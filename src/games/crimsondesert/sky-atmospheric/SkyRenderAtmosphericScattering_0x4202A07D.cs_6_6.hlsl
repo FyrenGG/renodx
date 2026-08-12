@@ -2767,6 +2767,15 @@ void main(
       _4697 = ((_4673 * _4642) * _precomputedAmbient7.y) + _4220;
       _4700 = ((_4683 * _4641) * _precomputedAmbient7.y) + _4219;
       _4703 = ((_4692 * _4640) * _precomputedAmbient7.y) + _4218;
+      // RenoDX: >>> [Patch: SpectralAerialPerspective] [Version: 1.16.00]
+      // Description: Carries the aerial LUT in-scatter term with the same per-wavelength segment
+      //              transmittance and ambient weight the native combine applies above, identical to
+      //              the aerial part of _4697/_4700/_4703, so the terminal write can select which
+      //              matrix converts it.
+      float _rndx_ap_lut_x = ((_4673 * _4642) * _precomputedAmbient7.y);
+      float _rndx_ap_lut_y = ((_4683 * _4641) * _precomputedAmbient7.y);
+      float _rndx_ap_lut_z = ((_4692 * _4640) * _precomputedAmbient7.y);
+      // RenoDX: <<< [Patch: SpectralAerialPerspective]
       _4704 = _4673 * _4645;
       _4705 = _4683 * _4644;
       _4706 = _4692 * _4643;
@@ -2776,9 +2785,26 @@ void main(
       } else {
         _4728 = 1.0f;
       }
-      _4763 = (_4728 * (((_4700 * 0.10958f) + (_4697 * 0.02062f)) + (_4703 * 0.8698f)));
-      _4764 = (_4728 * (((_4700 * 0.91636f) + (_4697 * 0.0702f)) + (_4703 * 0.01345f)));
-      _4765 = (_4728 * (((_4700 * 0.33951f) + (_4697 * 0.61312f)) + (_4703 * 0.04737f)));
+      // RenoDX: >>> [Patch: SpectralAerialPerspective] [Version: 1.16.00]
+      // Description: Selects which matrix converts the aerial in-scatter written to the sky
+      //              in-scatter target. The aerial LUT term is per-wavelength radiance at 680/550/440
+      //              nm with no colour matrix applied yet, so it converts through
+      //              SKY_SPECTRAL_TO_WORKING when enabled; its fused Mie share rides along, which the
+      //              near-unit row sums keep within about one percent of the vanilla conversion. The
+      //              ray-march accumulator (_4220/_4219/_4218) is already working-space colour and
+      //              keeps the vanilla conversion the native code gives it. The adjacent extinction
+      //              write below is a transmittance and stays vanilla in both states. Each Off arm is
+      //              the complete native expression.
+      _4763 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_4728 * (SKY_SPEC_DOT(2, _rndx_ap_lut_x, _rndx_ap_lut_y, _rndx_ap_lut_z) + SKY_VAN_DOT(2, _4220, _4219, _4218)))
+        : (_4728 * (((_4700 * 0.10958f) + (_4697 * 0.02062f)) + (_4703 * 0.8698f)));
+      _4764 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_4728 * (SKY_SPEC_DOT(1, _rndx_ap_lut_x, _rndx_ap_lut_y, _rndx_ap_lut_z) + SKY_VAN_DOT(1, _4220, _4219, _4218)))
+        : (_4728 * (((_4700 * 0.91636f) + (_4697 * 0.0702f)) + (_4703 * 0.01345f)));
+      _4765 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_4728 * (SKY_SPEC_DOT(0, _rndx_ap_lut_x, _rndx_ap_lut_y, _rndx_ap_lut_z) + SKY_VAN_DOT(0, _4220, _4219, _4218)))
+        : (_4728 * (((_4700 * 0.33951f) + (_4697 * 0.61312f)) + (_4703 * 0.04737f)));
+      // RenoDX: <<< [Patch: SpectralAerialPerspective]
       _4766 = (((_4705 * 0.10958f) + (_4704 * 0.02062f)) + (_4706 * 0.8698f));
       _4767 = (((_4705 * 0.91636f) + (_4704 * 0.0702f)) + (_4706 * 0.01345f));
       _4768 = (((_4705 * 0.33951f) + (_4704 * 0.61312f)) + (_4706 * 0.04737f));

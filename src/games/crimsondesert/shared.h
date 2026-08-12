@@ -46,6 +46,7 @@
 
 // Second flag word: custom_flags is fully allocated (32/32 bits).
 #define CUSTOM_FLAGS2__DIRECT_LIGHT_MATRIX_FIX          0b1u
+#define CUSTOM_FLAGS2__SPECTRAL_AERIAL_PERSPECTIVE      0b10u
 #define CUSTOM_FLAGS2__SHADOW_BAND_FIX                  0b1000u
 #define CUSTOM_FLAGS2                              shader_injection.custom_flags_2
 
@@ -61,6 +62,11 @@
 // (s*M*M*T where the sky gets M*T once). M has unit row sums, so the extra application is
 // luminance-neutral pure desaturation, strongest at low sun. On selects the single application.
 #define DIRECT_LIGHT_MATRIX_FIX                ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__DIRECT_LIGHT_MATRIX_FIX) != 0u ? 1.f : 0.f)
+// Applies the fitted spectral conversion to per-wavelength sky radiance on the aerial-perspective
+// path (long-distance haze), which vanilla lands in scene colour without the conversion the dome
+// receives. Same operator as SKY_SCATTERING, gated separately so the two surfaces can be judged
+// independently.
+#define SPECTRAL_AERIAL_PERSPECTIVE            ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_AERIAL_PERSPECTIVE) != 0u ? 1.f : 0.f)
 // Master gate for the far-contact shadow banding suppression (the connected-patch envelope and its
 // receiver-plane guard in the SceneShadowTiled far march). Off keeps the guard reject false and the
 // envelope factor at 1.0, so the accumulation resolves to the native expression exactly.

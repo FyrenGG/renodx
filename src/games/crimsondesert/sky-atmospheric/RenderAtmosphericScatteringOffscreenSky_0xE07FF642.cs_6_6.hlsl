@@ -2551,9 +2551,43 @@ void main(
       _4304 = (((_4243 * 0.33951f) + (_4242 * 0.61312f)) + (_4244 * 0.04737f));
       _4305 = (((_4243 * 0.91636f) + (_4242 * 0.0702f)) + (_4244 * 0.01345f));
       _4306 = (((_4243 * 0.10958f) + (_4242 * 0.02062f)) + (_4244 * 0.8698f));
-      _4307 = (_4269 * (((_4234 * 0.33951f) + (_4227 * 0.61312f)) + (_4241 * 0.04737f)));
-      _4308 = (_4269 * (((_4234 * 0.91636f) + (_4227 * 0.0702f)) + (_4241 * 0.01345f)));
-      _4309 = (_4269 * (((_4234 * 0.10958f) + (_4227 * 0.02062f)) + (_4241 * 0.8698f)));
+      // RenoDX: >>> [Patch: SpectralAerialPerspective] [Version: 1.16.00]
+      // Description: Converts the aerial-perspective in-scatter written to g_texSkyInscatterUAV with
+      //              the spectral matrix, on the LUT-driven component only. The triple
+      //              (_4227/_4234/_4241) is the sum of two components with different colour status,
+      //              so the On arm splits it and converts each with the matrix that suits it:
+      //              .
+      //              _rndx_ap_lut_* is the precomputed-LUT aerial term, near minus far already
+      //              clamped at zero upstream, weighted by the segment transmittance
+      //              (_4198/_4208/_4217) and blended over sun and moon. The LUT stores per-wavelength
+      //              Rayleigh radiance at 680/550/440 nm with beta folded in and no colour matrix
+      //              applied, so this is exactly the radiance the spectral fit is for. Its converted
+      //              result is clamped at zero because the fitted matrix carries negative
+      //              off-diagonal terms and in-scatter cannot be negative.
+      //              .
+      //              _rndx_ap_acc_* is the ray-march accumulator, which already reached working space
+      //              through the in-scatter conversions upstream. It keeps SKY_VAN_DOT, matching the
+      //              native second application, so that component's appearance is unchanged.
+      //              .
+      //              The adjacent extinction write (_4304/_4305/_4306) is a transmittance and stays
+      //              on the vanilla matrix permanently. Each Off arm is the complete native RGB
+      //              expression over the unsplit triple.
+      float _rndx_ap_lut_x = ((_4198 * _4165) * _precomputedAmbient7.y) + (_precomputedAmbient7.w * (_4198 * _4168));
+      float _rndx_ap_lut_y = ((_4208 * _4166) * _precomputedAmbient7.y) + (_precomputedAmbient7.w * (_4208 * _4169));
+      float _rndx_ap_lut_z = ((_4217 * _4167) * _precomputedAmbient7.y) + (_precomputedAmbient7.w * (_4217 * _4170));
+      float _rndx_ap_acc_x = _3576 + (_precomputedAmbient7.w * _3579);
+      float _rndx_ap_acc_y = _3575 + (_precomputedAmbient7.w * _3578);
+      float _rndx_ap_acc_z = _3574 + (_precomputedAmbient7.w * _3577);
+      _4307 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_4269 * (max(0.0f, SKY_SPEC_DOT(0, _rndx_ap_lut_x, _rndx_ap_lut_y, _rndx_ap_lut_z)) + SKY_VAN_DOT(0, _rndx_ap_acc_x, _rndx_ap_acc_y, _rndx_ap_acc_z)))
+        : (_4269 * (((_4234 * 0.33951f) + (_4227 * 0.61312f)) + (_4241 * 0.04737f)));
+      _4308 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_4269 * (max(0.0f, SKY_SPEC_DOT(1, _rndx_ap_lut_x, _rndx_ap_lut_y, _rndx_ap_lut_z)) + SKY_VAN_DOT(1, _rndx_ap_acc_x, _rndx_ap_acc_y, _rndx_ap_acc_z)))
+        : (_4269 * (((_4234 * 0.91636f) + (_4227 * 0.0702f)) + (_4241 * 0.01345f)));
+      _4309 = SPECTRAL_AERIAL_PERSPECTIVE
+        ? (_4269 * (max(0.0f, SKY_SPEC_DOT(2, _rndx_ap_lut_x, _rndx_ap_lut_y, _rndx_ap_lut_z)) + SKY_VAN_DOT(2, _rndx_ap_acc_x, _rndx_ap_acc_y, _rndx_ap_acc_z)))
+        : (_4269 * (((_4234 * 0.10958f) + (_4227 * 0.02062f)) + (_4241 * 0.8698f)));
+      // RenoDX: <<< [Patch: SpectralAerialPerspective]
     } else {
       _4304 = 1.0f;
       _4305 = 1.0f;

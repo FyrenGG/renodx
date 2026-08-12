@@ -1532,6 +1532,22 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
+        .key = "SpectralAerialPerspective",
+        .binding = &shader_injection.custom_flags_2,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 0.f,
+        .packed_values = {0u, CUSTOM_FLAGS2__SPECTRAL_AERIAL_PERSPECTIVE},
+        .can_reset = true,
+        .label = "Spectral Aerial Perspective",
+        .section = "Sky / Celestial",
+        .tooltip = "Converts long-distance atmospheric haze with the spectral color transform used by Spectral Sky Scattering.\n"
+                   "Off = vanilla conversion.\n"
+                   "On = fitted spectral conversion, so distant terrain haze matches the sky it fades into.",
+        .labels = {"Off", "On"},
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
         .key = "SunImprovements",
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,

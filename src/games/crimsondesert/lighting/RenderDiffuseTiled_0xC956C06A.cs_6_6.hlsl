@@ -5399,9 +5399,24 @@ void main(
     _3985 = _3979 * (((_3903 * 0.33951f) + (_3893 * 0.61312f)) + (_3912 * 0.04737f));
     _3991 = _3979 * (((_3903 * 0.91636f) + (_3893 * 0.0702f)) + (_3912 * 0.01345f));
     _3997 = _3979 * (((_3903 * 0.10958f) + (_3893 * 0.02062f)) + (_3912 * 0.8698f));
-    _4003 = (((_3985 * 0.61312f) + (_3991 * 0.33951f)) + (_3997 * 0.04737f)) * _3800;
-    _4009 = (((_3985 * 0.0702f) + (_3991 * 0.91636f)) + (_3997 * 0.01345f)) * _3800;
-    _4015 = (((_3985 * 0.02062f) + (_3991 * 0.10958f)) + (_3997 * 0.8698f)) * _3800;
+    // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+    // Description: The direct beam's atmospheric transmittance is converted to working space on the three
+    //              lines above, and the game converts the result a second time here. The conversion's rows
+    //              sum to one, so applying it twice keeps the overall brightness and only pulls the colour
+    //              toward grey, which strips the warmth the transmittance itself carries. On uses the single
+    //              conversion and keeps every other factor, including the cloud blend already folded into
+    //              the inputs and the trailing sun/moon scalar, so low-sun light keeps the colour of the sky
+    //              it arrives through. Off is the exact vanilla expression.
+    _4003 = (DIRECT_LIGHT_MATRIX_FIX != 0.f)
+                ? (_3985 * _3800)
+                : ((((_3985 * 0.61312f) + (_3991 * 0.33951f)) + (_3997 * 0.04737f)) * _3800);
+    _4009 = (DIRECT_LIGHT_MATRIX_FIX != 0.f)
+                ? (_3991 * _3800)
+                : ((((_3985 * 0.0702f) + (_3991 * 0.91636f)) + (_3997 * 0.01345f)) * _3800);
+    _4015 = (DIRECT_LIGHT_MATRIX_FIX != 0.f)
+                ? (_3997 * _3800)
+                : ((((_3985 * 0.02062f) + (_3991 * 0.10958f)) + (_3997 * 0.8698f)) * _3800);
+    // RenoDX: <<< [Patch: DirectLightMatrixFix]
     // RenoDX: >>> [Patch: DawnDuskDirectLightTint] [Version: 1.16.00]
     // Description: Applies the weather-driven dawn/dusk hue shift to the active sun or moon colour. Vanilla
     //              reddens direct light only through atmospheric transmittance, which leaves twilight

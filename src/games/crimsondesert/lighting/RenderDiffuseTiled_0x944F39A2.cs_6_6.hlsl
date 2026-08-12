@@ -6343,9 +6343,17 @@ void main(
       _4940 = _moonDirection.x;
     }
     _4943 = _lightingParams.x * _4537;
-    _4949 = _4943 * (((_4722 * 0.61312f) + (_4728 * 0.33951f)) + (_4734 * 0.04737f));
-    _4955 = _4943 * (((_4722 * 0.0702f) + (_4728 * 0.91636f)) + (_4734 * 0.01345f));
-    _4961 = _4943 * (((_4722 * 0.02062f) + (_4728 * 0.10958f)) + (_4734 * 0.8698f));
+    // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+    // Description: The game converts the direct beam's transmittance to working space a second time
+    //              here: _4722/_4728/_4734 are already the working-space result of that same matrix
+    //              applied to the exp2 transmittance triple, scaled by the cloud blend. The matrix
+    //              has unit row sums, so applying it twice preserves luminance and only desaturates,
+    //              most visibly at low sun where the beam is strongly tinted. On uses the single
+    //              conversion so low-sun light keeps the colour of the sky it arrives through.
+    _4949 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_4943 * _4722) : (_4943 * (((_4722 * 0.61312f) + (_4728 * 0.33951f)) + (_4734 * 0.04737f)));
+    _4955 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_4943 * _4728) : (_4943 * (((_4722 * 0.0702f) + (_4728 * 0.91636f)) + (_4734 * 0.01345f)));
+    _4961 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_4943 * _4734) : (_4943 * (((_4722 * 0.02062f) + (_4728 * 0.10958f)) + (_4734 * 0.8698f)));
+    // RenoDX: <<< [Patch: DirectLightMatrixFix]
     _4962 = _4940 - _997;
     _4963 = _4939 - _998;
     _4964 = _4938 - _999;

@@ -1516,6 +1516,22 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
+        .key = "DirectLightColorFix",
+        .binding = &shader_injection.custom_flags_2,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 1.f,
+        .packed_values = {0u, CUSTOM_FLAGS2__DIRECT_LIGHT_MATRIX_FIX},
+        .can_reset = true,
+        .label = "Direct Light Color Fix",
+        .section = "Sky / Celestial",
+        .tooltip = "Fixes direct sun and moon light being converted to the working color space twice.\n"
+                   "Off = vanilla double conversion, which desaturates direct light at dawn and dusk.\n"
+                   "On = single conversion, so low-sun light keeps the color of the sky it arrives through.",
+        .labels = {"Off", "On"},
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
         .key = "SunImprovements",
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,

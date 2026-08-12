@@ -3482,9 +3482,12 @@ void main(
       _3401 = 1.0f - _3399;
       _3405 = (((_3384 * _3400) - _3384) * _3384) + 1.0f;
       _3417 = (0.5f / ((((_3382 * _3401) + _3399) * _3343) + (_3382 * ((_3401 * _3343) + _3399)))) * (_3400 / ((_3405 * _3405) * 3.1415927f));
-      _3436 = ((((_3309 * 0.61312f) + (_3315 * 0.33951f)) + (_3321 * 0.04737f)) * _3128) * ((max((((_3396 * ((((_3364 * _3346) + -0.04f) * _3347) + 0.04f)) + _3395) * _3417), 0.0f) * _3398) + (_3359 * float(_3350)));
-      _3451 = ((((_3309 * 0.0702f) + (_3315 * 0.91636f)) + (_3321 * 0.01345f)) * _3128) * ((max((((_3396 * _3368) + _3395) * _3417), 0.0f) * _3398) + (_3359 * float(_3349)));
-      _3470 = ((((_3309 * 0.02062f) + (_3315 * 0.10958f)) + (_3321 * 0.8698f)) * _3128) * ((max((((_3396 * ((((_3364 * _3344) + -0.04f) * _3347) + 0.04f)) + _3395) * _3417), 0.0f) * _3398) + (_3359 * float(_3348)));
+      // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+      // Description: The game converts the direct beam's transmittance to working space a second time here, on a value the lines above already converted; because the matrix rows sum to one that second pass only desaturates. On uses the single conversion, so low-sun light keeps the colour of the sky it arrives through, while every other factor of the term is unchanged. Off is the exact vanilla double conversion.
+      _3436 = ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_3309 * _3128) : ((((_3309 * 0.61312f) + (_3315 * 0.33951f)) + (_3321 * 0.04737f)) * _3128)) * ((max((((_3396 * ((((_3364 * _3346) + -0.04f) * _3347) + 0.04f)) + _3395) * _3417), 0.0f) * _3398) + (_3359 * float(_3350)));
+      _3451 = ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_3315 * _3128) : ((((_3309 * 0.0702f) + (_3315 * 0.91636f)) + (_3321 * 0.01345f)) * _3128)) * ((max((((_3396 * _3368) + _3395) * _3417), 0.0f) * _3398) + (_3359 * float(_3349)));
+      _3470 = ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_3321 * _3128) : ((((_3309 * 0.02062f) + (_3315 * 0.10958f)) + (_3321 * 0.8698f)) * _3128)) * ((max((((_3396 * ((((_3364 * _3344) + -0.04f) * _3347) + 0.04f)) + _3395) * _3417), 0.0f) * _3398) + (_3359 * float(_3348)));
+      // RenoDX: <<< [Patch: DirectLightMatrixFix]
       _3471 = dot(float3(_3436, _3451, _3470), float3(0.212671f, 0.71516f, 0.072169f));
       _3476 = min((max(0.0005f, _exposure3.w) * 4096.0f), _3471);
       _3477 = max(1e-09f, _3471);
@@ -3734,9 +3737,12 @@ void main(
         _4136 = _4124 * (((_4061 * 0.91636f) + (_4057 * 0.0702f)) + (_4065 * 0.01345f));
         _4142 = _4124 * (((_4061 * 0.10958f) + (_4057 * 0.02062f)) + (_4065 * 0.8698f));
         _4150 = ((_3993 * 0.15734209f) * max(0.0f, (0.3f - dot(float3(_126, _127, _128), float3(_3501, _3500, _3499))))) * saturate(min(_3887, _3946));
-        _4191 = (((_4150 * (((_3971 * 0.02062f) + (_3972 * 0.10958f)) + (_3973 * 0.8698f))) * (((_4130 * 0.02062f) + (_4136 * 0.10958f)) + (_4142 * 0.8698f))) + _3483);
-        _4192 = (((_4150 * (((_3971 * 0.0702f) + (_3972 * 0.91636f)) + (_3973 * 0.01345f))) * (((_4130 * 0.0702f) + (_4136 * 0.91636f)) + (_4142 * 0.01345f))) + _3481);
-        _4193 = (((_4150 * (((_3971 * 0.61312f) + (_3972 * 0.33951f)) + (_3973 * 0.04737f))) * (((_4130 * 0.61312f) + (_4136 * 0.33951f)) + (_4142 * 0.04737f))) + _3479);
+        // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+        // Description: The game converts this direct beam's transmittance to working space a second time here, on a value the lines above already converted; because the matrix rows sum to one that second pass only desaturates. On uses the single conversion, so low-sun light keeps the colour of the sky it arrives through, while every other factor of the term is unchanged. Off is the exact vanilla double conversion. The neighbouring conversion of _3971/_3972/_3973 is a separately derived vector and stays vanilla in both states.
+        _4191 = (((_4150 * (((_3971 * 0.02062f) + (_3972 * 0.10958f)) + (_3973 * 0.8698f))) * ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _4142 : (((_4130 * 0.02062f) + (_4136 * 0.10958f)) + (_4142 * 0.8698f)))) + _3483);
+        _4192 = (((_4150 * (((_3971 * 0.0702f) + (_3972 * 0.91636f)) + (_3973 * 0.01345f))) * ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _4136 : (((_4130 * 0.0702f) + (_4136 * 0.91636f)) + (_4142 * 0.01345f)))) + _3481);
+        _4193 = (((_4150 * (((_3971 * 0.61312f) + (_3972 * 0.33951f)) + (_3973 * 0.04737f))) * ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _4130 : (((_4130 * 0.61312f) + (_4136 * 0.33951f)) + (_4142 * 0.04737f)))) + _3479);
+        // RenoDX: <<< [Patch: DirectLightMatrixFix]
       } else {
         _4191 = _3483;
         _4192 = _3481;
@@ -4502,9 +4508,12 @@ void main(
                   _5993 = _5175;
                   _5994 = _5174;
                   _5995 = _5173;
-                  _5996 = (_5972 * (((_5410 * 0.02062f) + (_5416 * 0.10958f)) + (_5422 * 0.8698f)));
-                  _5997 = (_5972 * (((_5410 * 0.0702f) + (_5416 * 0.91636f)) + (_5422 * 0.01345f)));
-                  _5998 = (_5972 * (((_5410 * 0.61312f) + (_5416 * 0.33951f)) + (_5422 * 0.04737f)));
+                  // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+                  // Description: The game converts this direct beam's transmittance to working space a second time here, on a value the lines above already converted; because the matrix rows sum to one that second pass only desaturates. On uses the single conversion, so low-sun light keeps the colour of the sky it arrives through, while every other factor of the term is unchanged. Off is the exact vanilla double conversion.
+                  _5996 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_5972 * _5422) : (_5972 * (((_5410 * 0.02062f) + (_5416 * 0.10958f)) + (_5422 * 0.8698f)));
+                  _5997 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_5972 * _5416) : (_5972 * (((_5410 * 0.0702f) + (_5416 * 0.91636f)) + (_5422 * 0.01345f)));
+                  _5998 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_5972 * _5410) : (_5972 * (((_5410 * 0.61312f) + (_5416 * 0.33951f)) + (_5422 * 0.04737f)));
+                  // RenoDX: <<< [Patch: DirectLightMatrixFix]
                 } else {
                   _5993 = _5175;
                   _5994 = _5174;

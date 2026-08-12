@@ -3123,9 +3123,12 @@ void main(
       _3396 = 1.0f - _3394;
       _3400 = (((_3379 * _3395) - _3379) * _3379) + 1.0f;
       _3412 = (0.5f / ((((_3377 * _3396) + _3394) * _3338) + (_3377 * ((_3396 * _3338) + _3394)))) * (_3395 / ((_3400 * _3400) * 3.1415927f));
-      _3431 = ((((_3304 * 0.61312f) + (_3310 * 0.33951f)) + (_3316 * 0.04737f)) * _3123) * ((max((((_3391 * ((((_3359 * _3341) + -0.04f) * _3342) + 0.04f)) + _3390) * _3412), 0.0f) * _3393) + (_3354 * float(_3345)));
-      _3446 = ((((_3304 * 0.0702f) + (_3310 * 0.91636f)) + (_3316 * 0.01345f)) * _3123) * ((max((((_3391 * _3363) + _3390) * _3412), 0.0f) * _3393) + (_3354 * float(_3344)));
-      _3465 = ((((_3304 * 0.02062f) + (_3310 * 0.10958f)) + (_3316 * 0.8698f)) * _3123) * ((max((((_3391 * ((((_3359 * _3339) + -0.04f) * _3342) + 0.04f)) + _3390) * _3412), 0.0f) * _3393) + (_3354 * float(_3343)));
+      // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+      // Description: The game converts the direct beam's transmittance to working space a second time here, on a value the lines above already converted; because the matrix rows sum to one that second pass only desaturates. On uses the single conversion, so low-sun light keeps the colour of the sky it arrives through, while every other factor of the term is unchanged. Off is the exact vanilla double conversion.
+      _3431 = ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_3304 * _3123) : ((((_3304 * 0.61312f) + (_3310 * 0.33951f)) + (_3316 * 0.04737f)) * _3123)) * ((max((((_3391 * ((((_3359 * _3341) + -0.04f) * _3342) + 0.04f)) + _3390) * _3412), 0.0f) * _3393) + (_3354 * float(_3345)));
+      _3446 = ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_3310 * _3123) : ((((_3304 * 0.0702f) + (_3310 * 0.91636f)) + (_3316 * 0.01345f)) * _3123)) * ((max((((_3391 * _3363) + _3390) * _3412), 0.0f) * _3393) + (_3354 * float(_3344)));
+      _3465 = ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_3316 * _3123) : ((((_3304 * 0.02062f) + (_3310 * 0.10958f)) + (_3316 * 0.8698f)) * _3123)) * ((max((((_3391 * ((((_3359 * _3339) + -0.04f) * _3342) + 0.04f)) + _3390) * _3412), 0.0f) * _3393) + (_3354 * float(_3343)));
+      // RenoDX: <<< [Patch: DirectLightMatrixFix]
       _3466 = dot(float3(_3431, _3446, _3465), float3(0.212671f, 0.71516f, 0.072169f));
       _3471 = min((max(0.0005f, _exposure3.w) * 4096.0f), _3466);
       _3472 = max(1e-09f, _3466);
@@ -3375,9 +3378,12 @@ void main(
         _4131 = _4119 * (((_4056 * 0.91636f) + (_4052 * 0.0702f)) + (_4060 * 0.01345f));
         _4137 = _4119 * (((_4056 * 0.10958f) + (_4052 * 0.02062f)) + (_4060 * 0.8698f));
         _4145 = ((_3988 * 0.15734209f) * max(0.0f, (0.3f - dot(float3(_115, _116, _117), float3(_3496, _3495, _3494))))) * saturate(min(_3882, _3941));
-        _4186 = (((_4145 * (((_3966 * 0.02062f) + (_3967 * 0.10958f)) + (_3968 * 0.8698f))) * (((_4125 * 0.02062f) + (_4131 * 0.10958f)) + (_4137 * 0.8698f))) + _3478);
-        _4187 = (((_4145 * (((_3966 * 0.0702f) + (_3967 * 0.91636f)) + (_3968 * 0.01345f))) * (((_4125 * 0.0702f) + (_4131 * 0.91636f)) + (_4137 * 0.01345f))) + _3476);
-        _4188 = (((_4145 * (((_3966 * 0.61312f) + (_3967 * 0.33951f)) + (_3968 * 0.04737f))) * (((_4125 * 0.61312f) + (_4131 * 0.33951f)) + (_4137 * 0.04737f))) + _3474);
+        // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+        // Description: The game converts this direct beam's transmittance to working space a second time here, on a value the lines above already converted; because the matrix rows sum to one that second pass only desaturates. On uses the single conversion, so low-sun light keeps the colour of the sky it arrives through, while every other factor of the term is unchanged. Off is the exact vanilla double conversion. The neighbouring conversion of _3966/_3967/_3968 is a separately derived vector and stays vanilla in both states.
+        _4186 = (((_4145 * (((_3966 * 0.02062f) + (_3967 * 0.10958f)) + (_3968 * 0.8698f))) * ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _4137 : (((_4125 * 0.02062f) + (_4131 * 0.10958f)) + (_4137 * 0.8698f)))) + _3478);
+        _4187 = (((_4145 * (((_3966 * 0.0702f) + (_3967 * 0.91636f)) + (_3968 * 0.01345f))) * ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _4131 : (((_4125 * 0.0702f) + (_4131 * 0.91636f)) + (_4137 * 0.01345f)))) + _3476);
+        _4188 = (((_4145 * (((_3966 * 0.61312f) + (_3967 * 0.33951f)) + (_3968 * 0.04737f))) * ((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _4125 : (((_4125 * 0.61312f) + (_4131 * 0.33951f)) + (_4137 * 0.04737f)))) + _3474);
+        // RenoDX: <<< [Patch: DirectLightMatrixFix]
       } else {
         _4186 = _3478;
         _4187 = _3476;

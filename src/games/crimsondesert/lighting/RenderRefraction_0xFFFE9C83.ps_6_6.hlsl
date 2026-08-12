@@ -1782,9 +1782,12 @@ float4 main(
     __3__38__0__1__g_dlssRRDiffuseAlbedoUAV[int2(_52, _53)] = float4(saturate(((_2469 * 0.33951f) + (_2467 * 0.61312f)) + (_2471 * 0.04737f)), saturate(((_2469 * 0.91636f) + (_2467 * 0.0702f)) + (_2471 * 0.01345f)), saturate(((_2469 * 0.10958f) + (_2467 * 0.02062f)) + (_2471 * 0.8698f)), 1.0f);
     __3__38__0__1__g_dlssRRSpecularAlbedoUAV[int2(_52, _53)] = float4(_2524, _2524, _2524, 1.0f);
     __3__38__0__1__g_dlssRRNormalRoughnessUAV[int2(_52, _53)] = float4(_2480, _2481, _2482, _2473.w);
-    SV_Target.x = (((((((_2361 * 0.33951f) + (_2360 * 0.61312f)) + (_2362 * 0.04737f)) + select(_209, (_2442.x * _2438), 0.0f)) + _2448.x) + (min(60000.0f, _2243) * _2446)) + (((_2435 + _2248.x) * _2345) * exp2(_1772 * _513)));
-    SV_Target.y = (((((((_2361 * 0.91636f) + (_2360 * 0.0702f)) + (_2362 * 0.01345f)) + select(_209, (_2442.y * _2439), 0.0f)) + _2448.y) + (min(60000.0f, _2244) * _2446)) + (((_2436 + _2248.y) * _2345) * exp2(_1772 * _518)));
-    SV_Target.z = (((((((_2361 * 0.10958f) + (_2360 * 0.02062f)) + (_2362 * 0.8698f)) + select(_209, (_2442.z * _2440), 0.0f)) + _2448.z) + (min(60000.0f, _2245) * _2446)) + (((_2437 + _2248.z) * _2345) * exp2(_1772 * _523)));
+    // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+    // Description: The direct beam's transmittance is converted to working space earlier in this shader, and the lit refraction result carrying it is converted a second time here; because the matrix rows sum to one that second pass only desaturates. On uses the single conversion, so low-sun light keeps the colour of the sky it arrives through, while every other term of the output is unchanged. Off is the exact vanilla double conversion.
+    SV_Target.x = ((((((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _2360 : (((_2361 * 0.33951f) + (_2360 * 0.61312f)) + (_2362 * 0.04737f))) + select(_209, (_2442.x * _2438), 0.0f)) + _2448.x) + (min(60000.0f, _2243) * _2446)) + (((_2435 + _2248.x) * _2345) * exp2(_1772 * _513)));
+    SV_Target.y = ((((((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _2361 : (((_2361 * 0.91636f) + (_2360 * 0.0702f)) + (_2362 * 0.01345f))) + select(_209, (_2442.y * _2439), 0.0f)) + _2448.y) + (min(60000.0f, _2244) * _2446)) + (((_2436 + _2248.y) * _2345) * exp2(_1772 * _518)));
+    SV_Target.z = ((((((DIRECT_LIGHT_MATRIX_FIX != 0.f) ? _2362 : (((_2361 * 0.10958f) + (_2360 * 0.02062f)) + (_2362 * 0.8698f))) + select(_209, (_2442.z * _2440), 0.0f)) + _2448.z) + (min(60000.0f, _2245) * _2446)) + (((_2437 + _2248.z) * _2345) * exp2(_1772 * _523)));
+    // RenoDX: <<< [Patch: DirectLightMatrixFix]
     SV_Target.w = 1.0f;
     // RenoDX: >>> [Patch: RefractionSurfaceShadowGate] [Version: 1.16.00]
     // Description: Restores visible sun/cloud shadowing on the surface of refracting materials such

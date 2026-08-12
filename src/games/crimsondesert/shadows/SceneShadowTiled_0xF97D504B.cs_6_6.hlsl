@@ -1761,7 +1761,7 @@ void main(
               float _rndxSiPlaneZ = mad(_rndxSiQy, (_rndxSiNdcY - _77), mad(_rndxSiQx, (_rndxSiNdcX - _72), _117));
               float _rndxSiEps = 1.7881395564245394e-07f + (0.001956947147846222f * abs(_rndxSiPlaneZ - _117));
               float _rndxSiFront = _rndxSiPlaneSide * (_2636 - _rndxSiPlaneZ);
-              _rndxSiReject = isfinite(_rndxSiPlaneZ) && (_rndxSiPlaneZ >= 0.0f) && (_rndxSiPlaneZ <= 1.0f) && (_rndxSiFront <= _rndxSiEps);
+              _rndxSiReject = (SHADOW_BAND_FIX != 0.f) && isfinite(_rndxSiPlaneZ) && (_rndxSiPlaneZ >= 0.0f) && (_rndxSiPlaneZ <= 1.0f) && (_rndxSiFront <= _rndxSiEps);
             }
             // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
             // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
@@ -1778,7 +1778,7 @@ void main(
             // sample takes the native miss path, preserving the previous owner and accumulator and never
             // terminalizing.
             float _rndxCpeFactor = 1.0f;
-            if (!_rndxSiReject) {
+            if ((SHADOW_BAND_FIX != 0.f) && (!_rndxSiReject)) {
               bool _rndxCpeListA = ((uint)((int)(_2637) + (int)(-19)) < (uint)2) || ((_2637 == 18) || (((_2633 & 125) == 105) || ((_2637 == 106) || (((uint)((int)(_2637) + (int)(-27)) < (uint)2) || ((_2637 == 26) || ((_2637 == 107) || (((uint)((int)(_2637) + (int)(-5)) < (uint)2) || (((_2633 & 126) == 66) || ((_2637 == 7) || (_2637 == 53))))))))));
               bool _rndxCpeTerrain = (_2637 != 67) && ((uint)((int)(_2637) + (int)(-52)) < (uint)16);
               if ((_rndxSiReceiverVulnerable) && ((_2637 == _85) && ((!_rndxCpeListA) && (!_rndxCpeTerrain)))) {

@@ -1759,6 +1759,22 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
+        .key = "ShadowBandFix",
+        .binding = &shader_injection.custom_flags_2,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 1.f,
+        .packed_values = {0u, CUSTOM_FLAGS2__SHADOW_BAND_FIX},
+        .can_reset = true,
+        .label = "Distant Shadow Band Fix",
+        .section = "Shadows",
+        .tooltip = "Suppresses the organised terrace bands in far contact shadows on distant terrain.\n"
+                   "Off = vanilla far-march accumulation.\n"
+                   "On = banding suppressed while shadow depth and foliage self-shadow are preserved.",
+        .labels = {"Off", "On"},
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
         .key = "ContactShadowQuality",
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,

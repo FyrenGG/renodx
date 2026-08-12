@@ -2302,11 +2302,35 @@ void main(
               _4215 = 1.0f;
               _4216 = 1.0f;
               _4217 = 1.0f;
+              // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+              // Description: Selects which matrix converts this region's sun Rayleigh in-scatter
+              //              radiance into the working space. The row carries two Rayleigh terms:
+              //              a gather term against the view-path transmittance triple
+              //              (_3307/_3311/_3315), weighted by that row's multi-gather channel
+              //              (_2239/_2238/_2237), and a single-scatter term against the step
+              //              transmittance triple (_3226/_3230/_3234) carrying the sun Rayleigh
+              //              phase _3259. Both convert per wavelength through
+              //              SKY_SPECTRAL_TO_WORKING when enabled; the density carrier _3337 rides
+              //              through as the macro's phase argument, which preserves this region's
+              //              scale because its betas are the raw packed ints. Beta stays native, so
+              //              extinction and ozone are untouched, and the Mie, cloud and volume-fog
+              //              terms of the same accumulator keep the vanilla matrix. Each Off arm is
+              //              the complete native expression.
+              float _rndx_sky_ray_r2_z = SKY_SCATTERING
+                ? ((_2237 * SKY_RAY_INSCATTER(2, _3307, _3311, _3315, _3192, _3195, _3197, _3337)) + SKY_RAY_INSCATTER(2, _3226, _3230, _3234, _3192, _3195, _3197, (_3337 * _3259)))
+                : ((_3197 * _3337) * (_3333 + (_3249 * _3259)));
+              float _rndx_sky_ray_r2_y = SKY_SCATTERING
+                ? ((_2238 * SKY_RAY_INSCATTER(1, _3307, _3311, _3315, _3192, _3195, _3197, _3337)) + SKY_RAY_INSCATTER(1, _3226, _3230, _3234, _3192, _3195, _3197, (_3337 * _3259)))
+                : ((_3195 * _3337) * (_3327 + (_3244 * _3259)));
+              float _rndx_sky_ray_r2_x = SKY_SCATTERING
+                ? ((_2239 * SKY_RAY_INSCATTER(0, _3307, _3311, _3315, _3192, _3195, _3197, _3337)) + SKY_RAY_INSCATTER(0, _3226, _3230, _3234, _3192, _3195, _3197, (_3337 * _3259)))
+                : ((_3192 * _3337) * (_3321 + (_3239 * _3259)));
+              // RenoDX: <<< [Patch: SkySpectralRayleigh]
               // RenoDX: >>> [Patch: DawnDuskImprovements] [Version: 1.13.00]
               // Description: Routes only the positive sun-Mie term in the recovered RGB accumulation cluster through the existing boosted phase companion; every other native term remains unchanged.
-              _4218 = ((((_precomputedAmbients[48].z) * ((_3297 * _3299) + (_3252 * _3298))) + _2019) + (((((((_3301b * _3252) * _mieScatterColor.z) + (((_3297 * _3287) + (_3286 * _3249)) * _3207)) + (((_mieScatterColor.z * _3334) + _3336) * _3333)) * 25.0f) + ((_3197 * _3337) * (_3333 + (_3249 * _3259)))) * _precomputedAmbient7.y));
-              _4219 = ((((_precomputedAmbients[48].y) * ((_3294 * _3299) + (_3251 * _3298))) + _2020) + (((((((_3301b * _3251) * _mieScatterColor.y) + (((_3294 * _3287) + (_3286 * _3244)) * _3207)) + (((_mieScatterColor.y * _3334) + _3336) * _3327)) * 25.0f) + ((_3195 * _3337) * (_3327 + (_3244 * _3259)))) * _precomputedAmbient7.y));
-              _4220 = ((((_precomputedAmbients[48].x) * ((_3291 * _3299) + (_3250 * _3298))) + _2021) + (((((((_3301b * _3250) * _mieScatterColor.x) + (((_3291 * _3287) + (_3286 * _3239)) * _3207)) + (((_mieScatterColor.x * _3334) + _3336) * _3321)) * 25.0f) + ((_3192 * _3337) * (_3321 + (_3239 * _3259)))) * _precomputedAmbient7.y));
+              _4218 = ((((_precomputedAmbients[48].z) * ((_3297 * _3299) + (_3252 * _3298))) + _2019) + (((((((_3301b * _3252) * _mieScatterColor.z) + (((_3297 * _3287) + (_3286 * _3249)) * _3207)) + (((_mieScatterColor.z * _3334) + _3336) * _3333)) * 25.0f) + _rndx_sky_ray_r2_z) * _precomputedAmbient7.y));
+              _4219 = ((((_precomputedAmbients[48].y) * ((_3294 * _3299) + (_3251 * _3298))) + _2020) + (((((((_3301b * _3251) * _mieScatterColor.y) + (((_3294 * _3287) + (_3286 * _3244)) * _3207)) + (((_mieScatterColor.y * _3334) + _3336) * _3327)) * 25.0f) + _rndx_sky_ray_r2_y) * _precomputedAmbient7.y));
+              _4220 = ((((_precomputedAmbients[48].x) * ((_3291 * _3299) + (_3250 * _3298))) + _2021) + (((((((_3301b * _3250) * _mieScatterColor.x) + (((_3291 * _3287) + (_3286 * _3239)) * _3207)) + (((_mieScatterColor.x * _3334) + _3336) * _3321)) * 25.0f) + _rndx_sky_ray_r2_x) * _precomputedAmbient7.y));
               // RenoDX: <<< [Patch: DawnDuskImprovements]
               _4221 = _3185;
               _4222 = _3182;

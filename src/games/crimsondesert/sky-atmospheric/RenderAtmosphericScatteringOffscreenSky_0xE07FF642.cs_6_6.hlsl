@@ -1618,18 +1618,30 @@ void main(
             //              display space, so SKY_VAN_DOT keeps it on the vanilla matrix. Beta stays
             //              the native packed value on both arms — only the matrix differs — and each
             //              Off arm is the complete native RGB expression.
+            //              .
+            //              The accumulation rows carry a second Rayleigh radiance term of their own —
+            //              the sun single-scatter sub-term against the cloud-attenuated transmittance
+            //              triple (_1618/_1621/_1624) with the sun phase carrier _1657 — and it takes
+            //              the same spectral conversion. The volume-fog, cloud-density and Mie terms
+            //              standing beside it carry artist colour and keep the vanilla matrix.
             _1721 = SKY_SCATTERING
               ? (SKY_RAY_INSCATTER(0, _1698, _1702, _1706, _1582, _1585, _1587, _1655) + SKY_VAN_DOT(0, _1698, _1702, _1706) * (_1709 + _mieScatterColor.x * _1707))
               : (((_1582 * _1655) + _1709) + (_mieScatterColor.x * _1707)) * (((_1702 * 0.33951f) + (_1698 * 0.61312f)) + (_1706 * 0.04737f));
-            _1733 = (((((_1684 + (_1629 * _1677)) * _1599) + ((_1582 * _1657) * _1629)) + ((_1674 * _1640) * _mieScatterColor.x)) + (_1721 * _595)) * _268;
+            _1733 = SKY_SCATTERING
+              ? ((((((_1684 + (_1629 * _1677)) * _1599) + SKY_RAY_INSCATTER(0, _1618, _1621, _1624, _1582, _1585, _1587, _1657)) + ((_1674 * _1640) * _mieScatterColor.x)) + (_1721 * _595)) * _268)
+              : (((((_1684 + (_1629 * _1677)) * _1599) + ((_1582 * _1657) * _1629)) + ((_1674 * _1640) * _mieScatterColor.x)) + (_1721 * _595)) * _268;
             _1744 = SKY_SCATTERING
               ? (SKY_RAY_INSCATTER(1, _1698, _1702, _1706, _1582, _1585, _1587, _1655) + SKY_VAN_DOT(1, _1698, _1702, _1706) * (_1709 + _mieScatterColor.y * _1707))
               : (((_1585 * _1655) + _1709) + (_mieScatterColor.y * _1707)) * (((_1702 * 0.91636f) + (_1698 * 0.0702f)) + (_1706 * 0.01345f));
-            _1756 = (((((_1687 + (_1634 * _1677)) * _1599) + ((_1585 * _1657) * _1634)) + ((_1674 * _1641) * _mieScatterColor.y)) + (_1744 * _594)) * _268;
+            _1756 = SKY_SCATTERING
+              ? ((((((_1687 + (_1634 * _1677)) * _1599) + SKY_RAY_INSCATTER(1, _1618, _1621, _1624, _1582, _1585, _1587, _1657)) + ((_1674 * _1641) * _mieScatterColor.y)) + (_1744 * _594)) * _268)
+              : (((((_1687 + (_1634 * _1677)) * _1599) + ((_1585 * _1657) * _1634)) + ((_1674 * _1641) * _mieScatterColor.y)) + (_1744 * _594)) * _268;
             _1767 = SKY_SCATTERING
               ? (SKY_RAY_INSCATTER(2, _1698, _1702, _1706, _1582, _1585, _1587, _1655) + SKY_VAN_DOT(2, _1698, _1702, _1706) * (_1709 + _mieScatterColor.z * _1707))
               : ((_1709 + (_1587 * _1655)) + (_mieScatterColor.z * _1707)) * (((_1702 * 0.10958f) + (_1698 * 0.02062f)) + (_1706 * 0.8698f));
-            _1779 = (((((_1690 + (_1639 * _1677)) * _1599) + ((_1587 * _1657) * _1639)) + ((_1674 * _1642) * _mieScatterColor.z)) + (_1767 * _593)) * _268;
+            _1779 = SKY_SCATTERING
+              ? ((((((_1690 + (_1639 * _1677)) * _1599) + SKY_RAY_INSCATTER(2, _1618, _1621, _1624, _1582, _1585, _1587, _1657)) + ((_1674 * _1642) * _mieScatterColor.z)) + (_1767 * _593)) * _268)
+              : (((((_1690 + (_1639 * _1677)) * _1599) + ((_1587 * _1657) * _1639)) + ((_1674 * _1642) * _mieScatterColor.z)) + (_1767 * _593)) * _268;
             // RenoDX: <<< [Patch: SkySpectralRayleigh]
             _1780 = _1554.x + _1566;
             _1782 = (_1554.y + _1569) * _1592;
@@ -2253,12 +2265,38 @@ void main(
             _3571 = _3245;
             _3572 = _3242;
             _3573 = _3239;
-            _3574 = ((((_precomputedAmbients[48].z) * ((_3360 * _3362) + (_3315 * _3361))) + _2015) + (((((((_3346 * _3315) * _mieScatterColor.z) + (((_3360 * _3350) + (_3349 * _3312)) * _3270)) + (_3412 * _2277)) * 25.0f) + (((_3393 * _2277) + (_3312 * _3329)) * _3413)) * _precomputedAmbient7.y));
-            _3575 = ((((_precomputedAmbients[48].y) * ((_3357 * _3362) + (_3314 * _3361))) + _2016) + (((((((_3346 * _3314) * _mieScatterColor.y) + (((_3357 * _3350) + (_3349 * _3307)) * _3270)) + (_3407 * _2278)) * 25.0f) + (((_3388 * _2278) + (_3307 * _3329)) * _3408)) * _precomputedAmbient7.y));
-            _3576 = ((((_precomputedAmbients[48].x) * ((_3354 * _3362) + (_3313 * _3361))) + _2017) + (((((((_3346 * _3313) * _mieScatterColor.x) + (((_3354 * _3350) + (_3349 * _3302)) * _3270)) + (_3401 * _2279)) * 25.0f) + (((_3383 * _2279) + (_3302 * _3329)) * _3403)) * _precomputedAmbient7.y));
-            _3577 = (((((_3444 * _3445) + (_3393 * _2274)) * _3413) + _2018) + (((((_3453 * _mieScatterColor.z) + _3459) * _3444) + (_3412 * _2274)) * 25.0f));
-            _3578 = (((((_3439 * _3445) + (_3388 * _2275)) * _3408) + _2019) + (((((_3453 * _mieScatterColor.y) + _3459) * _3439) + (_3407 * _2275)) * 25.0f));
-            _3579 = (((((_3434 * _3445) + (_3383 * _2276)) * _3403) + _2020) + (((((_3453 * _mieScatterColor.x) + _3459) * _3434) + (_3401 * _2276)) * 25.0f));
+            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+            // Description: Converts the second-region Rayleigh in-scatter radiance of both bodies with
+            //              the spectral matrix instead of the vanilla RGB matrix. Each row carries two
+            //              Rayleigh terms: the multi-scatter gather term against the view-only
+            //              transmittance triple (_3370/_3374/_3378), whose gather scalar stays factored
+            //              onto the row, and the single-scatter term against that body's body+view
+            //              transmittance triple — _3289/_3293/_3297 with the sun phase _3329, and
+            //              _3421/_3425/_3429 with the moon phase _3445. Beta is the native packed
+            //              triple (_3255/_3258/_3260) on both arms and the region's density carrier
+            //              _3402 rides through as the phase argument, so the region-2 scale is
+            //              preserved exactly. The volume-fog, cloud-density and Mie terms beside them
+            //              carry artist colour and keep the vanilla matrix. Each Off arm is the
+            //              complete native RGB expression.
+            _3574 = SKY_SCATTERING
+              ? (((((_precomputedAmbients[48].z) * ((_3360 * _3362) + (_3315 * _3361))) + _2015) + (((((((_3346 * _3315) * _mieScatterColor.z) + (((_3360 * _3350) + (_3349 * _3312)) * _3270)) + (_3412 * _2277)) * 25.0f) + ((SKY_RAY_INSCATTER(2, _3370, _3374, _3378, _3255, _3258, _3260, _3402) * _2277) + SKY_RAY_INSCATTER(2, _3289, _3293, _3297, _3255, _3258, _3260, (_3329 * _3402)))) * _precomputedAmbient7.y)))
+              : ((((_precomputedAmbients[48].z) * ((_3360 * _3362) + (_3315 * _3361))) + _2015) + (((((((_3346 * _3315) * _mieScatterColor.z) + (((_3360 * _3350) + (_3349 * _3312)) * _3270)) + (_3412 * _2277)) * 25.0f) + (((_3393 * _2277) + (_3312 * _3329)) * _3413)) * _precomputedAmbient7.y));
+            _3575 = SKY_SCATTERING
+              ? (((((_precomputedAmbients[48].y) * ((_3357 * _3362) + (_3314 * _3361))) + _2016) + (((((((_3346 * _3314) * _mieScatterColor.y) + (((_3357 * _3350) + (_3349 * _3307)) * _3270)) + (_3407 * _2278)) * 25.0f) + ((SKY_RAY_INSCATTER(1, _3370, _3374, _3378, _3255, _3258, _3260, _3402) * _2278) + SKY_RAY_INSCATTER(1, _3289, _3293, _3297, _3255, _3258, _3260, (_3329 * _3402)))) * _precomputedAmbient7.y)))
+              : ((((_precomputedAmbients[48].y) * ((_3357 * _3362) + (_3314 * _3361))) + _2016) + (((((((_3346 * _3314) * _mieScatterColor.y) + (((_3357 * _3350) + (_3349 * _3307)) * _3270)) + (_3407 * _2278)) * 25.0f) + (((_3388 * _2278) + (_3307 * _3329)) * _3408)) * _precomputedAmbient7.y));
+            _3576 = SKY_SCATTERING
+              ? (((((_precomputedAmbients[48].x) * ((_3354 * _3362) + (_3313 * _3361))) + _2017) + (((((((_3346 * _3313) * _mieScatterColor.x) + (((_3354 * _3350) + (_3349 * _3302)) * _3270)) + (_3401 * _2279)) * 25.0f) + ((SKY_RAY_INSCATTER(0, _3370, _3374, _3378, _3255, _3258, _3260, _3402) * _2279) + SKY_RAY_INSCATTER(0, _3289, _3293, _3297, _3255, _3258, _3260, (_3329 * _3402)))) * _precomputedAmbient7.y)))
+              : ((((_precomputedAmbients[48].x) * ((_3354 * _3362) + (_3313 * _3361))) + _2017) + (((((((_3346 * _3313) * _mieScatterColor.x) + (((_3354 * _3350) + (_3349 * _3302)) * _3270)) + (_3401 * _2279)) * 25.0f) + (((_3383 * _2279) + (_3302 * _3329)) * _3403)) * _precomputedAmbient7.y));
+            _3577 = SKY_SCATTERING
+              ? ((((SKY_RAY_INSCATTER(2, _3421, _3425, _3429, _3255, _3258, _3260, (_3445 * _3402)) + (SKY_RAY_INSCATTER(2, _3370, _3374, _3378, _3255, _3258, _3260, _3402) * _2274)) + _2018) + (((((_3453 * _mieScatterColor.z) + _3459) * _3444) + (_3412 * _2274)) * 25.0f)))
+              : (((((_3444 * _3445) + (_3393 * _2274)) * _3413) + _2018) + (((((_3453 * _mieScatterColor.z) + _3459) * _3444) + (_3412 * _2274)) * 25.0f));
+            _3578 = SKY_SCATTERING
+              ? ((((SKY_RAY_INSCATTER(1, _3421, _3425, _3429, _3255, _3258, _3260, (_3445 * _3402)) + (SKY_RAY_INSCATTER(1, _3370, _3374, _3378, _3255, _3258, _3260, _3402) * _2275)) + _2019) + (((((_3453 * _mieScatterColor.y) + _3459) * _3439) + (_3407 * _2275)) * 25.0f)))
+              : (((((_3439 * _3445) + (_3388 * _2275)) * _3408) + _2019) + (((((_3453 * _mieScatterColor.y) + _3459) * _3439) + (_3407 * _2275)) * 25.0f));
+            _3579 = SKY_SCATTERING
+              ? ((((SKY_RAY_INSCATTER(0, _3421, _3425, _3429, _3255, _3258, _3260, (_3445 * _3402)) + (SKY_RAY_INSCATTER(0, _3370, _3374, _3378, _3255, _3258, _3260, _3402) * _2276)) + _2020) + (((((_3453 * _mieScatterColor.x) + _3459) * _3434) + (_3401 * _2276)) * 25.0f)))
+              : (((((_3434 * _3445) + (_3383 * _2276)) * _3403) + _2020) + (((((_3453 * _mieScatterColor.x) + _3459) * _3434) + (_3401 * _2276)) * 25.0f));
+            // RenoDX: <<< [Patch: SkySpectralRayleigh]
           } else {
             _3569 = _260;
             _3570 = _2011;

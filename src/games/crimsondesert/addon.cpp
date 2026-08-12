@@ -1548,6 +1548,22 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
+        .key = "SpectralSkyAmbient",
+        .binding = &shader_injection.custom_flags_2,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 0.f,
+        .packed_values = {0u, CUSTOM_FLAGS2__SPECTRAL_SKY_AMBIENT},
+        .can_reset = true,
+        .label = "Spectral Sky Ambient",
+        .section = "Sky / Celestial",
+        .tooltip = "Converts the sky's contribution to ambient world lighting with the spectral color transform.\n"
+                   "Off = vanilla conversion.\n"
+                   "On = fitted spectral conversion; tints how the sky lights the world, not the visible sky itself.",
+        .labels = {"Off", "On"},
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
         .key = "SunImprovements",
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,

@@ -2875,12 +2875,29 @@ void main(
               _1837 = ((_1823 * 0.91636f) + (_1819 * 0.0702f)) + (_1827 * 0.01345f);
               _1842 = ((_1823 * 0.10958f) + (_1819 * 0.02062f)) + (_1827 * 0.8698f);
               _1844 = _1765 * (_1728 + _969);
+              // RenoDX: >>> [Patch: SpectralSkyAmbient] [Version: 1.16.00]
+              // Description: Converts this region's sun-path Rayleigh in-scatter per wavelength through
+              //              the spectral matrix instead of collapsing each output row onto its own
+              //              channel — the single-scatter term against the view transmittance triple
+              //              (_1784/_1787/_1790) and the multi-scatter gather against the sun
+              //              transmittance triple (_1819/_1823/_1827), with the per-wavelength gather
+              //              weight folded into the beta arguments. Volume fog, cloud and the cloud/fog
+              //              share of the gather carry display-referred colour and keep the vanilla
+              //              matrix, as does transmittance. Each Off arm is the complete native
+              //              expression.
               _1846 = (_1748 * _1803) + _1844;
-              _1863 = ((((((_volumeFogScatterColor.x * _1811) + _1808) * _1765) + (_1748 * _1805)) * (((_1787 * 0.33951f) + (_1784 * 0.61312f)) + (_1790 * 0.04737f))) + ((_1846 * _761) * _1832)) * _434;
+              _1863 = SPECTRAL_SKY_AMBIENT
+                ? (((((_volumeFogScatterColor.x * _1811) + _1808) * _1765) * SKY_VAN_DOT(0, _1784, _1787, _1790)) + SKY_RAY_INSCATTER(0, _1784, _1787, _1790, _1748, _1751, _1753, _1805) + SKY_RAY_INSCATTER(0, _1819, _1823, _1827, (_1748 * _761), (_1751 * _760), (_1753 * _759), _1803) + ((_1844 * _761) * _1832)) * _434
+                : ((((((_volumeFogScatterColor.x * _1811) + _1808) * _1765) + (_1748 * _1805)) * (((_1787 * 0.33951f) + (_1784 * 0.61312f)) + (_1790 * 0.04737f))) + ((_1846 * _761) * _1832)) * _434;
               _1865 = (_1751 * _1803) + _1844;
-              _1881 = ((((((_volumeFogScatterColor.y * _1811) + _1808) * _1765) + (_1751 * _1805)) * (((_1787 * 0.91636f) + (_1784 * 0.0702f)) + (_1790 * 0.01345f))) + ((_1865 * _760) * _1837)) * _434;
+              _1881 = SPECTRAL_SKY_AMBIENT
+                ? (((((_volumeFogScatterColor.y * _1811) + _1808) * _1765) * SKY_VAN_DOT(1, _1784, _1787, _1790)) + SKY_RAY_INSCATTER(1, _1784, _1787, _1790, _1748, _1751, _1753, _1805) + SKY_RAY_INSCATTER(1, _1819, _1823, _1827, (_1748 * _761), (_1751 * _760), (_1753 * _759), _1803) + ((_1844 * _760) * _1837)) * _434
+                : ((((((_volumeFogScatterColor.y * _1811) + _1808) * _1765) + (_1751 * _1805)) * (((_1787 * 0.91636f) + (_1784 * 0.0702f)) + (_1790 * 0.01345f))) + ((_1865 * _760) * _1837)) * _434;
               _1883 = _1844 + (_1753 * _1803);
-              _1899 = ((((((_volumeFogScatterColor.z * _1811) + _1808) * _1765) + (_1753 * _1805)) * (((_1787 * 0.10958f) + (_1784 * 0.02062f)) + (_1790 * 0.8698f))) + ((_1883 * _759) * _1842)) * _434;
+              _1899 = SPECTRAL_SKY_AMBIENT
+                ? (((((_volumeFogScatterColor.z * _1811) + _1808) * _1765) * SKY_VAN_DOT(2, _1784, _1787, _1790)) + SKY_RAY_INSCATTER(2, _1784, _1787, _1790, _1748, _1751, _1753, _1805) + SKY_RAY_INSCATTER(2, _1819, _1823, _1827, (_1748 * _761), (_1751 * _760), (_1753 * _759), _1803) + ((_1844 * _759) * _1842)) * _434
+                : ((((((_volumeFogScatterColor.z * _1811) + _1808) * _1765) + (_1753 * _1805)) * (((_1787 * 0.10958f) + (_1784 * 0.02062f)) + (_1790 * 0.8698f))) + ((_1883 * _759) * _1842)) * _434;
+              // RenoDX: <<< [Patch: SpectralSkyAmbient]
               _1900 = _1720.x + _1732;
               _1902 = (_1720.y + _1735) * _1758;
               _1903 = _1771 * _1900;
@@ -2895,9 +2912,24 @@ void main(
               _1920 = _1755 * _773;
               _1935 = ((_1920 * 0.07957747f) * (((1.0f - _1919) * 3.0f) / ((_1919 + 2.0f) * 2.0f))) * (_360 / exp2(log2((_1919 + 1.0f) - (_miePhaseConst * _361)) * 1.5f));
               _1941 = ((((_376 * 2.0f) * _969) * _1802) + (_1807 * _368)) * _1765;
-              _1960 = (((((_1941 + (_1748 * _1917)) + (_mieScatterColor.x * _1935)) * (((_1912 * 0.33951f) + (_1909 * 0.61312f)) + (_1915 * 0.04737f))) + ((_1832 * _758) * ((_mieScatterColor.x * _1920) + _1846))) * _434) + _397;
-              _1978 = (((((_1941 + (_1751 * _1917)) + (_mieScatterColor.y * _1935)) * (((_1912 * 0.91636f) + (_1909 * 0.0702f)) + (_1915 * 0.01345f))) + ((_1837 * _757) * ((_mieScatterColor.y * _1920) + _1865))) * _434) + _398;
-              _1996 = (((((_1941 + (_1753 * _1917)) + (_mieScatterColor.z * _1935)) * (((_1912 * 0.10958f) + (_1909 * 0.02062f)) + (_1915 * 0.8698f))) + ((_1842 * _756) * ((_mieScatterColor.z * _1920) + _1883))) * _434) + _399;
+              // RenoDX: >>> [Patch: SpectralSkyAmbient] [Version: 1.16.00]
+              // Description: Converts this region's moon-path Rayleigh in-scatter per wavelength through
+              //              the spectral matrix — the single-scatter term against the moon transmittance
+              //              triple (_1909/_1912/_1915) and the multi-scatter gather against the sun
+              //              transmittance triple (_1819/_1823/_1827) the game mixes it with, with the
+              //              per-wavelength gather weight folded into the beta arguments. Cloud, Mie and
+              //              the cloud/fog share of the gather keep the vanilla matrix, as does
+              //              transmittance. Each Off arm is the complete native expression.
+              _1960 = SPECTRAL_SKY_AMBIENT
+                ? ((((_1941 + (_mieScatterColor.x * _1935)) * SKY_VAN_DOT(0, _1909, _1912, _1915)) + SKY_RAY_INSCATTER(0, _1909, _1912, _1915, _1748, _1751, _1753, _1917) + SKY_RAY_INSCATTER(0, _1819, _1823, _1827, (_1748 * _758), (_1751 * _757), (_1753 * _756), _1803) + ((_1832 * _758) * ((_mieScatterColor.x * _1920) + _1844))) * _434) + _397
+                : (((((_1941 + (_1748 * _1917)) + (_mieScatterColor.x * _1935)) * (((_1912 * 0.33951f) + (_1909 * 0.61312f)) + (_1915 * 0.04737f))) + ((_1832 * _758) * ((_mieScatterColor.x * _1920) + _1846))) * _434) + _397;
+              _1978 = SPECTRAL_SKY_AMBIENT
+                ? ((((_1941 + (_mieScatterColor.y * _1935)) * SKY_VAN_DOT(1, _1909, _1912, _1915)) + SKY_RAY_INSCATTER(1, _1909, _1912, _1915, _1748, _1751, _1753, _1917) + SKY_RAY_INSCATTER(1, _1819, _1823, _1827, (_1748 * _758), (_1751 * _757), (_1753 * _756), _1803) + ((_1837 * _757) * ((_mieScatterColor.y * _1920) + _1844))) * _434) + _398
+                : (((((_1941 + (_1751 * _1917)) + (_mieScatterColor.y * _1935)) * (((_1912 * 0.91636f) + (_1909 * 0.0702f)) + (_1915 * 0.01345f))) + ((_1837 * _757) * ((_mieScatterColor.y * _1920) + _1865))) * _434) + _398;
+              _1996 = SPECTRAL_SKY_AMBIENT
+                ? ((((_1941 + (_mieScatterColor.z * _1935)) * SKY_VAN_DOT(2, _1909, _1912, _1915)) + SKY_RAY_INSCATTER(2, _1909, _1912, _1915, _1748, _1751, _1753, _1917) + SKY_RAY_INSCATTER(2, _1819, _1823, _1827, (_1748 * _758), (_1751 * _757), (_1753 * _756), _1803) + ((_1842 * _756) * ((_mieScatterColor.z * _1920) + _1844))) * _434) + _399
+                : (((((_1941 + (_1753 * _1917)) + (_mieScatterColor.z * _1935)) * (((_1912 * 0.10958f) + (_1909 * 0.02062f)) + (_1915 * 0.8698f))) + ((_1842 * _756) * ((_mieScatterColor.z * _1920) + _1883))) * _434) + _399;
+              // RenoDX: <<< [Patch: SpectralSkyAmbient]
               if (_1728 > 0.001f) {
                 _2000 = _cloudPhaseConstFront * 0.5f;
                 _2001 = _2000 * _2000;
@@ -3414,12 +3446,45 @@ void main(
             _3658 = _3387;
             _3659 = _3384;
             _3660 = _3381;
-            _3661 = ((((((((_volumeFogScatterColor.z * _3460) + _3457) * _3461) + (_3402 * _3454)) * (((_3435 * 0.10958f) + (_3431 * 0.02062f)) + (_3439 * 0.8698f))) + (((_3498 + _3495) * _2419) * _3492)) * _286) + _2161);
-            _3662 = ((((((((_volumeFogScatterColor.y * _3460) + _3457) * _3461) + (_3400 * _3454)) * (((_3435 * 0.91636f) + (_3431 * 0.0702f)) + (_3439 * 0.01345f))) + (((_3498 + _3494) * _2420) * _3487)) * _286) + _2160);
-            _3663 = ((((((((_volumeFogScatterColor.x * _3460) + _3457) * _3461) + (_3397 * _3454)) * (((_3435 * 0.33951f) + (_3431 * 0.61312f)) + (_3439 * 0.04737f))) + (((_3498 + _3493) * _2421) * _3482)) * _286) + _2159);
-            _3664 = (((((_3529 * _3530) + _3557) * _3495) + _2158) + (((((_mieScatterColor.z * _3533) + _3497) * _3557) + (((_mieScatterColor.z * _3548) + _3554) * _3529)) * 25.0f));
-            _3665 = (((((_3524 * _3530) + _3556) * _3494) + _2157) + (((((_mieScatterColor.y * _3533) + _3497) * _3556) + (((_mieScatterColor.y * _3548) + _3554) * _3524)) * 25.0f));
-            _3666 = (((((_3519 * _3530) + _3555) * _3493) + _2156) + (((((_mieScatterColor.x * _3533) + _3497) * _3555) + (((_mieScatterColor.x * _3548) + _3554) * _3519)) * 25.0f));
+            // RenoDX: >>> [Patch: SpectralSkyAmbient] [Version: 1.16.00]
+            // Description: Converts this region's sun-path Rayleigh in-scatter per wavelength through
+            //              the spectral matrix instead of collapsing each output row onto its own
+            //              channel — the single-scatter term against the view transmittance triple
+            //              (_3431/_3435/_3439) and the multi-scatter gather against the sun
+            //              transmittance triple (_3469/_3473/_3477), with the per-wavelength gather
+            //              weight folded into the beta arguments. Volume fog, cloud and the cloud/fog
+            //              share of the gather carry display-referred colour and keep the vanilla
+            //              matrix, as does transmittance. The rows are emitted blue first here. Each
+            //              Off arm is the complete native expression.
+            _3661 = SPECTRAL_SKY_AMBIENT
+              ? (((((((_volumeFogScatterColor.z * _3460) + _3457) * _3461) * SKY_VAN_DOT(2, _3431, _3435, _3439)) + SKY_RAY_INSCATTER(2, _3431, _3435, _3439, _3397, _3400, _3402, _3454) + SKY_RAY_INSCATTER(2, _3469, _3473, _3477, (_3397 * _2421), (_3400 * _2420), (_3402 * _2419), _3452) + ((_3498 * _2419) * _3492)) * _286) + _2161)
+              : ((((((((_volumeFogScatterColor.z * _3460) + _3457) * _3461) + (_3402 * _3454)) * (((_3435 * 0.10958f) + (_3431 * 0.02062f)) + (_3439 * 0.8698f))) + (((_3498 + _3495) * _2419) * _3492)) * _286) + _2161);
+            _3662 = SPECTRAL_SKY_AMBIENT
+              ? (((((((_volumeFogScatterColor.y * _3460) + _3457) * _3461) * SKY_VAN_DOT(1, _3431, _3435, _3439)) + SKY_RAY_INSCATTER(1, _3431, _3435, _3439, _3397, _3400, _3402, _3454) + SKY_RAY_INSCATTER(1, _3469, _3473, _3477, (_3397 * _2421), (_3400 * _2420), (_3402 * _2419), _3452) + ((_3498 * _2420) * _3487)) * _286) + _2160)
+              : ((((((((_volumeFogScatterColor.y * _3460) + _3457) * _3461) + (_3400 * _3454)) * (((_3435 * 0.91636f) + (_3431 * 0.0702f)) + (_3439 * 0.01345f))) + (((_3498 + _3494) * _2420) * _3487)) * _286) + _2160);
+            _3663 = SPECTRAL_SKY_AMBIENT
+              ? (((((((_volumeFogScatterColor.x * _3460) + _3457) * _3461) * SKY_VAN_DOT(0, _3431, _3435, _3439)) + SKY_RAY_INSCATTER(0, _3431, _3435, _3439, _3397, _3400, _3402, _3454) + SKY_RAY_INSCATTER(0, _3469, _3473, _3477, (_3397 * _2421), (_3400 * _2420), (_3402 * _2419), _3452) + ((_3498 * _2421) * _3482)) * _286) + _2159)
+              : ((((((((_volumeFogScatterColor.x * _3460) + _3457) * _3461) + (_3397 * _3454)) * (((_3435 * 0.33951f) + (_3431 * 0.61312f)) + (_3439 * 0.04737f))) + (((_3498 + _3493) * _2421) * _3482)) * _286) + _2159);
+            // RenoDX: <<< [Patch: SpectralSkyAmbient]
+            // RenoDX: >>> [Patch: SpectralSkyAmbient] [Version: 1.16.00]
+            // Description: Converts this region's moon-path Rayleigh in-scatter per wavelength through
+            //              the spectral matrix — the single-scatter term against the moon transmittance
+            //              triple (_3506/_3510/_3514) and the multi-scatter gather against the sun
+            //              transmittance triple (_3469/_3473/_3477) the game mixes it with, with the
+            //              per-wavelength gather weight folded into the beta arguments. Mie and the
+            //              cloud/fog share of the gather keep the vanilla matrix, as does transmittance.
+            //              The rows are emitted blue first here. Each Off arm is the complete native
+            //              expression.
+            _3664 = SPECTRAL_SKY_AMBIENT
+              ? (((SKY_RAY_INSCATTER(2, _3506, _3510, _3514, _3397, _3400, _3402, (_3530 * _3452)) + SKY_RAY_INSCATTER(2, _3469, _3473, _3477, (_3397 * _2418), (_3400 * _2417), (_3402 * _2416), _3452)) + _2158) + (((((_mieScatterColor.z * _3533) + _3497) * _3557) + (((_mieScatterColor.z * _3548) + _3554) * _3529)) * 25.0f))
+              : (((((_3529 * _3530) + _3557) * _3495) + _2158) + (((((_mieScatterColor.z * _3533) + _3497) * _3557) + (((_mieScatterColor.z * _3548) + _3554) * _3529)) * 25.0f));
+            _3665 = SPECTRAL_SKY_AMBIENT
+              ? (((SKY_RAY_INSCATTER(1, _3506, _3510, _3514, _3397, _3400, _3402, (_3530 * _3452)) + SKY_RAY_INSCATTER(1, _3469, _3473, _3477, (_3397 * _2418), (_3400 * _2417), (_3402 * _2416), _3452)) + _2157) + (((((_mieScatterColor.y * _3533) + _3497) * _3556) + (((_mieScatterColor.y * _3548) + _3554) * _3524)) * 25.0f))
+              : (((((_3524 * _3530) + _3556) * _3494) + _2157) + (((((_mieScatterColor.y * _3533) + _3497) * _3556) + (((_mieScatterColor.y * _3548) + _3554) * _3524)) * 25.0f));
+            _3666 = SPECTRAL_SKY_AMBIENT
+              ? (((SKY_RAY_INSCATTER(0, _3506, _3510, _3514, _3397, _3400, _3402, (_3530 * _3452)) + SKY_RAY_INSCATTER(0, _3469, _3473, _3477, (_3397 * _2418), (_3400 * _2417), (_3402 * _2416), _3452)) + _2156) + (((((_mieScatterColor.x * _3533) + _3497) * _3555) + (((_mieScatterColor.x * _3548) + _3554) * _3519)) * 25.0f))
+              : (((((_3519 * _3530) + _3555) * _3493) + _2156) + (((((_mieScatterColor.x * _3533) + _3497) * _3555) + (((_mieScatterColor.x * _3548) + _3554) * _3519)) * 25.0f));
+            // RenoDX: <<< [Patch: SpectralSkyAmbient]
           } else {
             _3657 = _2165;
             _3658 = _2173;
@@ -4445,12 +4510,29 @@ void main(
               _6727 = ((_6713 * 0.91636f) + (_6709 * 0.0702f)) + (_6717 * 0.01345f);
               _6732 = ((_6713 * 0.10958f) + (_6709 * 0.02062f)) + (_6717 * 0.8698f);
               _6734 = _6655 * (_6618 + _5859);
+              // RenoDX: >>> [Patch: SpectralSkyAmbient] [Version: 1.16.00]
+              // Description: Converts this region's sun-path Rayleigh in-scatter per wavelength through
+              //              the spectral matrix instead of collapsing each output row onto its own
+              //              channel — the single-scatter term against the view transmittance triple
+              //              (_6674/_6677/_6680) and the multi-scatter gather against the sun
+              //              transmittance triple (_6709/_6713/_6717), with the per-wavelength gather
+              //              weight folded into the beta arguments. Volume fog, cloud and the cloud/fog
+              //              share of the gather carry display-referred colour and keep the vanilla
+              //              matrix, as does transmittance. Each Off arm is the complete native
+              //              expression.
               _6736 = (_6638 * _6693) + _6734;
-              _6753 = ((((((_volumeFogScatterColor.x * _6701) + _6698) * _6655) + (_6638 * _6695)) * (((_6677 * 0.33951f) + (_6674 * 0.61312f)) + (_6680 * 0.04737f))) + ((_6736 * _5651) * _6722)) * _5324;
+              _6753 = SPECTRAL_SKY_AMBIENT
+                ? (((((_volumeFogScatterColor.x * _6701) + _6698) * _6655) * SKY_VAN_DOT(0, _6674, _6677, _6680)) + SKY_RAY_INSCATTER(0, _6674, _6677, _6680, _6638, _6641, _6643, _6695) + SKY_RAY_INSCATTER(0, _6709, _6713, _6717, (_6638 * _5651), (_6641 * _5650), (_6643 * _5649), _6693) + ((_6734 * _5651) * _6722)) * _5324
+                : ((((((_volumeFogScatterColor.x * _6701) + _6698) * _6655) + (_6638 * _6695)) * (((_6677 * 0.33951f) + (_6674 * 0.61312f)) + (_6680 * 0.04737f))) + ((_6736 * _5651) * _6722)) * _5324;
               _6755 = (_6641 * _6693) + _6734;
-              _6771 = ((((((_volumeFogScatterColor.y * _6701) + _6698) * _6655) + (_6641 * _6695)) * (((_6677 * 0.91636f) + (_6674 * 0.0702f)) + (_6680 * 0.01345f))) + ((_6755 * _5650) * _6727)) * _5324;
+              _6771 = SPECTRAL_SKY_AMBIENT
+                ? (((((_volumeFogScatterColor.y * _6701) + _6698) * _6655) * SKY_VAN_DOT(1, _6674, _6677, _6680)) + SKY_RAY_INSCATTER(1, _6674, _6677, _6680, _6638, _6641, _6643, _6695) + SKY_RAY_INSCATTER(1, _6709, _6713, _6717, (_6638 * _5651), (_6641 * _5650), (_6643 * _5649), _6693) + ((_6734 * _5650) * _6727)) * _5324
+                : ((((((_volumeFogScatterColor.y * _6701) + _6698) * _6655) + (_6641 * _6695)) * (((_6677 * 0.91636f) + (_6674 * 0.0702f)) + (_6680 * 0.01345f))) + ((_6755 * _5650) * _6727)) * _5324;
               _6773 = _6734 + (_6643 * _6693);
-              _6789 = ((((((_volumeFogScatterColor.z * _6701) + _6698) * _6655) + (_6643 * _6695)) * (((_6677 * 0.10958f) + (_6674 * 0.02062f)) + (_6680 * 0.8698f))) + ((_6773 * _5649) * _6732)) * _5324;
+              _6789 = SPECTRAL_SKY_AMBIENT
+                ? (((((_volumeFogScatterColor.z * _6701) + _6698) * _6655) * SKY_VAN_DOT(2, _6674, _6677, _6680)) + SKY_RAY_INSCATTER(2, _6674, _6677, _6680, _6638, _6641, _6643, _6695) + SKY_RAY_INSCATTER(2, _6709, _6713, _6717, (_6638 * _5651), (_6641 * _5650), (_6643 * _5649), _6693) + ((_6734 * _5649) * _6732)) * _5324
+                : ((((((_volumeFogScatterColor.z * _6701) + _6698) * _6655) + (_6643 * _6695)) * (((_6677 * 0.10958f) + (_6674 * 0.02062f)) + (_6680 * 0.8698f))) + ((_6773 * _5649) * _6732)) * _5324;
+              // RenoDX: <<< [Patch: SpectralSkyAmbient]
               _6790 = _6610.x + _6622;
               _6792 = (_6610.y + _6625) * _6648;
               _6793 = _6661 * _6790;
@@ -4465,9 +4547,24 @@ void main(
               _6810 = _6645 * _5663;
               _6825 = ((_6810 * 0.07957747f) * (((1.0f - _6809) * 3.0f) / ((_6809 + 2.0f) * 2.0f))) * (_5256 / exp2(log2((_6809 + 1.0f) - (_miePhaseConst * _5257)) * 1.5f));
               _6831 = ((((_5272 * 2.0f) * _5859) * _6692) + (_6697 * _5264)) * _6655;
-              _6850 = (((((_6831 + (_6638 * _6807)) + (_mieScatterColor.x * _6825)) * (((_6802 * 0.33951f) + (_6799 * 0.61312f)) + (_6805 * 0.04737f))) + ((_6722 * _5648) * ((_mieScatterColor.x * _6810) + _6736))) * _5324) + _5292;
-              _6868 = (((((_6831 + (_6641 * _6807)) + (_mieScatterColor.y * _6825)) * (((_6802 * 0.91636f) + (_6799 * 0.0702f)) + (_6805 * 0.01345f))) + ((_6727 * _5647) * ((_mieScatterColor.y * _6810) + _6755))) * _5324) + _5293;
-              _6886 = (((((_6831 + (_6643 * _6807)) + (_mieScatterColor.z * _6825)) * (((_6802 * 0.10958f) + (_6799 * 0.02062f)) + (_6805 * 0.8698f))) + ((_6732 * _5646) * ((_mieScatterColor.z * _6810) + _6773))) * _5324) + _5294;
+              // RenoDX: >>> [Patch: SpectralSkyAmbient] [Version: 1.16.00]
+              // Description: Converts this region's moon-path Rayleigh in-scatter per wavelength through
+              //              the spectral matrix — the single-scatter term against the moon transmittance
+              //              triple (_6799/_6802/_6805) and the multi-scatter gather against the sun
+              //              transmittance triple (_6709/_6713/_6717) the game mixes it with, with the
+              //              per-wavelength gather weight folded into the beta arguments. Cloud, Mie and
+              //              the cloud/fog share of the gather keep the vanilla matrix, as does
+              //              transmittance. Each Off arm is the complete native expression.
+              _6850 = SPECTRAL_SKY_AMBIENT
+                ? ((((_6831 + (_mieScatterColor.x * _6825)) * SKY_VAN_DOT(0, _6799, _6802, _6805)) + SKY_RAY_INSCATTER(0, _6799, _6802, _6805, _6638, _6641, _6643, _6807) + SKY_RAY_INSCATTER(0, _6709, _6713, _6717, (_6638 * _5648), (_6641 * _5647), (_6643 * _5646), _6693) + ((_6722 * _5648) * ((_mieScatterColor.x * _6810) + _6734))) * _5324) + _5292
+                : (((((_6831 + (_6638 * _6807)) + (_mieScatterColor.x * _6825)) * (((_6802 * 0.33951f) + (_6799 * 0.61312f)) + (_6805 * 0.04737f))) + ((_6722 * _5648) * ((_mieScatterColor.x * _6810) + _6736))) * _5324) + _5292;
+              _6868 = SPECTRAL_SKY_AMBIENT
+                ? ((((_6831 + (_mieScatterColor.y * _6825)) * SKY_VAN_DOT(1, _6799, _6802, _6805)) + SKY_RAY_INSCATTER(1, _6799, _6802, _6805, _6638, _6641, _6643, _6807) + SKY_RAY_INSCATTER(1, _6709, _6713, _6717, (_6638 * _5648), (_6641 * _5647), (_6643 * _5646), _6693) + ((_6727 * _5647) * ((_mieScatterColor.y * _6810) + _6734))) * _5324) + _5293
+                : (((((_6831 + (_6641 * _6807)) + (_mieScatterColor.y * _6825)) * (((_6802 * 0.91636f) + (_6799 * 0.0702f)) + (_6805 * 0.01345f))) + ((_6727 * _5647) * ((_mieScatterColor.y * _6810) + _6755))) * _5324) + _5293;
+              _6886 = SPECTRAL_SKY_AMBIENT
+                ? ((((_6831 + (_mieScatterColor.z * _6825)) * SKY_VAN_DOT(2, _6799, _6802, _6805)) + SKY_RAY_INSCATTER(2, _6799, _6802, _6805, _6638, _6641, _6643, _6807) + SKY_RAY_INSCATTER(2, _6709, _6713, _6717, (_6638 * _5648), (_6641 * _5647), (_6643 * _5646), _6693) + ((_6732 * _5646) * ((_mieScatterColor.z * _6810) + _6734))) * _5324) + _5294
+                : (((((_6831 + (_6643 * _6807)) + (_mieScatterColor.z * _6825)) * (((_6802 * 0.10958f) + (_6799 * 0.02062f)) + (_6805 * 0.8698f))) + ((_6732 * _5646) * ((_mieScatterColor.z * _6810) + _6773))) * _5324) + _5294;
+              // RenoDX: <<< [Patch: SpectralSkyAmbient]
               if (_6618 > 0.001f) {
                 _6890 = _cloudPhaseConstFront * 0.5f;
                 _6891 = _6890 * _6890;
@@ -4982,12 +5079,45 @@ void main(
               _8541 = _8270;
               _8542 = _8267;
               _8543 = _8264;
-              _8544 = ((((((((_volumeFogScatterColor.z * _8343) + _8340) * _8344) + (_8285 * _8337)) * (((_8318 * 0.10958f) + (_8314 * 0.02062f)) + (_8322 * 0.8698f))) + (((_8381 + _8378) * _7302) * _8375)) * _5182) + _7051);
-              _8545 = ((((((((_volumeFogScatterColor.y * _8343) + _8340) * _8344) + (_8283 * _8337)) * (((_8318 * 0.91636f) + (_8314 * 0.0702f)) + (_8322 * 0.01345f))) + (((_8381 + _8377) * _7303) * _8370)) * _5182) + _7050);
-              _8546 = ((((((((_volumeFogScatterColor.x * _8343) + _8340) * _8344) + (_8280 * _8337)) * (((_8318 * 0.33951f) + (_8314 * 0.61312f)) + (_8322 * 0.04737f))) + (((_8381 + _8376) * _7304) * _8365)) * _5182) + _7049);
-              _8547 = (((((_8412 * _8413) + _8440) * _8378) + _7048) + (((((_mieScatterColor.z * _8416) + _8380) * _8440) + (((_mieScatterColor.z * _8431) + _8437) * _8412)) * 25.0f));
-              _8548 = (((((_8407 * _8413) + _8439) * _8377) + _7047) + (((((_mieScatterColor.y * _8416) + _8380) * _8439) + (((_mieScatterColor.y * _8431) + _8437) * _8407)) * 25.0f));
-              _8549 = (((((_8402 * _8413) + _8438) * _8376) + _7046) + (((((_mieScatterColor.x * _8416) + _8380) * _8438) + (((_mieScatterColor.x * _8431) + _8437) * _8402)) * 25.0f));
+              // RenoDX: >>> [Patch: SpectralSkyAmbient] [Version: 1.16.00]
+              // Description: Converts this region's sun-path Rayleigh in-scatter per wavelength through
+              //              the spectral matrix instead of collapsing each output row onto its own
+              //              channel — the single-scatter term against the view transmittance triple
+              //              (_8314/_8318/_8322) and the multi-scatter gather against the sun
+              //              transmittance triple (_8352/_8356/_8360), with the per-wavelength gather
+              //              weight folded into the beta arguments. Volume fog, cloud and the cloud/fog
+              //              share of the gather carry display-referred colour and keep the vanilla
+              //              matrix, as does transmittance. The rows are emitted blue first here. Each
+              //              Off arm is the complete native expression.
+              _8544 = SPECTRAL_SKY_AMBIENT
+                ? (((((((_volumeFogScatterColor.z * _8343) + _8340) * _8344) * SKY_VAN_DOT(2, _8314, _8318, _8322)) + SKY_RAY_INSCATTER(2, _8314, _8318, _8322, _8280, _8283, _8285, _8337) + SKY_RAY_INSCATTER(2, _8352, _8356, _8360, (_8280 * _7304), (_8283 * _7303), (_8285 * _7302), _8335) + ((_8381 * _7302) * _8375)) * _5182) + _7051)
+                : ((((((((_volumeFogScatterColor.z * _8343) + _8340) * _8344) + (_8285 * _8337)) * (((_8318 * 0.10958f) + (_8314 * 0.02062f)) + (_8322 * 0.8698f))) + (((_8381 + _8378) * _7302) * _8375)) * _5182) + _7051);
+              _8545 = SPECTRAL_SKY_AMBIENT
+                ? (((((((_volumeFogScatterColor.y * _8343) + _8340) * _8344) * SKY_VAN_DOT(1, _8314, _8318, _8322)) + SKY_RAY_INSCATTER(1, _8314, _8318, _8322, _8280, _8283, _8285, _8337) + SKY_RAY_INSCATTER(1, _8352, _8356, _8360, (_8280 * _7304), (_8283 * _7303), (_8285 * _7302), _8335) + ((_8381 * _7303) * _8370)) * _5182) + _7050)
+                : ((((((((_volumeFogScatterColor.y * _8343) + _8340) * _8344) + (_8283 * _8337)) * (((_8318 * 0.91636f) + (_8314 * 0.0702f)) + (_8322 * 0.01345f))) + (((_8381 + _8377) * _7303) * _8370)) * _5182) + _7050);
+              _8546 = SPECTRAL_SKY_AMBIENT
+                ? (((((((_volumeFogScatterColor.x * _8343) + _8340) * _8344) * SKY_VAN_DOT(0, _8314, _8318, _8322)) + SKY_RAY_INSCATTER(0, _8314, _8318, _8322, _8280, _8283, _8285, _8337) + SKY_RAY_INSCATTER(0, _8352, _8356, _8360, (_8280 * _7304), (_8283 * _7303), (_8285 * _7302), _8335) + ((_8381 * _7304) * _8365)) * _5182) + _7049)
+                : ((((((((_volumeFogScatterColor.x * _8343) + _8340) * _8344) + (_8280 * _8337)) * (((_8318 * 0.33951f) + (_8314 * 0.61312f)) + (_8322 * 0.04737f))) + (((_8381 + _8376) * _7304) * _8365)) * _5182) + _7049);
+              // RenoDX: <<< [Patch: SpectralSkyAmbient]
+              // RenoDX: >>> [Patch: SpectralSkyAmbient] [Version: 1.16.00]
+              // Description: Converts this region's moon-path Rayleigh in-scatter per wavelength through
+              //              the spectral matrix — the single-scatter term against the moon transmittance
+              //              triple (_8389/_8393/_8397) and the multi-scatter gather against the sun
+              //              transmittance triple (_8352/_8356/_8360) the game mixes it with, with the
+              //              per-wavelength gather weight folded into the beta arguments. Mie and the
+              //              cloud/fog share of the gather keep the vanilla matrix, as does transmittance.
+              //              The rows are emitted blue first here. Each Off arm is the complete native
+              //              expression.
+              _8547 = SPECTRAL_SKY_AMBIENT
+                ? (((SKY_RAY_INSCATTER(2, _8389, _8393, _8397, _8280, _8283, _8285, (_8413 * _8335)) + SKY_RAY_INSCATTER(2, _8352, _8356, _8360, (_8280 * _7301), (_8283 * _7300), (_8285 * _7299), _8335)) + _7048) + (((((_mieScatterColor.z * _8416) + _8380) * _8440) + (((_mieScatterColor.z * _8431) + _8437) * _8412)) * 25.0f))
+                : (((((_8412 * _8413) + _8440) * _8378) + _7048) + (((((_mieScatterColor.z * _8416) + _8380) * _8440) + (((_mieScatterColor.z * _8431) + _8437) * _8412)) * 25.0f));
+              _8548 = SPECTRAL_SKY_AMBIENT
+                ? (((SKY_RAY_INSCATTER(1, _8389, _8393, _8397, _8280, _8283, _8285, (_8413 * _8335)) + SKY_RAY_INSCATTER(1, _8352, _8356, _8360, (_8280 * _7301), (_8283 * _7300), (_8285 * _7299), _8335)) + _7047) + (((((_mieScatterColor.y * _8416) + _8380) * _8439) + (((_mieScatterColor.y * _8431) + _8437) * _8407)) * 25.0f))
+                : (((((_8407 * _8413) + _8439) * _8377) + _7047) + (((((_mieScatterColor.y * _8416) + _8380) * _8439) + (((_mieScatterColor.y * _8431) + _8437) * _8407)) * 25.0f));
+              _8549 = SPECTRAL_SKY_AMBIENT
+                ? (((SKY_RAY_INSCATTER(0, _8389, _8393, _8397, _8280, _8283, _8285, (_8413 * _8335)) + SKY_RAY_INSCATTER(0, _8352, _8356, _8360, (_8280 * _7301), (_8283 * _7300), (_8285 * _7299), _8335)) + _7046) + (((((_mieScatterColor.x * _8416) + _8380) * _8438) + (((_mieScatterColor.x * _8431) + _8437) * _8402)) * 25.0f))
+                : (((((_8402 * _8413) + _8438) * _8376) + _7046) + (((((_mieScatterColor.x * _8416) + _8380) * _8438) + (((_mieScatterColor.x * _8431) + _8437) * _8402)) * 25.0f));
+              // RenoDX: <<< [Patch: SpectralSkyAmbient]
               _8550 = _5316;
             } else {
               _8540 = _7055;

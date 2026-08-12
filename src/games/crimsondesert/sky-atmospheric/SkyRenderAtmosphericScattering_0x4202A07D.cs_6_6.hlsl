@@ -1685,14 +1685,6 @@ void main(
             _1723 = _1722 * _1689;
             _1726 = (_ozoneRatio * SKY_OZONE_3) + (_1699 * 1.9607843e-07f);
             // RenoDX: <<< [Patch: SkySpectralOzone]
-            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-            // Description: Overwrites red and green packed beta from blue only after native ozone/extinction assembly, preserving vanilla extinction while enabling spectral in-scatter.
-            if (SKY_SCATTERING) {
-              float _rndx_sky_render_ref_1 = _1699;
-              _1694 = _rndx_sky_render_ref_1 * SKY_RAYLEIGH_CH1;
-              _1697 = _rndx_sky_render_ref_1 * SKY_RAYLEIGH_CH2;
-            }
-            // RenoDX: <<< [Patch: SkySpectralRayleigh]
             _1727 = _1726 * _1689;
             _1730 = exp2((_1716 + _1719) * -1.442695f);
             _1733 = exp2((_1723 + _1719) * -1.442695f);
@@ -1771,16 +1763,24 @@ void main(
             // RenoDX: <<< [Patch: DawnDuskCloudReddening]
             _1824 = _1701 * _742;
             _1826 = _1711 * (_1674 + _938);
-            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-            // Description: Selects the sky-render spectral RGB in-scatter matrix only when enabled and preserves each complete native expression as its exact Off arm.
+            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+            // Description: Selects which matrix converts Rayleigh in-scatter radiance into the working
+            //              space. Beta stays native everywhere, so extinction and ozone are untouched;
+            //              only the conversion changes. Each row carries two Rayleigh radiance terms —
+            //              the view-path term against the cloud-attenuated transmittance triple
+            //              (_1730/_1733/_1736) and the sun-path term against the sun transmittance
+            //              triple (_1815/_1819/_1823) — and both convert per wavelength through
+            //              SKY_SPECTRAL_TO_WORKING when enabled. The cloud, volume-fog and Mie terms
+            //              carry display-referred artist colour and keep the vanilla matrix, as does
+            //              transmittance itself. Each Off arm is the complete native expression.
             _1850 = SKY_SCATTERING
-              ? ((((_1801 + (_1794 * _1741)) * _1711) + ((_1694 * _1773) * _1741) + ((_1790 * _1753) * _mieScatterColor.x) + (_543 * SKY_RAY_INSCATTER(0, _1815, _1819, _1823, _1694, _1697, _1699, _1770) + _543 * SKY_VAN_DOT(0, _1815, _1819, _1823) * (_1826 + _mieScatterColor.x * _1824))) * _255)
+              ? ((((_1801 + (_1794 * _1741)) * _1711) + SKY_RAY_INSCATTER(0, _1730, _1733, _1736, _1694, _1697, _1699, _1773) + ((_1790 * _1753) * _mieScatterColor.x) + (_543 * SKY_RAY_INSCATTER(0, _1815, _1819, _1823, _1694, _1697, _1699, _1770) + _543 * SKY_VAN_DOT(0, _1815, _1819, _1823) * (_1826 + _mieScatterColor.x * _1824))) * _255)
               : (((((_1801 + (_1794 * _1741)) * _1711) + ((_1694 * _1773) * _1741)) + ((_1790 * _1753) * _mieScatterColor.x)) + (((((_1819 * 0.33951f) + (_1815 * 0.61312f)) + (_1823 * 0.04737f)) * _543) * (((_1694 * _1770) + _1826) + (_mieScatterColor.x * _1824)))) * _255;
             _1873 = SKY_SCATTERING
-              ? ((((_1804 + (_1794 * _1746)) * _1711) + ((_1697 * _1773) * _1746) + ((_1790 * _1755) * _mieScatterColor.y) + (_542 * SKY_RAY_INSCATTER(1, _1815, _1819, _1823, _1694, _1697, _1699, _1770) + _542 * SKY_VAN_DOT(1, _1815, _1819, _1823) * (_1826 + _mieScatterColor.y * _1824))) * _255)
+              ? ((((_1804 + (_1794 * _1746)) * _1711) + SKY_RAY_INSCATTER(1, _1730, _1733, _1736, _1694, _1697, _1699, _1773) + ((_1790 * _1755) * _mieScatterColor.y) + (_542 * SKY_RAY_INSCATTER(1, _1815, _1819, _1823, _1694, _1697, _1699, _1770) + _542 * SKY_VAN_DOT(1, _1815, _1819, _1823) * (_1826 + _mieScatterColor.y * _1824))) * _255)
               : (((((_1804 + (_1794 * _1746)) * _1711) + ((_1697 * _1773) * _1746)) + ((_1790 * _1755) * _mieScatterColor.y)) + (((((_1819 * 0.91636f) + (_1815 * 0.0702f)) + (_1823 * 0.01345f)) * _542) * (((_1697 * _1770) + _1826) + (_mieScatterColor.y * _1824)))) * _255;
             _1896 = SKY_SCATTERING
-              ? ((((_1807 + (_1794 * _1751)) * _1711) + ((_1699 * _1773) * _1751) + ((_1790 * _1757) * _mieScatterColor.z) + (_541 * SKY_RAY_INSCATTER(2, _1815, _1819, _1823, _1694, _1697, _1699, _1770) + _541 * SKY_VAN_DOT(2, _1815, _1819, _1823) * (_1826 + _mieScatterColor.z * _1824))) * _255)
+              ? ((((_1807 + (_1794 * _1751)) * _1711) + SKY_RAY_INSCATTER(2, _1730, _1733, _1736, _1694, _1697, _1699, _1773) + ((_1790 * _1757) * _mieScatterColor.z) + (_541 * SKY_RAY_INSCATTER(2, _1815, _1819, _1823, _1694, _1697, _1699, _1770) + _541 * SKY_VAN_DOT(2, _1815, _1819, _1823) * (_1826 + _mieScatterColor.z * _1824))) * _255)
               : (((((_1807 + (_1794 * _1751)) * _1711) + ((_1699 * _1773) * _1751)) + ((_1790 * _1757) * _mieScatterColor.z)) + (((((_1819 * 0.10958f) + (_1815 * 0.02062f)) + (_1823 * 0.8698f)) * _541) * ((_1826 + (_1699 * _1770)) + (_mieScatterColor.z * _1824)))) * _255;
             // RenoDX: <<< [Patch: SkySpectralRayleigh]
             if (_1674 > 0.001f) {
@@ -2199,14 +2199,6 @@ void main(
               _3219 = (_3195 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
               _3222 = (_ozoneRatio * SKY_OZONE_3) + (_3197 * 1.9607843e-07f);
               // RenoDX: <<< [Patch: SkySpectralOzone]
-              // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-              // Description: Overwrites red and green packed beta from blue only after native ozone/extinction assembly, preserving vanilla extinction while enabling spectral in-scatter.
-              if (SKY_SCATTERING) {
-                float _rndx_sky_render_ref_2 = _3197;
-                _3192 = _rndx_sky_render_ref_2 * SKY_RAYLEIGH_CH1;
-                _3195 = _rndx_sky_render_ref_2 * SKY_RAYLEIGH_CH2;
-              }
-              // RenoDX: <<< [Patch: SkySpectralRayleigh]
               _3226 = exp2(((_3211 * _3187) + _3216) * -1.442695f);
               _3230 = exp2(((_3219 * _3187) + _3216) * -1.442695f);
               _3234 = exp2(((_3222 * _3187) + _3216) * -1.442695f);

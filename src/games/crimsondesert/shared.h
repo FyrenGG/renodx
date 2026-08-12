@@ -177,12 +177,7 @@
 #define MOON_BRIGHTNESS                        3.50f
 #define MOON_GLOW_STRENGTH                     1.00f
 #define MOON_LIMB_DARKENING                    1.00f
-// Forced off. The spectral constants in sky_spectral_common.hlsli are derived for a 630/560/490nm
-// wavelength basis and a BT.2020 target, but the game's atmosphere triple is 680/550/440nm and its
-// working space is AP1-like, so enabling them desaturates the sky. Every gated site's off arm is the
-// exact native expression, so 0.f here is bit-identical to vanilla. The gate returns to the flag
-// test when re-derived constants replace that header.
-#define SKY_SCATTERING                         0.f
+#define SKY_SCATTERING                         ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__SKY_SCATTERING) != 0u ? 1.f : 0.f)
 #define DAWN_DUSK_IMPROVEMENTS                 ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__DAWN_DUSK_IMPROVEMENTS) != 0u ? 1.f : 0.f)
 // Snow / Fog Lighting Fixes is default-on; Off preserves vanilla snow/fog scattering and surfel voxel quantization.
 #define SNOW_FOG_FIX                           ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__SNOW_FOG_FIX) != 0u ? 1.f : 0.f)

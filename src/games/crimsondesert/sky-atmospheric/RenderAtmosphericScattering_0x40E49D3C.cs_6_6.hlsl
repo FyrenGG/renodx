@@ -1911,28 +1911,17 @@ void main(
             _1785 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
             _1788 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
             _1790 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
-            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-            // Description: Overwrites the main-view red and green packed Rayleigh channels from the exact native blue reference before extinction assembly; Off leaves all native channel values unchanged.
-            if (SKY_SCATTERING) {
-              float _rndx_sky_ref_1 = _1790;
-              _1785 = _rndx_sky_ref_1 * SKY_RAYLEIGH_CH1;
-              _1788 = _rndx_sky_ref_1 * SKY_RAYLEIGH_CH2;
-            }
-            // RenoDX: <<< [Patch: SkySpectralRayleigh]
             _1792 = _mieAerosolDensity * 2e-05f;
             _1795 = (_mieAerosolAbsorption + 1.0f) * _1792;
             _1797 = (_1730.y + _1772) * _1795;
             _1802 = _cloudScatteringCoefficient / _distanceScale;
             _1804 = (_1779 + _1680) * _1802;
-            // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
-            // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
-            _1808 = (_1785 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+            _1808 = (_1785 * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
             _1809 = _1808 * _1780;
             _1810 = _1804 + _1797;
-            _1813 = (_1788 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
+            _1813 = (_1788 * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
             _1814 = _1813 * _1780;
-            _1817 = (_ozoneRatio * SKY_OZONE_3) + (_1790 * 1.9607843e-07f);
-            // RenoDX: <<< [Patch: SkySpectralOzone]
+            _1817 = (_ozoneRatio * 2.1360002e-07f) + (_1790 * 1.9607843e-07f);
             _1818 = _1817 * _1780;
             _1821 = exp2((_1809 + _1810) * -1.442695f);
             _1824 = exp2((_1814 + _1810) * -1.442695f);
@@ -2004,12 +1993,27 @@ void main(
             // RenoDX: <<< [Patch: DawnDuskCloudReddening]
             _1914 = _1792 * _810;
             _1916 = _1802 * (_1765 + _1006);
-            _1928 = (((_1785 * _1859) + _1916) + (_mieScatterColor.x * _1914)) * (((_1909 * 0.33951f) + (_1905 * 0.61312f)) + (_1913 * 0.04737f));
+            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+            // Description: Converts this ray-march step's Rayleigh in-scatter radiance with the
+            //              spectral matrix instead of the vanilla RGB matrix. The Rayleigh term
+            //              (transmittance x beta x phase) is per-wavelength radiance and needs the
+            //              spectral-to-working conversion; the Mie term is artist colour already in
+            //              display space, so SKY_VAN_DOT keeps it on the vanilla matrix. Beta stays
+            //              the native packed value on both arms — only the matrix differs — and each
+            //              Off arm is the complete native RGB expression.
+            _1928 = SKY_SCATTERING
+              ? (SKY_RAY_INSCATTER(0, _1905, _1909, _1913, _1785, _1788, _1790, _1859) + SKY_VAN_DOT(0, _1905, _1909, _1913) * (_1916 + _mieScatterColor.x * _1914))
+              : (((_1785 * _1859) + _1916) + (_mieScatterColor.x * _1914)) * (((_1909 * 0.33951f) + (_1905 * 0.61312f)) + (_1913 * 0.04737f));
             _1940 = (((((_1891 + (_1832 * _1883)) * _1802) + ((_1785 * _1862) * _1832)) + ((_1879 * _1844) * _mieScatterColor.x)) + (_1928 * _611)) * _281;
-            _1951 = (((_1788 * _1859) + _1916) + (_mieScatterColor.y * _1914)) * (((_1909 * 0.91636f) + (_1905 * 0.0702f)) + (_1913 * 0.01345f));
+            _1951 = SKY_SCATTERING
+              ? (SKY_RAY_INSCATTER(1, _1905, _1909, _1913, _1785, _1788, _1790, _1859) + SKY_VAN_DOT(1, _1905, _1909, _1913) * (_1916 + _mieScatterColor.y * _1914))
+              : (((_1788 * _1859) + _1916) + (_mieScatterColor.y * _1914)) * (((_1909 * 0.91636f) + (_1905 * 0.0702f)) + (_1913 * 0.01345f));
             _1963 = (((((_1894 + (_1837 * _1883)) * _1802) + ((_1788 * _1862) * _1837)) + ((_1879 * _1845) * _mieScatterColor.y)) + (_1951 * _610)) * _281;
-            _1974 = ((_1916 + (_1790 * _1859)) + (_mieScatterColor.z * _1914)) * (((_1909 * 0.10958f) + (_1905 * 0.02062f)) + (_1913 * 0.8698f));
+            _1974 = SKY_SCATTERING
+              ? (SKY_RAY_INSCATTER(2, _1905, _1909, _1913, _1785, _1788, _1790, _1859) + SKY_VAN_DOT(2, _1905, _1909, _1913) * (_1916 + _mieScatterColor.z * _1914))
+              : ((_1916 + (_1790 * _1859)) + (_mieScatterColor.z * _1914)) * (((_1909 * 0.10958f) + (_1905 * 0.02062f)) + (_1913 * 0.8698f));
             _1986 = (((((_1897 + (_1842 * _1883)) * _1802) + ((_1790 * _1862) * _1842)) + ((_1879 * _1846) * _mieScatterColor.z)) + (_1974 * _609)) * _281;
+            // RenoDX: <<< [Patch: SkySpectralRayleigh]
             _1987 = _1757.x + _1769;
             _1989 = (_1757.y + _1772) * _1795;
             _1990 = _1808 * _1987;
@@ -2046,9 +2050,25 @@ void main(
             _2004 = (_209 * 0.059683103f) * _1859;
             _2012 = (_1871 * _1914) * (_209 / exp2(log2(_1865 - (_miePhaseConst * _210)) * 1.5f));
             _2019 = (_1802 * _798) * ((((_225 * 2.0f) * _1006) * _1858) + (_1881 * _217));
-            _2034 = (((((((_2012 * _mieScatterColor.x) + (_1785 * _2004)) * _798) + _2019) * (((_1999 * 0.33951f) + (_1996 * 0.61312f)) + (_2002 * 0.04737f))) + (_1928 * _608)) * _281) + _244;
-            _2049 = (((((((_2012 * _mieScatterColor.y) + (_1788 * _2004)) * _798) + _2019) * (((_1999 * 0.91636f) + (_1996 * 0.0702f)) + (_2002 * 0.01345f))) + (_1951 * _607)) * _281) + _245;
-            _2064 = (((((((_2012 * _mieScatterColor.z) + (_1790 * _2004)) * _798) + _2019) * (((_1999 * 0.10958f) + (_1996 * 0.02062f)) + (_2002 * 0.8698f))) + (_1974 * _606)) * _281) + _246;
+            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+            // Description: Converts the second in-scatter cluster's Rayleigh radiance with the
+            //              spectral matrix instead of the vanilla RGB matrix, leaving the Mie term on
+            //              the vanilla matrix because it is artist colour already in display space.
+            //              Here the Rayleigh phase carrier is the product _2004 * _798, so the whole
+            //              product is the phase argument and the sun-blend factor _798 stays applied
+            //              to the Mie term separately. Beta stays the native packed value on both
+            //              arms — only the matrix differs — and each Off arm is the complete native
+            //              RGB expression.
+            _2034 = SKY_SCATTERING
+              ? ((((SKY_RAY_INSCATTER(0, _1996, _1999, _2002, _1785, _1788, _1790, _2004 * _798) + SKY_VAN_DOT(0, _1996, _1999, _2002) * (((_2012 * _mieScatterColor.x) * _798) + _2019)) + (_1928 * _608)) * _281) + _244)
+              : (((((((_2012 * _mieScatterColor.x) + (_1785 * _2004)) * _798) + _2019) * (((_1999 * 0.33951f) + (_1996 * 0.61312f)) + (_2002 * 0.04737f))) + (_1928 * _608)) * _281) + _244;
+            _2049 = SKY_SCATTERING
+              ? ((((SKY_RAY_INSCATTER(1, _1996, _1999, _2002, _1785, _1788, _1790, _2004 * _798) + SKY_VAN_DOT(1, _1996, _1999, _2002) * (((_2012 * _mieScatterColor.y) * _798) + _2019)) + (_1951 * _607)) * _281) + _245)
+              : (((((((_2012 * _mieScatterColor.y) + (_1788 * _2004)) * _798) + _2019) * (((_1999 * 0.91636f) + (_1996 * 0.0702f)) + (_2002 * 0.01345f))) + (_1951 * _607)) * _281) + _245;
+            _2064 = SKY_SCATTERING
+              ? ((((SKY_RAY_INSCATTER(2, _1996, _1999, _2002, _1785, _1788, _1790, _2004 * _798) + SKY_VAN_DOT(2, _1996, _1999, _2002) * (((_2012 * _mieScatterColor.z) * _798) + _2019)) + (_1974 * _606)) * _281) + _246)
+              : (((((((_2012 * _mieScatterColor.z) + (_1790 * _2004)) * _798) + _2019) * (((_1999 * 0.10958f) + (_1996 * 0.02062f)) + (_2002 * 0.8698f))) + (_1974 * _606)) * _281) + _246;
+            // RenoDX: <<< [Patch: SkySpectralRayleigh]
             if (_1765 > 0.001f) {
               _2068 = _cloudPhaseConstFront * 0.5f;
               _2069 = _2068 * _2068;
@@ -2516,25 +2536,14 @@ void main(
               _3468 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
               _3471 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
               _3473 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
-              // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-              // Description: Overwrites the main-view red and green packed Rayleigh channels from the exact native blue reference before extinction assembly; Off leaves all native channel values unchanged.
-              if (SKY_SCATTERING) {
-                float _rndx_sky_ref_2 = _3473;
-                _3468 = _rndx_sky_ref_2 * SKY_RAYLEIGH_CH1;
-                _3471 = _rndx_sky_ref_2 * SKY_RAYLEIGH_CH2;
-              }
-              // RenoDX: <<< [Patch: SkySpectralRayleigh]
               _3475 = _mieAerosolDensity * 2e-05f;
               _3478 = (_mieAerosolAbsorption + 1.0f) * _3475;
               _3483 = _cloudScatteringCoefficient / _distanceScale;
               _3485 = _3483 * (_3370 + _3462);
-              // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
-              // Description: Routes the exact native ozone absorption literal(s) through the gated spectral constants; every Off selection resolves to the original float value.
-              _3489 = (_3468 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
+              _3489 = (_3468 * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
               _3492 = _3485 + ((_3420.y + _3455) * _3478);
-              _3495 = (_3471 * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
-              _3498 = (_ozoneRatio * SKY_OZONE_3) + (_3473 * 1.9607843e-07f);
-              // RenoDX: <<< [Patch: SkySpectralOzone]
+              _3495 = (_3471 * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
+              _3498 = (_ozoneRatio * 2.1360002e-07f) + (_3473 * 1.9607843e-07f);
               _3502 = exp2(((_3489 * _3463) + _3492) * -1.442695f);
               _3506 = exp2(((_3495 * _3463) + _3492) * -1.442695f);
               _3510 = exp2(((_3498 * _3463) + _3492) * -1.442695f);
@@ -2783,19 +2792,9 @@ void main(
               _4101 = (_4079 + _4040) * _4059;
               _4113 = (((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * sqrt(_mieScaledHeight * _4052)) * exp2((_4053 / _mieScaledHeight) * 1.442695f);
               _4115 = _4113 * (_4099 + _4046);
-              // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-              // Description: Hoists one exact main-view fused RGB extinction triplet, gates red/green Rayleigh reconstruction from blue, and routes the same native rows through the gated ozone constants.
-              float _rndx_sky_beta_r_3 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
-              float _rndx_sky_beta_g_3 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
-              float _rndx_sky_beta_b_3 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
-              if (SKY_SCATTERING) {
-                _rndx_sky_beta_r_3 = _rndx_sky_beta_b_3 * SKY_RAYLEIGH_CH1;
-                _rndx_sky_beta_g_3 = _rndx_sky_beta_b_3 * SKY_RAYLEIGH_CH2;
-              }
-              _4125 = ((_rndx_sky_beta_r_3) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
-              _4131 = ((_rndx_sky_beta_g_3) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
-              _4136 = ((_rndx_sky_beta_b_3) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
-              // RenoDX: <<< [Patch: SkySpectralRayleigh]
+              _4125 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+              _4131 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
+              _4136 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
               _4140 = exp2(((_4125 * _4101) + _4115) * -1.442695f);
               _4144 = exp2(((_4131 * _4101) + _4115) * -1.442695f);
               _4148 = exp2(((_4136 * _4101) + _4115) * -1.442695f);
@@ -2990,19 +2989,9 @@ void main(
           _4656 = (_4634 + _4595) * _4614;
           _4668 = (((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * sqrt(_mieScaledHeight * _4607)) * exp2((_4608 / _mieScaledHeight) * 1.442695f);
           _4670 = _4668 * (_4654 + _4601);
-          // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-          // Description: Hoists one exact main-view fused RGB extinction triplet, gates red/green Rayleigh reconstruction from blue, and routes the same native rows through the gated ozone constants.
-          float _rndx_sky_beta_r_4 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
-          float _rndx_sky_beta_g_4 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
-          float _rndx_sky_beta_b_4 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
-          if (SKY_SCATTERING) {
-            _rndx_sky_beta_r_4 = _rndx_sky_beta_b_4 * SKY_RAYLEIGH_CH1;
-            _rndx_sky_beta_g_4 = _rndx_sky_beta_b_4 * SKY_RAYLEIGH_CH2;
-          }
-          _4680 = ((_rndx_sky_beta_r_4) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
-          _4686 = ((_rndx_sky_beta_g_4) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
-          _4691 = ((_rndx_sky_beta_b_4) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
-          // RenoDX: <<< [Patch: SkySpectralRayleigh]
+          _4680 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+          _4686 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
+          _4691 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
           _4695 = exp2(((_4680 * _4656) + _4670) * -1.442695f);
           _4699 = exp2(((_4686 * _4656) + _4670) * -1.442695f);
           _4703 = exp2(((_4691 * _4656) + _4670) * -1.442695f);
@@ -3211,19 +3200,9 @@ void main(
         _5252 = (_5230 + _5191) * _5210;
         _5264 = (((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * sqrt(_mieScaledHeight * _5203)) * exp2((_5204 / _mieScaledHeight) * 1.442695f);
         _5266 = _5264 * (_5250 + _5197);
-        // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-        // Description: Hoists one exact main-view fused RGB extinction triplet, gates red/green Rayleigh reconstruction from blue, and routes the same native rows through the gated ozone constants.
-        float _rndx_sky_beta_r_5 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
-        float _rndx_sky_beta_g_5 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
-        float _rndx_sky_beta_b_5 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
-        if (SKY_SCATTERING) {
-          _rndx_sky_beta_r_5 = _rndx_sky_beta_b_5 * SKY_RAYLEIGH_CH1;
-          _rndx_sky_beta_g_5 = _rndx_sky_beta_b_5 * SKY_RAYLEIGH_CH2;
-        }
-        _5275 = ((_rndx_sky_beta_r_5) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1);
-        _5281 = ((_rndx_sky_beta_g_5) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2);
-        _5286 = ((_rndx_sky_beta_b_5) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3);
-        // RenoDX: <<< [Patch: SkySpectralRayleigh]
+        _5275 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f);
+        _5281 = (((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f);
+        _5286 = (((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f);
         _5290 = exp2(((_5275 * _5252) + _5266) * -1.442695f);
         _5294 = exp2(((_5281 * _5252) + _5266) * -1.442695f);
         _5298 = exp2(((_5286 * _5252) + _5266) * -1.442695f);
@@ -3292,19 +3271,9 @@ void main(
         _5515 = _4913;
       }
       _5530 = (((_4922 * 2e-05f) * _mieAerosolDensity) * (_mieAerosolAbsorption + 1.0f)) + ((_cloudScatteringCoefficient / _distanceScale) * (_4921 + _4920));
-      // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-      // Description: Hoists one exact main-view fused RGB extinction triplet, gates red/green Rayleigh reconstruction from blue, and routes the same native rows through the gated ozone constants.
-      float _rndx_sky_beta_r_6 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
-      float _rndx_sky_beta_g_6 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
-      float _rndx_sky_beta_b_6 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
-      if (SKY_SCATTERING) {
-        _rndx_sky_beta_r_6 = _rndx_sky_beta_b_6 * SKY_RAYLEIGH_CH1;
-        _rndx_sky_beta_g_6 = _rndx_sky_beta_b_6 * SKY_RAYLEIGH_CH2;
-      }
-      _5543 = exp2((((((_rndx_sky_beta_r_6) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1)) * _4923) + _5530) * -1.442695f);
-      _5553 = exp2((((((_rndx_sky_beta_g_6) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2)) * _4923) + _5530) * -1.442695f);
-      _5562 = exp2((((((_rndx_sky_beta_b_6) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3)) * _4923) + _5530) * -1.442695f);
-      // RenoDX: <<< [Patch: SkySpectralRayleigh]
+      _5543 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f)) * _4923) + _5530) * -1.442695f);
+      _5553 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f)) * _4923) + _5530) * -1.442695f);
+      _5562 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f)) * _4923) + _5530) * -1.442695f);
       _5572 = (((_5543 * _5512) * _precomputedAmbient7.y) + _4919) + (_precomputedAmbient7.w * ((_5543 * _5509) + _4916));
       _5579 = (((_5553 * _5511) * _precomputedAmbient7.y) + _4918) + (_precomputedAmbient7.w * ((_5553 * _5508) + _4915));
       _5586 = (((_5562 * _5510) * _precomputedAmbient7.y) + _4917) + (_precomputedAmbient7.w * ((_5562 * _5507) + _4914));

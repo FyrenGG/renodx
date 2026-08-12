@@ -1508,14 +1508,12 @@ renodx::utils::settings::Settings settings = {
         .can_reset = true,
         .label = "Spectral Sky Scattering",
         .section = "Sky / Celestial",
-        .tooltip = "Toggles Spectral rendering atmospheric scattering.\n"
-                   "Off = vanilla RGB Rayleigh scattering.\n"
-                   "On = Garcia Linan spectral rendering scattering.",
+        .tooltip = "Converts the sky's Rayleigh in-scatter with a spectral color transform fitted at the game's native wavelengths.\n"
+                   "Off = vanilla conversion.\n"
+                   "On = fitted spectral conversion; more accurate daytime sky color, reads warmer and softer than vanilla.",
         .labels = {"Off", "On"},
         .tint = rendering,
-        // Hidden: SKY_SCATTERING is forced off in shared.h (see the comment there), so this toggle
-        // currently has no effect. The entry stays registered so saved configs keep loading.
-        .is_visible = []() { return false; },
+        .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
         .key = "SunImprovements",

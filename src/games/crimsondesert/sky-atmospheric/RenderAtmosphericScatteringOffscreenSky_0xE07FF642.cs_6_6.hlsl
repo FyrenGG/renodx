@@ -1513,16 +1513,6 @@ void main(
             _1582 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
             _1585 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
             _1587 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
-            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-            // Description: Copies the exact native packed RGB beta into in-scatter-only locals, then gates red/green reconstruction from blue; extinction continues to consume the untouched native variables.
-            float _rndx_offscreen_ray_r_1 = _1582;
-            float _rndx_offscreen_ray_g_1 = _1585;
-            float _rndx_offscreen_ray_b_1 = _1587;
-            if (SKY_SCATTERING) {
-              _rndx_offscreen_ray_r_1 = _rndx_offscreen_ray_b_1 * SKY_RAYLEIGH_CH1;
-              _rndx_offscreen_ray_g_1 = _rndx_offscreen_ray_b_1 * SKY_RAYLEIGH_CH2;
-            }
-            // RenoDX: <<< [Patch: SkySpectralRayleigh]
             _1589 = _mieAerosolDensity * 2e-05f;
             _1592 = (_mieAerosolAbsorption + 1.0f) * _1589;
             _1594 = (_1527.y + _1569) * _1592;
@@ -1620,20 +1610,26 @@ void main(
             // RenoDX: <<< [Patch: DawnDuskCloudReddening]
             _1707 = _1589 * _607;
             _1709 = _1599 * (_1562 + _803);
-            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-            // Description: Selects the spectral matrix in-scatter expression only when enabled and retains each complete native RGB expression as the Off arm; companion accumulation lines consume the gated beta locals.
+            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+            // Description: Converts this ray-march step's Rayleigh in-scatter radiance with the
+            //              spectral matrix instead of the vanilla RGB matrix. The Rayleigh term
+            //              (transmittance x beta x phase) is per-wavelength radiance and needs the
+            //              spectral-to-working conversion; the Mie term is artist colour already in
+            //              display space, so SKY_VAN_DOT keeps it on the vanilla matrix. Beta stays
+            //              the native packed value on both arms — only the matrix differs — and each
+            //              Off arm is the complete native RGB expression.
             _1721 = SKY_SCATTERING
-              ? (SKY_RAY_INSCATTER(0, _1698, _1702, _1706, _rndx_offscreen_ray_r_1, _rndx_offscreen_ray_g_1, _rndx_offscreen_ray_b_1, _1655) + SKY_VAN_DOT(0, _1698, _1702, _1706) * (_1709 + _mieScatterColor.x * _1707))
+              ? (SKY_RAY_INSCATTER(0, _1698, _1702, _1706, _1582, _1585, _1587, _1655) + SKY_VAN_DOT(0, _1698, _1702, _1706) * (_1709 + _mieScatterColor.x * _1707))
               : (((_1582 * _1655) + _1709) + (_mieScatterColor.x * _1707)) * (((_1702 * 0.33951f) + (_1698 * 0.61312f)) + (_1706 * 0.04737f));
-            _1733 = (((((_1684 + (_1629 * _1677)) * _1599) + ((_rndx_offscreen_ray_r_1 * _1657) * _1629)) + ((_1674 * _1640) * _mieScatterColor.x)) + (_1721 * _595)) * _268;
+            _1733 = (((((_1684 + (_1629 * _1677)) * _1599) + ((_1582 * _1657) * _1629)) + ((_1674 * _1640) * _mieScatterColor.x)) + (_1721 * _595)) * _268;
             _1744 = SKY_SCATTERING
-              ? (SKY_RAY_INSCATTER(1, _1698, _1702, _1706, _rndx_offscreen_ray_r_1, _rndx_offscreen_ray_g_1, _rndx_offscreen_ray_b_1, _1655) + SKY_VAN_DOT(1, _1698, _1702, _1706) * (_1709 + _mieScatterColor.y * _1707))
+              ? (SKY_RAY_INSCATTER(1, _1698, _1702, _1706, _1582, _1585, _1587, _1655) + SKY_VAN_DOT(1, _1698, _1702, _1706) * (_1709 + _mieScatterColor.y * _1707))
               : (((_1585 * _1655) + _1709) + (_mieScatterColor.y * _1707)) * (((_1702 * 0.91636f) + (_1698 * 0.0702f)) + (_1706 * 0.01345f));
-            _1756 = (((((_1687 + (_1634 * _1677)) * _1599) + ((_rndx_offscreen_ray_g_1 * _1657) * _1634)) + ((_1674 * _1641) * _mieScatterColor.y)) + (_1744 * _594)) * _268;
+            _1756 = (((((_1687 + (_1634 * _1677)) * _1599) + ((_1585 * _1657) * _1634)) + ((_1674 * _1641) * _mieScatterColor.y)) + (_1744 * _594)) * _268;
             _1767 = SKY_SCATTERING
-              ? (SKY_RAY_INSCATTER(2, _1698, _1702, _1706, _rndx_offscreen_ray_r_1, _rndx_offscreen_ray_g_1, _rndx_offscreen_ray_b_1, _1655) + SKY_VAN_DOT(2, _1698, _1702, _1706) * (_1709 + _mieScatterColor.z * _1707))
+              ? (SKY_RAY_INSCATTER(2, _1698, _1702, _1706, _1582, _1585, _1587, _1655) + SKY_VAN_DOT(2, _1698, _1702, _1706) * (_1709 + _mieScatterColor.z * _1707))
               : ((_1709 + (_1587 * _1655)) + (_mieScatterColor.z * _1707)) * (((_1702 * 0.10958f) + (_1698 * 0.02062f)) + (_1706 * 0.8698f));
-            _1779 = (((((_1690 + (_1639 * _1677)) * _1599) + ((_rndx_offscreen_ray_b_1 * _1657) * _1639)) + ((_1674 * _1642) * _mieScatterColor.z)) + (_1767 * _593)) * _268;
+            _1779 = (((((_1690 + (_1639 * _1677)) * _1599) + ((_1587 * _1657) * _1639)) + ((_1674 * _1642) * _mieScatterColor.z)) + (_1767 * _593)) * _268;
             // RenoDX: <<< [Patch: SkySpectralRayleigh]
             _1780 = _1554.x + _1566;
             _1782 = (_1554.y + _1569) * _1592;
@@ -1674,16 +1670,20 @@ void main(
             _1797 = (_192 * 0.059683103f) * _1655;
             _1805 = (_1666 * _1707) * (_192 / exp2(log2(_1660 - (_miePhaseConst * _193)) * 1.5f));
             _1811 = ((((_208 * 2.0f) * _803) * _1654) + (_1676 * _200)) * _1599;
-            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-            // Description: Selects the second offscreen RGB spectral in-scatter cluster while preserving the three complete native expressions as exact Off arms.
+            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.16.00]
+            // Description: Converts the second offscreen in-scatter cluster's Rayleigh radiance with
+            //              the spectral matrix instead of the vanilla RGB matrix, on the same rule as
+            //              the cluster above: Rayleigh radiance takes the spectral conversion, the
+            //              Mie artist-colour term stays on SKY_VAN_DOT, and beta is the native packed
+            //              value on both arms. Each Off arm is the complete native RGB expression.
             _1825 = SKY_SCATTERING
-              ? (((SKY_RAY_INSCATTER(0, _1789, _1792, _1795, _rndx_offscreen_ray_r_1, _rndx_offscreen_ray_g_1, _rndx_offscreen_ray_b_1, _1797) + SKY_VAN_DOT(0, _1789, _1792, _1795) * (_1811 + _1805 * _mieScatterColor.x) + (_1721 * _592)) * _268) + _231)
+              ? (((SKY_RAY_INSCATTER(0, _1789, _1792, _1795, _1582, _1585, _1587, _1797) + SKY_VAN_DOT(0, _1789, _1792, _1795) * (_1811 + _1805 * _mieScatterColor.x) + (_1721 * _592)) * _268) + _231)
               : (((((_1811 + (_1582 * _1797)) + (_1805 * _mieScatterColor.x)) * (((_1792 * 0.33951f) + (_1789 * 0.61312f)) + (_1795 * 0.04737f))) + (_1721 * _592)) * _268) + _231;
             _1839 = SKY_SCATTERING
-              ? (((SKY_RAY_INSCATTER(1, _1789, _1792, _1795, _rndx_offscreen_ray_r_1, _rndx_offscreen_ray_g_1, _rndx_offscreen_ray_b_1, _1797) + SKY_VAN_DOT(1, _1789, _1792, _1795) * (_1811 + _1805 * _mieScatterColor.y) + (_1744 * _591)) * _268) + _232)
+              ? (((SKY_RAY_INSCATTER(1, _1789, _1792, _1795, _1582, _1585, _1587, _1797) + SKY_VAN_DOT(1, _1789, _1792, _1795) * (_1811 + _1805 * _mieScatterColor.y) + (_1744 * _591)) * _268) + _232)
               : (((((_1811 + (_1585 * _1797)) + (_1805 * _mieScatterColor.y)) * (((_1792 * 0.91636f) + (_1789 * 0.0702f)) + (_1795 * 0.01345f))) + (_1744 * _591)) * _268) + _232;
             _1853 = SKY_SCATTERING
-              ? (((SKY_RAY_INSCATTER(2, _1789, _1792, _1795, _rndx_offscreen_ray_r_1, _rndx_offscreen_ray_g_1, _rndx_offscreen_ray_b_1, _1797) + SKY_VAN_DOT(2, _1789, _1792, _1795) * (_1811 + _1805 * _mieScatterColor.z) + (_1767 * _590)) * _268) + _233)
+              ? (((SKY_RAY_INSCATTER(2, _1789, _1792, _1795, _1582, _1585, _1587, _1797) + SKY_VAN_DOT(2, _1789, _1792, _1795) * (_1811 + _1805 * _mieScatterColor.z) + (_1767 * _590)) * _268) + _233)
               : (((((_1811 + (_1587 * _1797)) + (_1805 * _mieScatterColor.z)) * (((_1792 * 0.10958f) + (_1789 * 0.02062f)) + (_1795 * 0.8698f))) + (_1767 * _590)) * _268) + _233;
             // RenoDX: <<< [Patch: SkySpectralRayleigh]
             if (_1562 > 0.001f) {
@@ -2158,16 +2158,6 @@ void main(
             _3255 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)));
             _3258 = (float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)));
             _3260 = (float)((uint)((uint)(_rayleighScatteringColor & 255)));
-            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-            // Description: Copies the exact native packed RGB beta into in-scatter-only locals, then gates red/green reconstruction from blue; extinction continues to consume the untouched native variables.
-            float _rndx_offscreen_ray_r_2 = _3255;
-            float _rndx_offscreen_ray_g_2 = _3258;
-            float _rndx_offscreen_ray_b_2 = _3260;
-            if (SKY_SCATTERING) {
-              _rndx_offscreen_ray_r_2 = _rndx_offscreen_ray_b_2 * SKY_RAYLEIGH_CH1;
-              _rndx_offscreen_ray_g_2 = _rndx_offscreen_ray_b_2 * SKY_RAYLEIGH_CH2;
-            }
-            // RenoDX: <<< [Patch: SkySpectralRayleigh]
             _3262 = _mieAerosolDensity * 2e-05f;
             _3265 = (_mieAerosolAbsorption + 1.0f) * _3262;
             _3270 = _cloudScatteringCoefficient / _distanceScale;
@@ -2236,14 +2226,11 @@ void main(
             _3396 = _3270 * (_2481 + _2158);
             _3401 = ((_mieScatterColor.x * _3394) + _3396) * _3383;
             _3402 = _2286 * 4.901961e-06f;
-            // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-            // Description: Routes only the final RGB in-scatter beta multiplications through the gated local copies; all interleaved native Mie terms remain text-identical.
-            _3403 = _rndx_offscreen_ray_r_2 * _3402;
+            _3403 = _3255 * _3402;
             _3407 = ((_mieScatterColor.y * _3394) + _3396) * _3388;
-            _3408 = _rndx_offscreen_ray_g_2 * _3402;
+            _3408 = _3258 * _3402;
             _3412 = ((_mieScatterColor.z * _3394) + _3396) * _3393;
-            _3413 = _rndx_offscreen_ray_b_2 * _3402;
-            // RenoDX: <<< [Patch: SkySpectralRayleigh]
+            _3413 = _3260 * _3402;
             _3414 = _3234.x + _3239;
             _3417 = _3272 + ((_3234.y + _3242) * _3265);
             _3421 = exp2(((_3276 * _3414) + _3417) * -1.442695f);

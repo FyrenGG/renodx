@@ -393,16 +393,9 @@ void main(
         _264 = _142 * 0.5f;
         _267 = ((_258 + _235) * _264) + _236;
         _270 = ((_263 + _234) * _264) + _237;
-        // RenoDX: >>> [Patch: SkySpectralRayleigh] [Version: 1.13.00]
-        // Description: Rebuilds red and green Rayleigh coefficients from the native packed blue reference only under the Sky Scattering gate; Off preserves all three native unpack assignments.
         _276 = ((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f;
         _280 = ((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f;
         _283 = ((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f;
-        if (SKY_SCATTERING) {
-          _276 = _283 * SKY_RAYLEIGH_CH1;
-          _280 = _283 * SKY_RAYLEIGH_CH2;
-        }
-        // RenoDX: <<< [Patch: SkySpectralRayleigh]
         _285 = _mieAerosolDensity * 2e-05f;
         _289 = ((_mieAerosolAbsorption + 1.0f) * _285) * _270;
         _290 = dot(float3(_247, _248, 0.0f), float3(_143, _144, 0.0f));

@@ -3457,7 +3457,12 @@ void main(
             if ((SHADOW_BAND_FIX != 0.f) && (!_rndxSiReject)) {
               bool _rndxCpeListA = ((uint)((int)(_5818) + (int)(-19)) < (uint)2) || ((_5818 == 18) || (((_5814 & 125) == 105) || ((_5818 == 106) || (((uint)((int)(_5818) + (int)(-27)) < (uint)2) || ((_5818 == 26) || ((_5818 == 107) || (((uint)((int)(_5818) + (int)(-5)) < (uint)2) || (((_5814 & 126) == 66) || ((_5818 == 7) || (_5818 == 53))))))))));
               bool _rndxCpeTerrain = (_5818 != 67) && ((uint)((int)(_5818) + (int)(-52)) < (uint)16);
-              if ((_rndxSiReceiverVulnerable) && ((_5818 == _80) && ((!_rndxCpeListA) && (!_rndxCpeTerrain)))) {
+              // The connected relief model is not valid for layered, alpha-tested foliage. Class 15 is
+              // both in the measured vulnerable set and in the project's foliage family, so distant leaf
+              // cards can form a short depth-continuous run and be mistaken for receiver relief. Keep
+              // foliage on the earlier receiver-plane path instead of attenuating real leaf-on-leaf shadow.
+              bool _rndxCpeFoliage = (_80 == 15);
+              if ((_rndxSiReceiverVulnerable) && ((!_rndxCpeFoliage) && ((_5818 == _80) && ((!_rndxCpeListA) && (!_rndxCpeTerrain))))) {
                 if (!_rndxCpeReady) {
                   _rndxCpeReady = true;
                   float2 _rndxCpeDirPx = float2((_5776) * _bufferSizeAndInvSize.x, (_5778) * _bufferSizeAndInvSize.y);

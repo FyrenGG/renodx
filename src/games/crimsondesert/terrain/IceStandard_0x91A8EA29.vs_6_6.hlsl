@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct IceParametersStruct {
   uint _iceCrackTexture;
   uint _iceCrackNormalTexture;
@@ -489,7 +493,12 @@ OutputSignature main(
   TEXCOORD_6 = (uint)(_123);
   TEXCOORD_7.x = ((uint)((int)((int)((uint)((uint)((int)min((uint)(_259), (uint)(1)))) << 1)) | (int)(((int)((uint)(1.0f - (BindlessParameters_MaterialOverrideParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_MaterialOverrideParameters._terrainBlend)))) & 1)));
   TEXCOORD_7.y = ((uint)((int)((int)((int)(((int)((uint)((uint)(saturate(_443) * 255.0f)) << 8)) & 65280) | (int)(((int)((uint)((uint)(saturate(_442) * 255.0f)) << 16)) & 16711680)) | (int)(((int)((uint)(saturate(_444) * 255.0f))) & 255)) | (int)((int)((uint)((uint)(saturate(1.0f - (((float)((uint)((uint)(((uint)((uint)(asint(_162))) >> 8) & 255)))) * 0.003921569f)) * 255.0f)) << 24))));
-  TEXCOORD_10.x = (((float4)(__0__7__0__0__g_bindlessTextures[((int)((uint)((uint)(select(((uint)(BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._noiseTexture) < (uint)65000), (BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._noiseTexture), 0))) + (uint)(0)))].SampleLevel(__0__4__0__0__g_staticBilinearWrap, float2((((BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._iceNoiseFrequency) * _267) + (BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._iceNoiseOffset)), (((BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._iceNoiseFrequency) * _269) + (BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._iceNoiseOffset))), 0.0f))).x);
+  // RenoDX: >>> [Patch: IceNoiseTileRelativeCoords] [Version: 1.16.00]
+  // Description: The wrapped ice-noise lookup uses tile-relative world coordinates so large camera positions cannot quantize the UV during motion; unrelated macro-scale ice coordinates remain native.
+  float _renodxIceNoiseU = _208 + _viewTileRelativePos.x;
+  float _renodxIceNoiseV = _210 + _viewTileRelativePos.z;
+  TEXCOORD_10.x = (((float4)(__0__7__0__0__g_bindlessTextures[((int)((uint)((uint)(select(((uint)(BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._noiseTexture) < (uint)65000), (BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._noiseTexture), 0))) + (uint)(0)))].SampleLevel(__0__4__0__0__g_staticBilinearWrap, float2((((BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._iceNoiseFrequency) * _renodxIceNoiseU) + (BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._iceNoiseOffset)), (((BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._iceNoiseFrequency) * _renodxIceNoiseV) + (BindlessParameters_IceParameters[NonUniformResourceIndex(((int)((uint)((uint)(_240)) + (uint)(0))))].BindlessParameters_IceParameters._iceNoiseOffset))), 0.0f))).x);
+  // RenoDX: <<< [Patch: IceNoiseTileRelativeCoords]
   TEXCOORD_10.y = _290;
   TEXCOORD_10.z = 0.0f;
   TEXCOORD_10.w = 0.0f;

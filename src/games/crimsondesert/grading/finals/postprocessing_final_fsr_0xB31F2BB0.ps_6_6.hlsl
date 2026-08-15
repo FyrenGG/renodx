@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../../common.hlsl" for the common RenoDX color and shader-injection declarations used below.
+#include "../../common.hlsl"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture2D<float4> __3__36__0__0__g_sceneColor : register(t12, space36);
 
 cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
@@ -173,7 +178,17 @@ float4 main(
     _36 = _13.x;
     _37 = _13.z;
   }
-  if (_slopeParams.w > 0.0f) {
+  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: 1.16.00]
+  // Description: Scales only the native red/blue chromatic-aberration offsets between the unchanged center sample and native shifted samples. The effective scalar is 1 when RenoDX is Off, preserving the native offsets.
+  _36 = lerp(_13.x, _36, CUSTOM_CHROMATIC_ABERRATION);
+  _37 = lerp(_13.z, _37, CUSTOM_CHROMATIC_ABERRATION);
+  // RenoDX: <<< [Patch: FinalChromaticAberration]
+
+  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: 1.16.00]
+  // Description: Keeps the native film-grain branch enabled only when its native strength is positive and RenoDX custom film grain is not selected. RenoDX Off clears the custom type flag, restoring the native condition.
+  bool vanilla_film_grain = (_slopeParams.w > 0.0f) && CUSTOM_FILM_GRAIN_TYPE == 0;
+  if (vanilla_film_grain) {
+  // RenoDX: <<< [Patch: CustomFilmGrainGate]
     _47 = ((TEXCOORD.y + 4.0f) * (TEXCOORD.x + 4.0f)) * _time.x;
     _48 = _47 * 0.7692308f;
     _52 = frac(abs(_48));
@@ -190,11 +205,32 @@ float4 main(
     _82 = _13.y;
     _83 = _37;
   }
+  // RenoDX: >>> [Patch: FinalCustomPostProcessingHDR] [Version: 1.13.00]
+  // Description: When custom film grain or sharpening is selected, decodes the HDR intermediate with the matching native/custom luminance scale, applies the shared post-process once in BT.709, and restores the PQ intermediate. RenoDX Off clears both type flags, so this block does not execute.
+  if (CUSTOM_FILM_GRAIN_TYPE != 0 || CUSTOM_SHARPENING_TYPE != 0) {
+    float3 color_pq = float3(_81, _82, _83);
+
+    float scaling = RENODX_TONE_MAP_TYPE == 0 ? 100.0f : RENODX_DIFFUSE_WHITE_NITS;
+    float3 color_bt2020 = renodx::color::pq::DecodeSafe(color_pq, scaling);
+    float3 color_bt709 = renodx::color::bt709::from::BT2020(color_bt2020);
+    color_bt709 = CustomPostProcessing(color_bt709, TEXCOORD, __3__36__0__0__g_sceneColor, __0__4__0__0__g_staticBilinearClamp, 0, scaling);
+    color_bt2020 = renodx::color::bt2020::from::BT709(color_bt709);
+    color_pq = renodx::color::pq::EncodeSafe(color_bt2020, scaling);
+
+    _81 = color_pq.x;
+    _82 = color_pq.y;
+    _83 = color_pq.z;
+  }
+  // RenoDX: <<< [Patch: FinalCustomPostProcessingHDR]
+
   _111 = 1.0f - abs(_etcParams.w);
   _115 = saturate(_etcParams.w);  // [sem: expr_sat]
-  _116 = (_111 * select((_81 < 0.04045f), (_81 * 0.07739938f), exp2(log2((_81 + 0.055f) * 0.94786733f) * 2.4f))) + _115;
-  _117 = (_111 * select((_82 < 0.04045f), (_82 * 0.07739938f), exp2(log2((_82 + 0.055f) * 0.94786733f) * 2.4f))) + _115;
-  _118 = (_111 * select((_83 < 0.04045f), (_83 * 0.07739938f), exp2(log2((_83 + 0.055f) * 0.94786733f) * 2.4f))) + _115;
+  // RenoDX: >>> [Patch: RemoveFinalSrgbDecodeHDR] [Version: 1.16.00]
+  // Description: The paired HDR tonemap writer stores raw PQ, so the final pass must blend those three channels directly instead of applying vanilla's sRGB decode and corrupting the coordinated intermediate.
+  _116 = (_111 * _81) + _115;
+  _117 = (_111 * _82) + _115;
+  _118 = (_111 * _83) + _115;
+  // RenoDX: <<< [Patch: RemoveFinalSrgbDecodeHDR]
   if (_colorGradingParams.w > 0.0f) {
     _123 = saturate(_colorGradingParams.w);  // [sem: expr_sat]
     _140 = (((max(0.0f, (1.0f - _116)) - _116) * _123) + _116);
@@ -221,7 +257,10 @@ float4 main(
   }
   _228 = abs(_177);
   _229 = abs(_178 + -1.0f);
-  _233 = saturate(1.0f - ((_225 * _postProcessParams.x) * dot(float2(_228, _229), float2(_228, _229))));  // [sem: expr_sat]
+  // RenoDX: >>> [Patch: FinalVignetteStrength] [Version: 1.16.00]
+  // Description: The native final pass derives its vignette attenuation from _postProcessParams.x and the squared screen-space radius. This block multiplies only that native coefficient by CUSTOM_VIGNETTE so the control scales the existing vignette without changing its center, falloff equation, saturation, or output routing. CUSTOM_VIGNETTE resolves to 1 when RenoDX is Off, restoring the native expression.
+  _233 = saturate(1.0f - ((_225 * _postProcessParams.x * CUSTOM_VIGNETTE) * dot(float2(_228, _229), float2(_228, _229))));  // [sem: expr_sat]
+  // RenoDX: <<< [Patch: FinalVignetteStrength]
   _243 = exp2(log2(_233 * exp2(log2(max(0.0f, (_149 + -0.8359375f)) / (18.851562f - (_149 * 18.6875f))) * 6.277395f)) * 0.15930176f);
   _244 = exp2(log2(_233 * exp2(log2(max(0.0f, (_150 + -0.8359375f)) / (18.851562f - (_150 * 18.6875f))) * 6.277395f)) * 0.15930176f);
   _245 = exp2(log2(_233 * exp2(log2(max(0.0f, (_151 + -0.8359375f)) / (18.851562f - (_151 * 18.6875f))) * 6.277395f)) * 0.15930176f);
@@ -244,5 +283,10 @@ float4 main(
   SV_Target.y = _284;
   SV_Target.z = _285;
   SV_Target.w = _13.w;
+
+  // RenoDX: >>> [Patch: FinalizePostProcessHDR] [Version: 1.13.00]
+  // Description: Runs the shared HDR finalizer after the native output has been assembled so enabled RenoDX display adjustments are applied once. Its effective controls are neutral when RenoDX is Off.
+  SV_Target.xyz = FinalizeHDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);
+  // RenoDX: <<< [Patch: FinalizePostProcessHDR]
   return SV_Target;
 }

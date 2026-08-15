@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../../common.hlsl" for the common RenoDX color and shader-injection declarations used below.
+#include "../../common.hlsl"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture2D<float4> __3__36__0__0__g_sceneColor : register(t12, space36);
 
 cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
@@ -179,7 +184,17 @@ float4 main(
     _38 = _15.x;
     _39 = _15.z;
   }
-  if (_slopeParams.w > 0.0f) {
+  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: 1.16.00]
+  // Description: Scales only the native red/blue chromatic-aberration offsets between the unchanged center sample and native shifted samples. The effective scalar is 1 when RenoDX is Off, preserving the native offsets.
+  _38 = lerp(_15.x, _38, CUSTOM_CHROMATIC_ABERRATION);
+  _39 = lerp(_15.z, _39, CUSTOM_CHROMATIC_ABERRATION);
+  // RenoDX: <<< [Patch: FinalChromaticAberration]
+
+  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: 1.16.00]
+  // Description: Keeps the native film-grain branch enabled only when its native strength is positive and RenoDX custom film grain is not selected. RenoDX Off clears the custom type flag, restoring the native condition.
+  bool vanilla_film_grain = (_slopeParams.w > 0.0f) && CUSTOM_FILM_GRAIN_TYPE == 0;
+  if (vanilla_film_grain) {
+  // RenoDX: <<< [Patch: CustomFilmGrainGate]
     _49 = ((TEXCOORD.y + 4.0f) * (TEXCOORD.x + 4.0f)) * _time.x;
     _50 = _49 * 0.7692308f;
     _54 = frac(abs(_50));
@@ -196,6 +211,18 @@ float4 main(
     _84 = _15.y;
     _85 = _39;
   }
+  // RenoDX: >>> [Patch: FinalCustomPostProcessingSDR] [Version: 1.13.00]
+  // Description: When custom film grain or sharpening is selected, decodes the native sRGB-domain color, applies the shared post-process once, and restores the native sRGB storage encoding. RenoDX Off clears both type flags, so this block does not execute.
+  if (CUSTOM_FILM_GRAIN_TYPE != 0 || CUSTOM_SHARPENING_TYPE != 0) {
+    float3 color_bt709 = renodx::color::srgb::Decode(float3(_83, _84, _85));
+    color_bt709 = CustomPostProcessing(color_bt709, TEXCOORD, __3__36__0__0__g_sceneColor, __0__4__0__0__g_staticBilinearClamp, 1);
+    color_bt709 = renodx::color::srgb::Encode(color_bt709);
+    _83 = color_bt709.x;
+    _84 = color_bt709.y;
+    _85 = color_bt709.z;
+  }
+  // RenoDX: <<< [Patch: FinalCustomPostProcessingSDR]
+
   _116 = 1.0f - abs(_etcParams.w);
   _120 = saturate(_etcParams.w);  // [sem: expr_sat]
   _121 = (_116 * saturate(select((_83 < 0.04045f), (_83 * 0.07739938f), exp2(log2((_83 + 0.055f) * 0.94786733f) * 2.4f)))) + _120;
@@ -230,7 +257,10 @@ float4 main(
   }
   _253 = abs(_202);
   _254 = abs(_203 + -1.0f);
-  _258 = saturate(1.0f - ((_250 * _postProcessParams.x) * dot(float2(_253, _254), float2(_253, _254))));  // [sem: expr_sat]
+  // RenoDX: >>> [Patch: FinalVignetteStrength] [Version: 1.16.00]
+  // Description: The native final pass derives its vignette attenuation from _postProcessParams.x and the squared screen-space radius. This block multiplies only that native coefficient by CUSTOM_VIGNETTE so the control scales the existing vignette without changing its center, falloff equation, saturation, or output routing. CUSTOM_VIGNETTE resolves to 1 when RenoDX is Off, restoring the native expression.
+  _258 = saturate(1.0f - ((_250 * _postProcessParams.x * CUSTOM_VIGNETTE) * dot(float2(_253, _254), float2(_253, _254))));  // [sem: expr_sat]
+  // RenoDX: <<< [Patch: FinalVignetteStrength]
   if (!(SV_Position.y < _viewDir.w)) {
     if (!(SV_Position.y >= (_screenSizeAndInvSize.y - _viewDir.w))) {
       _272 = (_258 * exp2(log2(saturate(mad(_colorBlind0.z, _161, mad(_colorBlind0.y, _160, (_159 * _colorBlind0.x))))) * _191));
@@ -250,5 +280,10 @@ float4 main(
   SV_Target.y = _273;
   SV_Target.z = _274;
   SV_Target.w = _15.w;
+
+  // RenoDX: >>> [Patch: FinalizePostProcessSDR] [Version: 1.13.00]
+  // Description: Runs the shared SDR finalizer after the native output has been assembled so enabled RenoDX display adjustments are applied once. Its effective controls are neutral when RenoDX is Off.
+  SV_Target.xyz = FinalizeSDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);
+  // RenoDX: <<< [Patch: FinalizePostProcessSDR]
   return SV_Target;
 }

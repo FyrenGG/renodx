@@ -119,6 +119,14 @@ cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
   float3 _sceneConstantDummy : packoffset(c172.y);
 };
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Reuses this shader's native SceneConstantBuffer time field, imports the shared tonemap declarations consumed by the material grading path, and begins suppressing the duplicate native exposure declaration.
+#define RENODX_TONEMAP_EXTERNAL_SCENE_CONSTANT_BUFFER 1
+#define RENODX_TONEMAP_SCENE_TIME_W _time.w
+#include "../tonemap.hlsli"
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure0 : packoffset(c000.x);
   float4 _exposure1 : packoffset(c001.x);
@@ -126,6 +134,10 @@ cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure3 : packoffset(c003.x);
   float4 _exposure4 : packoffset(c004.x);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of the native ExposureConstantBuffer so any intervening unrelated native declarations remain live.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
 cbuffer __3__35__0__0__AtmosphereConstantBuffer : register(b26, space35) {
   float _sunLightIntensity : packoffset(c000.x);
@@ -184,6 +196,10 @@ cbuffer __3__35__0__0__AtmosphereConstantBuffer : register(b26, space35) {
   float4 _mieScatterColor : packoffset(c014.x);
 };
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Begins suppressing native GlobalPushConstants because tonemap.hlsli provides the ABI-compatible live declaration consumed by the material grading path.
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   float4 _postProcessParams : packoffset(c000.x);
   float4 _postProcessParams1 : packoffset(c001.x);
@@ -200,6 +216,10 @@ cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   int _nightToneParm : packoffset(c012.x);
   int3 _padding : packoffset(c012.y);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of native GlobalPushConstants so the following unrelated native declarations remain live.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
 cbuffer __3__1__0__0__PostProcessSizeConstant : register(b1, space1) {
   float4 _srcTargetSizeAndInv : packoffset(c000.x);
@@ -211,11 +231,19 @@ cbuffer __3__1__0__0__PostProcessMaterialIndex : register(b2, space1) {
   int _passIndex : packoffset(c000.y);
 };
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Begins suppressing the native ColorBlindConstantBuffer because tonemap.hlsli provides the ABI-compatible live declaration used by the material grading path.
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
   float4 _colorBlind0 : packoffset(c000.x);
   float4 _colorBlind1 : packoffset(c001.x);
   float4 _colorBlind2 : packoffset(c002.x);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of the native ColorBlindConstantBuffer so all following native declarations compile normally.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
 cbuffer GlobalMaterialGlobalParameter_Common : register(b50, space98) {
   float3 _mainPosition : packoffset(c000.x);
@@ -826,55 +854,13 @@ float4 main(
   }
   _920 = (_localToneMappingParams.w > 0.0f);
   if (_920) {
-    _924 = _userImageAdjust.z * _exposure0.x;
-    _973 = exp2(log2(max(0.0f, (((_924 * max(0.0f, (((_901 * 1.70505f) - (_902 * 0.62179f)) - (_903 * 0.08326f)))) * _slopeParams.x) + _offsetParams.x))) * _powerParams.x);
-    _974 = exp2(log2(max(0.0f, (((max(0.0f, (((_902 * 1.1408f) - (_901 * 0.13026f)) - (_903 * 0.01055f))) * _924) * _slopeParams.y) + _offsetParams.y))) * _powerParams.y);
-    _975 = exp2(log2(max(0.0f, (((max(0.0f, (((_901 * -0.024f) - (_902 * 0.12897f)) + (_903 * 1.15297f))) * _924) * _slopeParams.z) + _offsetParams.z))) * _powerParams.z);
-    _977 = dot(float3(_973, _974, _975), float3(0.212671f, 0.71516f, 0.072169f));
-    _984 = ((_973 - _977) * _powerParams.w) + _977;
-    _985 = ((_974 - _977) * _powerParams.w) + _977;
-    _986 = ((_975 - _977) * _powerParams.w) + _977;
-    _1005 = min(max(log2(mad(_986, 0.079223745f, mad(_985, 0.0784336f, (_984 * 0.84247905f)))), -12.47393f), 4.026069f) + 12.47393f;
-    _1006 = min(max(log2(mad(_986, 0.07916613f, mad(_985, 0.87846863f, (_984 * 0.042328242f)))), -12.47393f), 4.026069f) + 12.47393f;
-    _1007 = min(max(log2(mad(_986, 0.879143f, mad(_985, 0.0784336f, (_984 * 0.042375654f)))), -12.47393f), 4.026069f) + 12.47393f;
-    _1008 = _1005 * 0.060606062f;
-    _1009 = _1006 * 0.060606062f;
-    _1010 = _1007 * 0.060606062f;
-    _1011 = _1008 * _1008;
-    _1012 = _1009 * _1009;
-    _1013 = _1010 * _1010;
-    _1059 = min(0.0f, (-0.0f - (((_1005 * 0.0072181816f) + ((_1011 * 0.4298f) + (((_1011 * _1011) * ((31.96f - (_1005 * 2.4327273f)) + (_1011 * 15.5f))) - ((_1005 * 0.41624245f) * _1011)))) + -0.00232f)));
-    _1060 = min(0.0f, (-0.0f - (((_1006 * 0.0072181816f) + ((_1012 * 0.4298f) + (((_1012 * _1012) * ((31.96f - (_1006 * 2.4327273f)) + (_1012 * 15.5f))) - ((_1006 * 0.41624245f) * _1012)))) + -0.00232f)));
-    _1061 = min(0.0f, (-0.0f - (((_1007 * 0.0072181816f) + ((_1013 * 0.4298f) + (((_1013 * _1013) * ((31.96f - (_1007 * 2.4327273f)) + (_1013 * 15.5f))) - ((_1007 * 0.41624245f) * _1013)))) + -0.00232f)));
-    _1062 = -0.0f - _1059;
-    _1063 = -0.0f - _1060;
-    _1064 = -0.0f - _1061;
-    _1065 = dot(float3(_1062, _1063, _1064), float3(0.2126f, 0.7152f, 0.0722f));
-    if (_nightToneParm == 1) {
-      _1082 = exp2(exp2(log2(abs((_time.w * 0.11666667f) + -1.4f)) * 8.0f) * -1.442695f) + 1.0f;
-      _1083 = -0.79999995f / _1082;
-      _1084 = -1.2f / _1082;
-      _1085 = 0.20000005f / _1082;
-      _1091 = saturate((_exposure2.x + -0.6f) * 0.10638298f);  // [sem: expr_sat]
-      _1094 = saturate((_exposure2.x + -0.1f) * 2.0f);  // [sem: expr_sat]
-      _1101 = (_1083 + 1.4f) + (_1094 * (-0.39999998f - _1083));
-      _1102 = (_1084 + 1.6f) + (_1094 * (-0.6f - _1084));
-      _1103 = (_1085 + 0.9f) + (_1094 * (0.5f - _1085));
-      _1120 = (lerp(_1102, 1.2f, _1091));  // [sem: blended]
-      _1121 = (lerp(_1101, 1.0f, _1091));  // [sem: blended]
-      _1122 = (lerp(_1103, 1.4f, _1091));  // [sem: blended]
-    } else {
-      _1120 = ((saturate((_exposure2.x + -3.0f) * 0.14285715f) * 0.20000005f) + 1.0f);  // [sem: blended]
-      _1121 = 1.0f;  // [sem: blended]
-      _1122 = 1.4f;  // [sem: blended]
-    }
-    _1132 = 1.0f - _1120;
-    _1157 = ((exp2(log2(((saturate((_1059 * _1059) * _1062) * _1132) + _1120) * _1062) * _1121) - _1065) * _1122) + _1065;
-    _1158 = ((exp2(log2(((saturate((_1060 * _1060) * _1063) * _1132) + _1120) * _1063) * _1121) - _1065) * _1122) + _1065;
-    _1159 = ((exp2(log2(((saturate((_1061 * _1061) * _1064) * _1132) + _1120) * _1064) * _1121) - _1065) * _1122) + _1065;
-    _1178 = saturate(exp2(log2(mad(_1159, -0.09902974f, mad(_1158, -0.09802088f, (_1157 * 1.196879f)))) * 2.2f));  // [sem: expr_sat]
-    _1179 = saturate(exp2(log2(mad(_1159, -0.098961174f, mad(_1158, 1.1519032f, (_1157 * -0.052896854f)))) * 2.2f));  // [sem: expr_sat]
-    _1180 = saturate(exp2(log2(mad(_1159, 1.1510737f, mad(_1158, -0.09804345f, (_1157 * -0.052971635f)))) * 2.2f));  // [sem: expr_sat]
+    // RenoDX: >>> [Patch: PostProcessMaterialTonemapReplace] [Version: 1.13.00]
+    // Description: Every PostProcessMaterial permutation statically inlines the full vanilla tonemap pipeline and can own the visible final output while its effect draws: the game skips this shader's manual sRGB encode and writes the display target directly when _etcParams.z == 0. An unreplaced curve renders the whole screen with the vanilla look for the duration of that effect. This block replaces the vanilla slope/offset/power grade, log-space tone curve, night tone adjustment, and output matrix with the shared TonemapReplacer while preserving the vanilla _etcParams.z == 0 final-output suite below (screen fade, fade-to-inverse wash, user brightness/contrast, user gamma, color-blind matrix), which must keep running when this draw is the visible final.
+    float3 _rndx_tonemapped_color = TonemapReplacer(float3(_901, _902, _903));
+    _1178 = _rndx_tonemapped_color.x;
+    _1179 = _rndx_tonemapped_color.y;
+    _1180 = _rndx_tonemapped_color.z;
+    // RenoDX: <<< [Patch: PostProcessMaterialTonemapReplace]
     if (_etcParams.z == 0.0f) {
       _1186 = 1.0f - abs(_etcParams.w);
       _1190 = saturate(_etcParams.w);  // [sem: expr_sat]
@@ -913,7 +899,14 @@ float4 main(
   if (_etcParams.y > 1.0f) {
     _1279 = abs(_45);
     _1280 = abs(_46 + -1.0f);
-    _1284 = saturate(1.0f - (dot(float2(_1279, _1280), float2(_1279, _1280)) * saturate(_etcParams.y + -1.0f)));  // [sem: expr_sat]
+    // RenoDX: >>> [Patch: PostProcessMaterialVignette] [Version: 1.13.00]
+    // Description: When this SDR PostProcessMaterial permutation is the visible final output (_etcParams.z == 0, the display target's sRGB view encodes in hardware), scale the shader's native vignette strength by the RenoDX Vignette setting so vignette intensity matches the standalone-final arrangement instead of snapping to full native strength while the effect draws. Intermediate draws (_etcParams.z > 0) keep the native strength.
+    float _rndx_vignette_strength = saturate(_etcParams.y + -1.0f);
+    if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
+      _rndx_vignette_strength *= CUSTOM_VIGNETTE;
+    }
+    _1284 = saturate(1.0f - (dot(float2(_1279, _1280), float2(_1279, _1280)) * _rndx_vignette_strength));  // [sem: expr_sat]
+    // RenoDX: <<< [Patch: PostProcessMaterialVignette]
     _1289 = (_1284 * _1271);
     _1290 = (_1284 * _1272);
     _1291 = (_1284 * _1273);
@@ -953,6 +946,15 @@ float4 main(
     _1338 = _1322;
     _1339 = _1323;
   }
+  // RenoDX: >>> [Patch: PostProcessMaterialFinalizeSDR] [Version: 1.13.00]
+  // Description: For SDR output, this PostProcessMaterial permutation can be the visible final output while its effect draws: it writes the display target directly when _etcParams.z == 0 and no standalone SDR final pass draws after it. Without this block, the RenoDX white point/color-temperature adjustment, Purkinje night handling, and SDR gamma finalization are skipped for the duration of the effect and return when it stops drawing. Applies FinalizeSDR to the post-letterbox color in the same pipeline position where the standalone SDR final pass finalizes.
+  if (CUSTOM_BASIC_POSTPROCESS_FINAL == 1.f && !(_etcParams.z > 0.0f)) {
+    float3 _rndx_final_color = FinalizeSDR(float3(_1337, _1338, _1339), _sunDirection.y, _moonDirection.y);
+    _1337 = _rndx_final_color.x;
+    _1338 = _rndx_final_color.y;
+    _1339 = _rndx_final_color.z;
+  }
+  // RenoDX: <<< [Patch: PostProcessMaterialFinalizeSDR]
   SV_Target.x = _1337;
   SV_Target.y = _1338;
   SV_Target.z = _1339;

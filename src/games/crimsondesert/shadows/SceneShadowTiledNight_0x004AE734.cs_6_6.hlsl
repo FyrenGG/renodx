@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the shared RenoDX option macros required by Contact Micro Shadows; this declaration changes no native output by itself.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture2D<float4> __3__36__0__0__g_terrainShadowDepth : register(t41, space36);
 
 Texture2DArray<float4> __3__36__0__0__g_dynamicShadowDepthArray : register(t237, space36);
@@ -168,6 +173,14 @@ SamplerComparisonState __3__40__0__0__g_samplerShadow : register(s0, space40);
 uint firstbithigh_msb(int value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
 uint firstbithigh_msb(uint value) { return (value == 0) ? 0xFFFFFFFF : (31u - firstbithigh(value)); }
 
+// RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+// Description: Pulls in the shared depth-bias micro detail shadow helper used by the contact
+//              shadow region later in this shader. The include sits here rather than at the top
+//              of the file because the helper references the shader-local resource and cbuffer
+//              declarations above it. The helper returns its input unchanged when Contact Micro
+//              Shadows is Off, so pulling it in adds no behavior on the vanilla path.
+#include "micro_detail_shadows.hlsli"
+// RenoDX: <<< [Patch: ContactMicroShadowsFamily]
 [numthreads(8, 8, 1)]
 void main(
   uint3 SV_DispatchThreadID : SV_DispatchThreadID,
@@ -175,6 +188,22 @@ void main(
   uint3 SV_GroupThreadID : SV_GroupThreadID,
   uint SV_GroupIndex : SV_GroupIndex
 ) {
+    // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+    // Description: Zero-initialized carrier variables for the contact-shadow ray direction and ray
+    //              origin used by the micro detail shadow helper later in this shader. The native
+    //              temporaries they copy are only assigned inside the shadow-evaluation gate that
+    //              follows; reading those raw temporaries at the helper call site outside the gate
+    //              compiles to undefined values on the gate's skip edge (phi-undef in DXIL). The
+    //              helper call is gated on the same condition, so the zero fallbacks are never
+    //              actually marched; they exist so every control path carries defined values. These
+    //              are storage only and do not affect any native computation.
+    float _rndxMicroDirX = 0.0f;
+    float _rndxMicroDirY = 0.0f;
+    float _rndxMicroDirZ = 0.0f;
+    float _rndxMicroWorldPosX = 0.0f;
+    float _rndxMicroWorldPosY = 0.0f;
+    float _rndxMicroWorldPosZ = 0.0f;
+    // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
   int4 _30;
   int _40;
   int _44;
@@ -1067,13 +1096,44 @@ void main(
       _1748 = mad(_1724, _1663, mad(_1731, _1738, ((((_1739 * _1663) * _1736) + 1.0f) * _1730)));
       _1752 = mad(_1724, _1664, mad(_1731, (_1733 + (_1737 * _1664)), ((_1730 * _1733) * _1738)));
       _1756 = mad(_1724, _1665, mad(_1731, (-0.0f - _1664), (-0.0f - (_1739 * _1730))));
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: The vanilla contact-shadow ray direction is the sun/moon direction rotated onto a
+      //              randomly sampled cone that changes every frame, which the shadow denoiser is expected
+      //              to resolve. Contact Micro Shadows adds extra sub-pixel occlusion on top of this march,
+      //              and the per-frame cone wobble makes that added detail crawl and shimmer between frames.
+      //              While any Contact Micro Shadows quality level is active this substitutes the unrotated
+      //              light direction so the added detail is temporally stable; with the feature Off the
+      //              vanilla jittered direction is left untouched.
+      if (CONTACT_SHADOW_STABLE_DIRECTION == 1.f) {
+        _1748 = _1663;
+        _1752 = _1664;
+        _1756 = _1665;
+      }
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       _1757 = select(_1644, 10, 8);
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: The vanilla screen-space contact-shadow ray takes only 8 or 10 march steps depending
+      //              on the material class, which undersamples thin and small occluders and leaves gaps in
+      //              the contact darkening. While a Contact Micro Shadows quality level is active this
+      //              raises the step count toward 16 in proportion to the selected quality; with the
+      //              feature Off the vanilla step count is used unchanged.
+      if (CONTACT_SHADOW_DETAIL_PATH == 1.f) {
+        _1757 = (int)(lerp(float(_1757), 16.0f, CONTACT_SHADOW_MARCH_BLEND) + 0.5f);
+      }
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       if (!_168) {
         _1763 = min(0.5f, ((_113 * 0.0025f) + 0.25f));
       } else {
         _1763 = 1.0f;
       }
-      _1769 = ((abs(_1664) * (select(_1646, 12.0f, 2.0f) - _1647)) + _1647) * select(_168, 0.01f, 0.1f);
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: Sets how far along the light direction the non-ray-traced contact shadow is allowed to
+      //              march. Vanilla caps this path at a 0.01 world-space reach, which is too short to pick
+      //              up contact occlusion from anything larger than immediate sub-pixel detail. The lerp
+      //              extends the reach toward 0.05 in proportion to the Contact Micro Shadows quality; at
+      //              the Off value the lerp returns the vanilla 0.01 exactly, leaving the march unchanged.
+      _1769 = ((abs(_1664) * (select(_1646, 12.0f, 2.0f) - _1647)) + _1647) * select(_168, lerp(0.01f, 0.05f, CONTACT_SHADOW_REACH_BLEND), 0.1f);
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       if (!_168) {
         _1777 = max((_113 * select(((uint)((int)(_78) + (int)(-11)) < (uint)9), 0.008f, 0.03f)), _1769);
       } else {
@@ -1094,7 +1154,16 @@ void main(
         _1820 = (((float)((uint)((uint)(((int)((uint)((uint)(_1814)) * (uint)(48271))) & 16777215)))) * 5.9604645e-08f);
       }
       if ((_78 == 15) && (!(_1645 || ((_78 != 15) && ((uint)((int)(_78) + (int)(-12)) < (uint)7))))) {
-        _1832 = ((10.0f - (saturate(_113 * 0.001f) * 9.0f)) * _1820);
+        // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+        // Description: The contact ray's first sample is offset by a per-pixel random value scaled by this
+        //              factor, so neighbouring pixels start at different distances and the march dithers
+        //              instead of banding. On this depth-faded material branch vanilla scales the random by
+        //              up to 10 units, which pushes the first sample past small nearby occluders and loses
+        //              their contact darkening entirely. The lerp pulls the start scale toward 2 as the
+        //              Contact Micro Shadows quality rises; at the Off value it returns the vanilla scale
+        //              exactly.
+        _1832 = ((lerp((10.0f - (saturate(_113 * 0.001f) * 9.0f)), 2.0f, CONTACT_SHADOW_START_BLEND)) * _1820);
+        // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       } else {
         _1832 = _1820;
       }
@@ -1111,6 +1180,19 @@ void main(
       _1844 = _1841 + _150;
       _1845 = _1842 + _151;
       _1846 = _1843 + _152;
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: Seeds the contact-shadow ray carriers with the dominant light direction and the
+      //              world-space march origin the native contact path just computed. Runs on the main
+      //              path of the native shadow-evaluation gate, so the carriers hold the native values
+      //              on every path that can reach the micro detail helper call (which is gated on the
+      //              same condition). This block only copies values and changes no native result.
+      _rndxMicroDirX = _1663;
+      _rndxMicroDirY = _1664;
+      _rndxMicroDirZ = _1665;
+      _rndxMicroWorldPosX = _1844;
+      _rndxMicroWorldPosY = _1845;
+      _rndxMicroWorldPosZ = _1846;
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       _1859 = mad((_viewRelative[2].z), _1846, mad((_viewRelative[2].y), _1845, ((_viewRelative[2].x) * _1844))) + (_viewRelative[2].w);
       _1862 = mad((_viewRelative[2].z), _1756, mad((_viewRelative[2].y), _1752, ((_viewRelative[2].x) * _1748)));
       _1865 = (((_1862 * _1777) + _1859) < _nearFarProj.x);
@@ -1148,7 +1230,15 @@ void main(
         _1998 = 0.0f;
         while(true) {
           // [sem: _3__36__0__0__g_depthStencil_load]
-          _2007 = __3__36__0__0__g_depthStencil.Load(int3(((int)(min(max(_1991, _1988), (1.0f - _1988)) * _bufferSizeAndInvSize.x)), ((int)(_1992 * _bufferSizeAndInvSize.y)), 0));
+          // RenoDX: >>> [Patch: ShadowEdgeNoiseFix] [Version: 1.16.00]
+          // Description: Replaces the vanilla X clamp at this contact-shadow depth load. Vanilla clamps the
+          //              sampled X coordinate to the first/last half texel while leaving Y unclamped, so a
+          //              ray that walks off the left or right edge of the screen keeps re-reading the same
+          //              border column and smears or flickers the shadow it produces there. The macro keeps
+          //              the vanilla clamp when the fix is off and passes X through unclamped when it is on,
+          //              which lets the out-of-bounds sample fail instead of stretching the edge column.
+          _2007 = __3__36__0__0__g_depthStencil.Load(int3(((int)(SHADOW_CONTACT_SAMPLE_X(_1991, _1988) * _bufferSizeAndInvSize.x)), ((int)(_1992 * _bufferSizeAndInvSize.y)), 0));
+          // RenoDX: <<< [Patch: ShadowEdgeNoiseFix]
           _2009 = (uint)((uint)(_2007.x)) >> 24;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _2012 = ((float)((uint)((uint)(_2007.x & 16777215)))) * 5.960465e-08f;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _2013 = _2009 & 127;
@@ -1207,7 +1297,21 @@ void main(
             _2098 = (1.0f - _2095) + (_2095 * _2093);
             _2113 = _2013;
             // [sem: expr_sat]
-            _2114 = saturate(((saturate(1.0f - ((_2098 * _2098) * _2093)) * (1.0f - _1998)) * saturate((-0.0f - _2022) / (_1994 * 0.0046548597f))) + _1998);
+            // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+            // Description: Rewrites the contact-shadow accumulation so the occlusion term can be scaled
+            //              without disturbing the base shadow it is added to. The vanilla expression is
+            //              saturate(((saturate(1 - d*d*s) * (1 - base)) * fade) + base): d*d*s is the
+            //              accumulated ray occlusion, (1 - base) limits the contribution to the light that is
+            //              still unshadowed, and fade is an occluder thickness/penetration confidence ramp
+            //              that discards hits whose depth delta is too large to be a real contact. The whole
+            //              product is hoisted into a named value and multiplied by a quality-driven gain that
+            //              runs 1.0 -> 0.7, so higher Contact Micro Shadows settings soften the coarse native
+            //              contact result before the finer sub-pixel detail is composited on top of it and
+            //              the two do not stack into crushed black contacts. At the Off value the gain is
+            //              exactly 1.0 and the expression reduces to the vanilla one bit for bit.
+            float _rndx_microNearAccum = (saturate(1.0f - ((_2098 * _2098) * _2093)) * (1.0f - _1998)) * saturate((-0.0f - _2022) / (_1994 * 0.0046548597f));
+            _2114 = saturate((_rndx_microNearAccum * lerp(1.0f, 0.7f, CONTACT_SHADOW_BASE_TUNING)) + _1998);
+            // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
           } else {
             _2113 = _1990;
             _2114 = _1998;  // [sem: expr_sat]
@@ -1295,7 +1399,15 @@ void main(
         _2286 = 0.0f;
         while(true) {
           // [sem: _3__36__0__0__g_depthStencil_load]
-          _2295 = __3__36__0__0__g_depthStencil.Load(int3(((int)(min(max(_2281, _2276), (1.0f - _2276)) * _bufferSizeAndInvSize.x)), ((int)(_2282 * _bufferSizeAndInvSize.y)), 0));
+          // RenoDX: >>> [Patch: ShadowEdgeNoiseFix] [Version: 1.16.00]
+          // Description: Replaces the vanilla X clamp at this contact-shadow depth load. Vanilla clamps the
+          //              sampled X coordinate to the first/last half texel while leaving Y unclamped, so a
+          //              ray that walks off the left or right edge of the screen keeps re-reading the same
+          //              border column and smears or flickers the shadow it produces there. The macro keeps
+          //              the vanilla clamp when the fix is off and passes X through unclamped when it is on,
+          //              which lets the out-of-bounds sample fail instead of stretching the edge column.
+          _2295 = __3__36__0__0__g_depthStencil.Load(int3(((int)(SHADOW_CONTACT_SAMPLE_X(_2281, _2276) * _bufferSizeAndInvSize.x)), ((int)(_2282 * _bufferSizeAndInvSize.y)), 0));
+          // RenoDX: <<< [Patch: ShadowEdgeNoiseFix]
           _2297 = (uint)((uint)(_2295.x)) >> 24;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _2300 = ((float)((uint)((uint)(_2295.x & 16777215)))) * 5.960465e-08f;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _2301 = _2297 & 127;
@@ -1354,7 +1466,21 @@ void main(
             _2386 = (1.0f - _2383) + (_2383 * _2381);
             _2401 = _2301;
             // [sem: expr_sat]
-            _2402 = saturate(((saturate(1.0f - ((_2386 * _2386) * _2381)) * (1.0f - _2286)) * saturate((-0.0f - _2310) / (_2280 * 0.0046548597f))) + _2286);
+            // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+            // Description: Rewrites the contact-shadow accumulation so the occlusion term can be scaled
+            //              without disturbing the base shadow it is added to. The vanilla expression is
+            //              saturate(((saturate(1 - d*d*s) * (1 - base)) * fade) + base): d*d*s is the
+            //              accumulated ray occlusion, (1 - base) limits the contribution to the light that is
+            //              still unshadowed, and fade is an occluder thickness/penetration confidence ramp
+            //              that discards hits whose depth delta is too large to be a real contact. The whole
+            //              product is hoisted into a named value and multiplied by a quality-driven gain that
+            //              runs 1.0 -> 0.7, so higher Contact Micro Shadows settings soften the coarse native
+            //              contact result before the finer sub-pixel detail is composited on top of it and
+            //              the two do not stack into crushed black contacts. At the Off value the gain is
+            //              exactly 1.0 and the expression reduces to the vanilla one bit for bit.
+            float _rndx_microFarAccum = (saturate(1.0f - ((_2386 * _2386) * _2381)) * (1.0f - _2286)) * saturate((-0.0f - _2310) / (_2280 * 0.0046548597f));
+            _2402 = saturate((_rndx_microFarAccum * lerp(1.0f, 0.7f, CONTACT_SHADOW_BASE_TUNING)) + _2286);
+            // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
           } else {
             _2401 = _2284;
             _2402 = _2286;  // [sem: expr_sat]
@@ -1567,6 +1693,60 @@ void main(
     } else {
       _2616 = 1.0f;  // [sem: expr_sat]
     }
+    // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+    // Description: The native contact-shadow march is a short ray with very few steps, so it misses
+    //              sub-pixel and small-scale occluders and leaves surface detail such as ground litter,
+    //              pebbles, cloth folds and foliage sitting on the ground without any contact darkening.
+    //              This calls the shared depth-bias micro detail shadow helper, which re-marches the depth
+    //              buffer with a continuous thickness window instead of a binary hit test and returns a
+    //              darkened contact value. The helper returns its input unchanged when Contact Micro
+    //              Shadows is Off, so the vanilla shadow value is preserved. The whole region is gated
+    //              on the same native shadow-evaluation condition that seeds the ray carriers: when
+    //              that gate is skipped the carriers were never given real values, and the native
+    //              composite below takes min(gateValue, contactValue). On that edge the native else-branch
+    //              sets contactValue to exactly 1.0 and gateValue is <= 0, so the min returns the gate value
+    //              and the helper result could not affect the output there. The same holds if gateValue is
+    //              NaN: the native if/else still yields 1.0 and the min resolves to the non-NaN operand, so
+    //              gating actually restores vanilla for that pixel, where the un-gated form would have
+    //              marched with unseeded carriers and could have returned less than 1.0. The gate makes the
+    //              skip explicit instead of marching with unseeded carriers.
+    if (_1633 > 0.0f) {
+      _2616 = ApplyContactMicroDetailShadow(
+          _2616,
+          float2(_58, _59),
+          _113,
+          _78,
+          float3(_rndxMicroDirX, _rndxMicroDirY, _rndxMicroDirZ),
+          float3(_rndxMicroWorldPosX, _rndxMicroWorldPosY, _rndxMicroWorldPosZ),
+          CONTACT_MICRO_DETAIL_STRENGTH,
+          (CONTACT_SHADOW_IS_FULL ? -0.022f : -0.025f),
+          (CONTACT_SHADOW_IS_FULL ? 3.10f : 3.0f),
+          CONTACT_MICRO_RANGE_NEAR,
+          CONTACT_MICRO_RANGE_FAR,
+          CONTACT_MICRO_THICKNESS_MULTIPLIER,
+          CONTACT_MICRO_OCCLUSION_SCALE,
+          CONTACT_MICRO_SELF_REJECT_PIXELS,
+          2.0f,
+          1.0f,
+          1.0f);
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: The micro detail shadow helper marches in screen space, so close to the frame border
+      //              its ray walks out of the depth buffer, loses the occluders that would have been found
+      //              there and produces an abrupt brightness seam along the edges of the image. This
+      //              attenuates the helper's extra darkening toward the border, falling back to a
+      //              half-strength blend at the outermost pixels so the transition is smooth. It only runs
+      //              when a Contact Micro Shadows quality level is active, so the vanilla value is
+      //              untouched when the feature is Off.
+      if (CONTACT_SHADOW_DETAIL_PATH == 1.f && _2616 < 1.0f) {
+        float2 _rndxMicroScreenUV = float2((_58 + 0.5f) * _bufferSizeAndInvSize.z,
+                                           (_59 + 0.5f) * _bufferSizeAndInvSize.w);
+        float2 _rndxMicroEdgeDist = min(_rndxMicroScreenUV, 1.0f - _rndxMicroScreenUV);
+        float _rndxMicroEdgeFade = saturate(min(_rndxMicroEdgeDist.x, _rndxMicroEdgeDist.y) * 10.0f);
+        _2616 = lerp(lerp(1.0f, _2616, 0.5f), _2616, _rndxMicroEdgeFade);
+      }
+    }
+    // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
     _2617 = min(_1633, _2616);
     _2631 = float(half(_2617 * float(_1609)));
     _2632 = float(half(_2617 * float(_1610)));

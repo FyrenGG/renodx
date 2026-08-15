@@ -1,3 +1,9 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below; Imports "../local-direct-lighting/local_light_common.hlsl" for the local-light color and attenuation helpers used below; Imports "../lighting/diffuse_brdf.hlsli" for the shared diffuse-BRDF helpers used below.
+#include "../shared.h"
+#include "../local-direct-lighting/local_light_common.hlsl"
+#include "../lighting/diffuse_brdf.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct ManyLightsData {
   float4 _position;
   float4 _color;
@@ -1241,6 +1247,22 @@ void main(
         _673 = __3__37__0__0__g_manyLightsDataBuffer[_666]._color.x;
         _674 = __3__37__0__0__g_manyLightsDataBuffer[_666]._color.y;
         _675 = __3__37__0__0__g_manyLightsDataBuffer[_666]._color.z;
+        // RenoDX: >>> [Patch: LocalLightHueCorrection] [Version: 1.16.00]
+        // Description: Corrects the resolved local-light RGB toward the configured warm-fire hue and saturation before
+        //              the color reaches its alpha, geometry, or scene-composite consumers. Only the already-resolved
+        //              X/Y/Z color channels are rewritten; the W channel and resource index remain untouched.
+        //              The explicit neutral-settings gate performs no helper call or RGB write when hue is 0 and
+        //              saturation is 1, so the disabled path is the exact successor-A dataflow.
+        if (LOCAL_LIGHT_HUE_CORRECTION > 0.0f || abs(LOCAL_LIGHT_SATURATION - 1.0f) > 1e-6f) {
+          float3 _rndx_local_light_corrected = ApplyLocalLightHueCorrection(
+              float3(_673, _674, _675),
+              LOCAL_LIGHT_HUE_CORRECTION,
+              LOCAL_LIGHT_SATURATION);
+          _673 = _rndx_local_light_corrected.x;
+          _674 = _rndx_local_light_corrected.y;
+          _675 = _rndx_local_light_corrected.z;
+        }
+        // RenoDX: <<< [Patch: LocalLightHueCorrection]
         _676 = __3__37__0__0__g_manyLightsDataBuffer[_666]._color.w;
         _678 = __3__37__0__0__g_manyLightsDataBuffer[_666]._up.x;
         _679 = __3__37__0__0__g_manyLightsDataBuffer[_666]._up.y;
@@ -1421,7 +1443,29 @@ void main(
             _1398 = ((((max((_1166 * _1122), 0.0f) - _1147) * _474) + _1147) * _1182);
             _1399 = ((((max((_1166 * _1123), 0.0f) - _1148) * _474) + _1148) * _1182);
             _1400 = ((((max((_1166 * _1124), 0.0f) - _1149) * _474) + _1149) * _1182);
-            _1401 = ((saturate(_831) * 0.31830987f) * (((saturate(1.0f - _effectiveMetallicForVelvet) + -1.0f) * _476) + 1.0f));
+            // RenoDX: >>> [Patch: MaterialDiffuseBRDF] [Version: 1.16.00]
+            // Description: This is the cloth/velvet branch of the punctual-light shading. Its diffuse term is a plain
+            //              Lambert lobe (NdotL / pi) scaled by a metallic-derived velvet weight, so rough fabric lit by
+            //              a local light loses the retro-reflection a microfacet diffuse model would give it. This block
+            //              optionally substitutes a physically based diffuse scalar (EON at mode 2, Hammon at mode 1)
+            //              while keeping the velvet weight as a separate multiplier. Mode 0 is the default and reproduces
+            //              the native expression exactly.
+            //              The roughness argument is the linear roughness the native GGX lobe uses (the clamped
+            //              G-buffer roughness channel), NOT any component of the shading normal. Passing a normal
+            //              component here makes the diffuse response vary with surface orientation instead of with
+            //              material roughness, which reads as blocky mismatches between neighbouring lighting tiles.
+            float _rndx_velvet_mod = (((saturate(1.0f - _effectiveMetallicForVelvet) + -1.0f) * _476) + 1.0f);
+            if (DIFFUSE_BRDF_MODE >= 2.0f) {
+              float _rndx_sNdotL2 = saturate(_831);
+              float _rndx_LdotV2 = dot(float3(_820, _821, _822), float3(_786, _787, _788));
+              _1401 = (_rndx_sNdotL2 * EON_DiffuseScalar(_rndx_sNdotL2, _834, _rndx_LdotV2, _648)) * _rndx_velvet_mod;
+            } else if (DIFFUSE_BRDF_MODE >= 1.0f) {
+              float _rndx_sNdotL2 = saturate(_831);
+              _1401 = (_rndx_sNdotL2 * HammonDiffuseScalar(_rndx_sNdotL2, _834, _836, _837, _648)) * _rndx_velvet_mod;
+            } else {
+              _1401 = ((saturate(_831) * 0.31830987f) * (((saturate(1.0f - _effectiveMetallicForVelvet) + -1.0f) * _476) + 1.0f));
+            }
+            // RenoDX: <<< [Patch: MaterialDiffuseBRDF]
           } else {
             if (!(_831 <= 0.0f)) {
               _1190 = saturate(1.0f - _837);  // [sem: expr_sat]
@@ -1436,7 +1480,28 @@ void main(
               _1233 = (max((((_1197 * _611) + _1196) * _1222), 0.0f) * _1205);
               _1234 = (max((((_1197 * _612) + _1196) * _1222), 0.0f) * _1205);
               _1235 = (max((((_1197 * _613) + _1196) * _1222), 0.0f) * _1205);
-              _1236 = (_831 * 0.31830987f);
+              // RenoDX: >>> [Patch: MaterialDiffuseBRDF] [Version: 1.16.00]
+              // Description: The native punctual-light diffuse term is a plain Lambert lobe (NdotL / pi), which loses the
+              //              retro-reflection and rough-surface energy that microfacet diffuse models reproduce, so rough
+              //              dielectrics lit by local lights look flat. This block optionally substitutes a physically
+              //              based diffuse scalar (EON at mode 2, Hammon at mode 1) evaluated from the same NdotL, NdotV,
+              //              LdotV/VdotH geometry the native lobe uses. Mode 0 is the default and keeps the exact native
+              //              Lambert expression.
+              //              The roughness argument is the linear roughness the native GGX lobe uses (the clamped
+              //              G-buffer roughness channel), NOT any component of the shading normal. Passing a normal
+              //              component here makes the diffuse response vary with surface orientation instead of with
+              //              material roughness, which reads as blocky mismatches between neighbouring lighting tiles.
+              if (DIFFUSE_BRDF_MODE >= 2.0f) {
+                float _rndx_sNdotL = saturate(_831);
+                float _rndx_LdotV = dot(float3(_820, _821, _822), float3(_786, _787, _788));
+                _1236 = _rndx_sNdotL * EON_DiffuseScalar(_rndx_sNdotL, _834, _rndx_LdotV, _648);
+              } else if (DIFFUSE_BRDF_MODE >= 1.0f) {
+                float _rndx_sNdotL = saturate(_831);
+                _1236 = _rndx_sNdotL * HammonDiffuseScalar(_rndx_sNdotL, _834, _836, _837, _648);
+              } else {
+                _1236 = (_831 * 0.31830987f);
+              }
+              // RenoDX: <<< [Patch: MaterialDiffuseBRDF]
             } else {
               _1233 = 0.0f;
               _1234 = 0.0f;
@@ -1525,6 +1590,44 @@ void main(
             }
           }
         }
+        // RenoDX: >>> [Patch: MaterialDiffraction] [Version: 1.16.00]
+        // Description: Smooth conductive and coated surfaces show a wavelength-dependent colour shift and fine
+        //              speckle when lit by a small bright source; the native specular lobe is achromatic and cannot
+        //              produce it. This block multiplies the accumulated local-light specular RGB by a per-channel
+        //              diffraction tint derived from the half-vector geometry, the surface normal, the specular F0
+        //              and screen position, weighted by the material gate so only materials flagged for it are
+        //              affected. The multiplier is lerp(1, shift, DIFFRACTION * gate), so at strength 0 the specular
+        //              is left exactly as native.
+        //              The third argument is the material roughness - the G-buffer roughness channel that feeds this
+        //              shader's own alpha/alpha-squared chain - NOT any component of the shading normal. Passing a
+        //              normal component there makes the diffraction blend vary with surface orientation instead of
+        //              with material roughness, the same defect the MaterialDiffuseBRDF blocks in this file warn about.
+        if (DIFFRACTION > 0.0f && float(_574) > 0.0f) {
+          float3 _rndx_dShift = DiffractionShiftAndSpeckleCS(
+              _836, _834, _648,
+              float2(_98, _99), (_nearFarProj.x / _89),
+              float3(_828, _829, _830),
+              float3(_645, _646, _647),
+              float3(_611, _612, _613));
+          float3 _rndx_dMod = lerp(1.0f, _rndx_dShift, DIFFRACTION * float(_574));
+          _1398 *= _rndx_dMod.x;
+          _1399 *= _rndx_dMod.y;
+          _1400 *= _rndx_dMod.z;
+        }
+        // RenoDX: <<< [Patch: MaterialDiffraction]
+        // RenoDX: >>> [Patch: MaterialSmoothTerminator] [Version: 1.16.00]
+        // Description: Softens the geometric shadow terminator after this branch has resolved its diffuse
+        //              scalar and specular RGB. The factor is derived from the matched N.L, V.H, and N.H
+        //              roles and multiplies all four resolved outputs at their shared post-branch boundary.
+        //              The entire mutation is inside the SMOOTH_TERMINATOR gate; at 0 no output is written.
+        if (SMOOTH_TERMINATOR > 0.0f) {
+          float _rndx_st = CallistoSmoothTerminator(_831, _837, _836, SMOOTH_TERMINATOR, 0.5f);
+          _1401 *= _rndx_st;
+          _1398 *= _rndx_st;
+          _1399 *= _rndx_st;
+          _1400 *= _rndx_st;
+        }
+        // RenoDX: <<< [Patch: MaterialSmoothTerminator]
         // [sem: expr_sat]
         _1403 = saturate(select((_771 > 99999.0f), 1.0f, (1.0f / max((_771 * _771), (_693 * _693))))) * (_684 * asfloat(_656.y));
         _1404 = _1403 * _768;

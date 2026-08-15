@@ -34,8 +34,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $scriptDir 'GradingAnnotations.ps1')
+
 if ([string]::IsNullOrWhiteSpace($Folder)) {
-    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     $Folder = Join-Path $scriptDir '..\tonemap-materials'
 }
 
@@ -57,6 +59,9 @@ $files = @(Get-ChildItem -LiteralPath $folderPath -File -Filter '*.hlsl')
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 $patchVersion = '1.13.00'
+# The dependency-binding arrangement is a separately authored patch and carries its own
+# version; it is not a variant of the tonemap treatment above.
+$bindingsPatchVersion = '1.16.00'
 
 function Find-MatchingBrace {
     param([string]$Text, [int]$OpenIndex)
@@ -90,10 +95,14 @@ function Find-BindlessLoadVar {
 
 # The _enableChromaticAberration product for a raw load var. Handles both the split
 # form (separate product statement) and the fused form (multiply inside the load line).
+# The uint-to-float cast chain is matched loosely because its parenthesisation is a
+# decompiler formatting choice that differs between decompiler builds
+# ('((float)((uint)(uint)(x)))' vs '((float)((uint)((uint)(x))))'); the operands, not
+# the bracket count, are what identify the statement.
 function Find-EnableCAProductVar {
     param([string]$Text, [string]$RawVar)
     if ($null -eq $RawVar) { return $null }
-    $m = [regex]::Match($Text, '(?m)^[ \t]*(_\d+) = \(\(float\)\(\(uint\)\(uint\)\(_enableChromaticAberration\)\)\) \* ' + [regex]::Escape($RawVar) + ';')
+    $m = [regex]::Match($Text, '(?m)^[ \t]*(_\d+) = \(\(float\)[\(\)uint ]*\(_enableChromaticAberration\)\)*\) \* ' + [regex]::Escape($RawVar) + ';')
     if ($m.Success) { return $m.Groups[1].Value }
     $loadLine = [regex]::Match($Text, '(?m)^[ \t]*' + [regex]::Escape($RawVar) + ' = [^\r\n]*;')
     if ($loadLine.Success -and $loadLine.Value.Contains('_enableChromaticAberration')) { return $RawVar }
@@ -111,6 +120,7 @@ $finalizePatchMissing = New-Object System.Collections.Generic.List[string]
 $curveVarLeaks = New-Object System.Collections.Generic.List[string]
 $compositeSdrFiles = New-Object System.Collections.Generic.List[string]
 $compositeIssues = New-Object System.Collections.Generic.List[string]
+$bindingsAnnotationMissing = New-Object System.Collections.Generic.List[string]
 
 $sdrCount = 0
 $hdrCount = 0
@@ -731,6 +741,14 @@ foreach ($file in $files) {
         }
     }
 
+    # ---- Stage 5: annotate the tonemap.hlsli dependency arrangement ----
+    $beforeAnnotate = $content
+    $content = Add-TonemapDependencyAnnotations -Text $content -Newline $newline `
+        -Version $bindingsPatchVersion -Consumer 'the material grading path'
+    if ($content -eq $beforeAnnotate -and $content -notmatch '\[Patch: RenoDXDependencyBindings\]') {
+        $bindingsAnnotationMissing.Add($file.Name)
+    }
+
     if ($content -ne $originalContent) {
         if (-not $WhatIf) {
             [System.IO.File]::WriteAllText($file.FullName, $content, $utf8NoBom)
@@ -795,4 +813,9 @@ if ($curveVarLeaks.Count -gt 0) {
 if ($compositeIssues.Count -gt 0) {
     Write-Output "COMPOSITE_ISSUES=$($compositeIssues.Count)"
     $compositeIssues | ForEach-Object { Write-Output ("  " + $_) }
+}
+
+if ($bindingsAnnotationMissing.Count -gt 0) {
+    Write-Output "BINDINGS_ANNOTATION_MISSING=$($bindingsAnnotationMissing.Count)"
+    $bindingsAnnotationMissing | ForEach-Object { Write-Output ("  " + $_) }
 }

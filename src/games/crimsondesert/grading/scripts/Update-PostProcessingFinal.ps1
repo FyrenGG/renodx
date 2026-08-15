@@ -31,8 +31,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $scriptDir 'GradingAnnotations.ps1')
+
 if ([string]::IsNullOrWhiteSpace($Folder)) {
-    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     $Folder = Join-Path $scriptDir '..\finals'
 }
 
@@ -57,6 +59,25 @@ $files = @(Get-ChildItem -LiteralPath $folderPath -File -Filter '*.hlsl' |
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 $patchVersion = '1.13.00'
+# The final-pass control scaling (vignette, sharpening strength and its vanilla gate,
+# chromatic aberration, the PQ sRGB-decode removal) and the tonemap.hlsli dependency
+# arrangement are a separately authored group of patches with their own version.
+$finalControlsPatchVersion = '1.16.00'
+
+# Anchor constants as regex fragments, not literals. The structural decompiler prints
+# float constants at whatever precision round-trips, and that precision depends on the
+# decompiler build: the same AP1 grade coefficient appears as '1.705049991607666f' in
+# older output and '1.70505f' in current output. Matching one spelling makes every
+# anchor here miss on decompiles from the other, which reads like the game changed.
+# Each fragment accepts both spellings of one value.
+$cGradeR = '(?:1\.705049991607666f|1\.70505f)'
+$cGradeG = '(?:1\.1407999992370605f|1\.1408f)'
+$cGradeB = '(?:1\.1529699563980103f|1\.15297f)'
+$cSrgbCutoff = '(?:0\.040449999272823334f|0\.04045f)'
+$cSrgbSlope = '(?:0\.07739938050508499f|0\.07739938f)'
+$cSrgbOffset = '(?:0\.054999999701976776f|0\.055f)'
+$cSrgbScale = '(?:0\.9478673338890076f|0\.94786733f)'
+$cSrgbGamma = '(?:2\.4000000953674316f|2\.4f)'
 
 $updatedFiles = New-Object System.Collections.Generic.List[string]
 $stagedFiles = New-Object System.Collections.Generic.List[string]
@@ -65,6 +86,7 @@ $missingPattern = New-Object System.Collections.Generic.List[string]
 $fusedSegmentFailed = New-Object System.Collections.Generic.List[string]
 $missingCBufferPattern = New-Object System.Collections.Generic.List[string]
 $curveVarLeaks = New-Object System.Collections.Generic.List[string]
+$bindingsAnnotationMissing = New-Object System.Collections.Generic.List[string]
 
 $slimCount = 0
 $fusedCount = 0
@@ -244,7 +266,8 @@ foreach ($file in $files) {
                 $redVar = $redMatch.Groups[1].Value
                 $blueVar = $blueMatch.Groups[1].Value
                 $insert = $newline +
-                    "  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: $patchVersion]$newline" +
+                    "  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: $finalControlsPatchVersion]$newline" +
+                    "  // Description: Scales only the native red/blue chromatic-aberration offsets between the unchanged center sample and native shifted samples. The effective scalar is 1 when RenoDX is Off, preserving the native offsets.$newline" +
                     "  $redVar = lerp($sceneSample.x, $redVar, CUSTOM_CHROMATIC_ABERRATION);$newline" +
                     "  $blueVar = lerp($sceneSample.z, $blueVar, CUSTOM_CHROMATIC_ABERRATION);$newline" +
                     "  // RenoDX: <<< [Patch: FinalChromaticAberration]$newline"
@@ -260,11 +283,21 @@ foreach ($file in $files) {
     $filmGrainMatch = [regex]::Match($content, 'if\s*\(\s*_slopeParams\.w\s*>\s*0\.0f\s*\)\s*\{')
     if ($filmGrainMatch.Success -and -not $content.Contains('CUSTOM_FILM_GRAIN_TYPE == 0')) {
         $lineStart = Find-LineStart -Text $content -Index $filmGrainMatch.Index -Newline $newline
-        $prefix = "  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: $patchVersion]$newline" +
-            "  bool vanilla_film_grain = (_slopeParams.w > 0.0f) && CUSTOM_FILM_GRAIN_TYPE == 0;$newline" +
-            "  // RenoDX: <<< [Patch: CustomFilmGrainGate]$newline"
+        $prefix = "  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: $finalControlsPatchVersion]$newline" +
+            "  // Description: Keeps the native film-grain branch enabled only when its native strength is positive and RenoDX custom film grain is not selected. RenoDX Off clears the custom type flag, restoring the native condition.$newline" +
+            "  bool vanilla_film_grain = (_slopeParams.w > 0.0f) && CUSTOM_FILM_GRAIN_TYPE == 0;$newline"
         $content = $content.Substring(0, $lineStart) + $prefix + $content.Substring($lineStart)
-        $content = [regex]::Replace($content, 'if\s*\(\s*_slopeParams\.w\s*>\s*0\.0f\s*\)\s*\{', 'if (vanilla_film_grain) {', 1)
+        # The rewritten native condition belongs to this patch too, so the block closes
+        # after it rather than after the declaration.
+        $gate = 'if (vanilla_film_grain) {'
+        $content = [regex]::Replace($content, 'if\s*\(\s*_slopeParams\.w\s*>\s*0\.0f\s*\)\s*\{', $gate, 1)
+        $gateIdx = $content.IndexOf($gate, [System.StringComparison]::Ordinal)
+        if ($gateIdx -ge 0) {
+            $gateEnd = $gateIdx + $gate.Length
+            $content = $content.Substring(0, $gateEnd) +
+                "$newline  // RenoDX: <<< [Patch: CustomFilmGrainGate]" +
+                $content.Substring($gateEnd)
+        }
     }
 
     if (-not $isFused -and -not $content.Contains('CustomPostProcessing(')) {
@@ -287,6 +320,7 @@ foreach ($file in $files) {
                 if ($isHdr) {
                     $postProcessBlock = $newline +
                         "  // RenoDX: >>> [Patch: FinalCustomPostProcessingHDR] [Version: $patchVersion]$newline" +
+                        "  // Description: When custom film grain or sharpening is selected, decodes the HDR intermediate with the matching native/custom luminance scale, applies the shared post-process once in BT.709, and restores the PQ intermediate. RenoDX Off clears both type flags, so this block does not execute.$newline" +
                         "  if (CUSTOM_FILM_GRAIN_TYPE != 0 || CUSTOM_SHARPENING_TYPE != 0) {$newline" +
                         "    float3 color_pq = float3($colorX, $colorY, $colorZ);$newline$newline" +
                         "    float scaling = RENODX_TONE_MAP_TYPE == 0 ? 100.0f : RENODX_DIFFUSE_WHITE_NITS;$newline" +
@@ -303,6 +337,7 @@ foreach ($file in $files) {
                 } else {
                     $postProcessBlock = $newline +
                         "  // RenoDX: >>> [Patch: FinalCustomPostProcessingSDR] [Version: $patchVersion]$newline" +
+                        "  // Description: When custom film grain or sharpening is selected, decodes the native sRGB-domain color, applies the shared post-process once, and restores the native sRGB storage encoding. RenoDX Off clears both type flags, so this block does not execute.$newline" +
                         "  if (CUSTOM_FILM_GRAIN_TYPE != 0 || CUSTOM_SHARPENING_TYPE != 0) {$newline" +
                         "    float3 color_bt709 = renodx::color::srgb::Decode(float3($colorX, $colorY, $colorZ));$newline" +
                         "    color_bt709 = CustomPostProcessing(color_bt709, TEXCOORD, __3__36__0__0__g_sceneColor, __0__4__0__0__g_staticBilinearClamp, 1);$newline" +
@@ -349,20 +384,35 @@ foreach ($file in $files) {
                 }
             }
         }
+
+        $content = Add-LineAnnotation -Text $content -Newline $newline -Name 'FinalVanillaSharpeningGate' `
+            -Version $finalControlsPatchVersion -LineNeedle 'if (CUSTOM_SHARPENING_TYPE == 0 && ' `
+            -Description ('The native depth-qualified sharpener would otherwise run before the RenoDX custom sharpening pass and apply two sharpeners to the same pixel. ' +
+                'This block adds CUSTOM_SHARPENING_TYPE == 0 to the unchanged native depth condition so the native path runs only when custom sharpening is not selected. ' +
+                'CUSTOM_SHARPENING_TYPE resolves to 0 when RenoDX is Off, restoring the native condition.')
     }
 
     if (-not $isFused -and $isHdr -and -not $content.Contains('* CUSTOM_SHARPENING) +')) {
         $content = [regex]::Replace($content, '(?m)^(\s*_\d+\s*=\s*\(\(_\d+\s*\*\s*_\d+)(\)\s*\+\s*_\d+\);)', '$1 * CUSTOM_SHARPENING$2', 3)
+
+        $content = Add-RunAnnotation -Text $content -Newline $newline -Name 'FinalSharpeningStrength' `
+            -Version $finalControlsPatchVersion -LineNeedle '* CUSTOM_SHARPENING) + ' `
+            -Description ('The native HDR final computes one sharpening delta per RGB channel and adds each delta back to its original center color. ' +
+                'This block multiplies only those three native deltas by CUSTOM_SHARPENING while preserving the native center additions and channel order. ' +
+                'CUSTOM_SHARPENING resolves to 1 when RenoDX is Off, restoring all three native equations.')
     }
 
     if (-not $isFused -and $isHdr -and -not $content.Contains('Patch: RemoveFinalSrgbDecodeHDR')) {
-        $srgbDecodePattern = '(?m)^(?<indent>\s*)(?<decl>float\s+)?(?<out>_\d+)\s*=\s*\((?<scale>_\d+)\s*\*\s*select\(\((?<in>_\d+)\s*<\s*0\.040449999272823334f\),\s*\(\k<in>\s*\*\s*0\.07739938050508499f\),\s*exp2\(log2\(\(\k<in>\s*\+\s*0\.054999999701976776f\)\s*\*\s*0\.9478673338890076f\)\s*\*\s*2\.4000000953674316f\)\)\)\s*\+\s*(?<offset>_\d+)\s*;\r?$'
+        $srgbDecodePattern = '(?m)^(?<indent>\s*)(?<decl>float\s+)?(?<out>_\d+)\s*=\s*\((?<scale>_\d+)\s*\*\s*select\(\((?<in>_\d+)\s*<\s*' +
+            $cSrgbCutoff + '\),\s*\(\k<in>\s*\*\s*' + $cSrgbSlope + '\),\s*exp2\(log2\(\(\k<in>\s*\+\s*' +
+            $cSrgbOffset + '\)\s*\*\s*' + $cSrgbScale + '\)\s*\*\s*' + $cSrgbGamma + '\)\)\)\s*\+\s*(?<offset>_\d+)\s*;\r?$'
         $srgbDecodeMatches = @([regex]::Matches($content, $srgbDecodePattern))
         if ($srgbDecodeMatches.Count -ge 3) {
             $firstSrgbDecode = $srgbDecodeMatches[0]
             $thirdSrgbDecode = $srgbDecodeMatches[2]
             $replacementLines = @(
-                "$($firstSrgbDecode.Groups['indent'].Value)// RenoDX: >>> [Patch: RemoveFinalSrgbDecodeHDR] [Version: $patchVersion]",
+                "$($firstSrgbDecode.Groups['indent'].Value)// RenoDX: >>> [Patch: RemoveFinalSrgbDecodeHDR] [Version: $finalControlsPatchVersion]",
+                "$($firstSrgbDecode.Groups['indent'].Value)// Description: The paired HDR tonemap writer stores raw PQ, so the final pass must blend those three channels directly instead of applying vanilla's sRGB decode and corrupting the coordinated intermediate.",
                 "$($srgbDecodeMatches[0].Groups['indent'].Value)$($srgbDecodeMatches[0].Groups['decl'].Value)$($srgbDecodeMatches[0].Groups['out'].Value) = ($($srgbDecodeMatches[0].Groups['scale'].Value) * $($srgbDecodeMatches[0].Groups['in'].Value)) + $($srgbDecodeMatches[0].Groups['offset'].Value);",
                 "$($srgbDecodeMatches[1].Groups['indent'].Value)$($srgbDecodeMatches[1].Groups['decl'].Value)$($srgbDecodeMatches[1].Groups['out'].Value) = ($($srgbDecodeMatches[1].Groups['scale'].Value) * $($srgbDecodeMatches[1].Groups['in'].Value)) + $($srgbDecodeMatches[1].Groups['offset'].Value);",
                 "$($srgbDecodeMatches[2].Groups['indent'].Value)$($srgbDecodeMatches[2].Groups['decl'].Value)$($srgbDecodeMatches[2].Groups['out'].Value) = ($($srgbDecodeMatches[2].Groups['scale'].Value) * $($srgbDecodeMatches[2].Groups['in'].Value)) + $($srgbDecodeMatches[2].Groups['offset'].Value);",
@@ -409,7 +459,8 @@ foreach ($file in $files) {
                     $out3 = $elseAssigns[$elseAssigns.Count - 1].Groups[1].Value
                     $in3 = $elseAssigns[$elseAssigns.Count - 1].Groups[2].Value
                     $sharpenBlock = $newline +
-                        "    // RenoDX: >>> [Patch: FinalSharpeningStrength] [Version: $patchVersion]$newline" +
+                        "    // RenoDX: >>> [Patch: FinalSharpeningStrength] [Version: $finalControlsPatchVersion]$newline" +
+                        "    // Description: Scales only the native per-channel sharpening deltas before they are added back to the unchanged center color. The effective strength is 1 when RenoDX is Off, restoring the native equations.$newline" +
                         "    $out1 = lerp($in1, $out1, CUSTOM_SHARPENING);$newline" +
                         "    $out2 = lerp($in2, $out2, CUSTOM_SHARPENING);$newline" +
                         "    $out3 = lerp($in3, $out3, CUSTOM_SHARPENING);$newline" +
@@ -429,8 +480,9 @@ foreach ($file in $files) {
         $failReason = $null
 
         # Segment start: the first CDL grade line (AP1-style input matrix R row).
-        $gradeIdx = $content.IndexOf('1.705049991607666f', [System.StringComparison]::Ordinal)
-        if ($gradeIdx -lt 0) { $failReason = 'grade constant not found' }
+        $gradeIdx = -1
+        $gradeConstMatch = [regex]::Match($content, $cGradeR)
+        if ($gradeConstMatch.Success) { $gradeIdx = $gradeConstMatch.Index } else { $failReason = 'grade constant not found' }
 
         $fadeMatch = $null
         if ($null -eq $failReason) {
@@ -469,9 +521,9 @@ foreach ($file in $files) {
         if ($null -eq $failReason) {
             $segStart = Find-LineStart -Text $content -Index $gradeIdx -Newline $newline
             $segText = $content.Substring($segStart, $washIdx - $segStart)
-            $rM = [regex]::Match($segText, '\((_\d+) \* 1\.705049991607666f\)')
-            $gM = [regex]::Match($segText, '\((_\d+) \* 1\.1407999992370605f\)')
-            $bM = [regex]::Match($segText, '\((_\d+) \* 1\.1529699563980103f\)')
+            $rM = [regex]::Match($segText, '\((_\d+) \* ' + $cGradeR + '\)')
+            $gM = [regex]::Match($segText, '\((_\d+) \* ' + $cGradeG + '\)')
+            $bM = [regex]::Match($segText, '\((_\d+) \* ' + $cGradeB + '\)')
             if ($rM.Success -and $gM.Success -and $bM.Success) {
                 $inR = $rM.Groups[1].Value; $inG = $gM.Groups[1].Value; $inB = $bM.Groups[1].Value
             } else {
@@ -556,17 +608,25 @@ foreach ($file in $files) {
         $content = [regex]::Replace($content, '(_localToneMappingParams\.w[\s\S]*?saturate\(1\.0f - \(\(_\d+ \* _postProcessParams\.x)(\) \* dot\(float2)', '$1 * CUSTOM_VIGNETTE$2', 1)
     }
 
+    $content = Add-LineAnnotation -Text $content -Newline $newline -Name 'FinalVignetteStrength' `
+        -Version $finalControlsPatchVersion -LineNeedle '* CUSTOM_VIGNETTE) * dot(float2' `
+        -Description ('The native final pass derives its vignette attenuation from _postProcessParams.x and the squared screen-space radius. ' +
+            'This block multiplies only that native coefficient by CUSTOM_VIGNETTE so the control scales the existing vignette without changing its center, falloff equation, saturation, or output routing. ' +
+            'CUSTOM_VIGNETTE resolves to 1 when RenoDX is Off, restoring the native expression.')
+
     if (-not $content.Contains('FinalizePostProcess')) {
         $targetWMatch = [regex]::Match($content, '(?m)^\s*SV_Target\.w\s*=\s*[^;]+;')
         if ($targetWMatch.Success) {
             if ($isHdr) {
                 $finalizeBlock = $newline + $newline +
                     "  // RenoDX: >>> [Patch: FinalizePostProcessHDR] [Version: $patchVersion]$newline" +
+                    "  // Description: Runs the shared HDR finalizer after the native output has been assembled so enabled RenoDX display adjustments are applied once. Its effective controls are neutral when RenoDX is Off.$newline" +
                     "  SV_Target.xyz = FinalizeHDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);$newline" +
                     "  // RenoDX: <<< [Patch: FinalizePostProcessHDR]"
             } else {
                 $finalizeBlock = $newline + $newline +
                     "  // RenoDX: >>> [Patch: FinalizePostProcessSDR] [Version: $patchVersion]$newline" +
+                    "  // Description: Runs the shared SDR finalizer after the native output has been assembled so enabled RenoDX display adjustments are applied once. Its effective controls are neutral when RenoDX is Off.$newline" +
                     "  SV_Target.xyz = FinalizeSDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);$newline" +
                     "  // RenoDX: <<< [Patch: FinalizePostProcessSDR]"
             }
@@ -575,6 +635,13 @@ foreach ($file in $files) {
         } else {
             $missing = $true
         }
+    }
+
+    $consumer = if ($isFused) { 'the fused final grading path' } else { 'the standalone final pass' }
+    $content = Add-TonemapDependencyAnnotations -Text $content -Newline $newline `
+        -Version $finalControlsPatchVersion -Consumer $consumer
+    if ($content -notmatch '\[Patch: RenoDXDependencyBindings\]') {
+        $bindingsAnnotationMissing.Add($file.Name)
     }
 
     if ($missing) {
@@ -619,4 +686,9 @@ if ($missingCBufferPattern.Count -gt 0) {
 if ($curveVarLeaks.Count -gt 0) {
     Write-Output "CURVE_VAR_LEAKS=$($curveVarLeaks.Count)"
     $curveVarLeaks | ForEach-Object { Write-Output ("  " + $_) }
+}
+
+if ($bindingsAnnotationMissing.Count -gt 0) {
+    Write-Output "BINDINGS_ANNOTATION_MISSING=$($bindingsAnnotationMissing.Count)"
+    $bindingsAnnotationMissing | ForEach-Object { Write-Output ("  " + $_) }
 }

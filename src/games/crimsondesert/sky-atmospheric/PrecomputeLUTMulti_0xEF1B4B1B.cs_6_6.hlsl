@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared spectral and/or Dawn/Dusk helpers required by this shader's owned patch families.
+#include "sky_spectral_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture3D<float4> __3__36__0__0__g_texPrecomputedLUTMultiGather : register(t67, space36);
 
 RWTexture3D<float4> __3__48__0__1__g_texPrecomputedLUTMultiUAV : register(u2, space48);
@@ -406,11 +411,20 @@ void main(
       }
       // [sem: _3__36__0__0__g_texPrecomputedLUTMultiGather_sampleLod]
       _368 = __3__36__0__0__g_texPrecomputedLUTMultiGather.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float3(((exp2(log2(saturate((_320 + -16.0f) / (_atmosphereThickness + -32.0f))) * 0.5f) * 0.96875f) + 0.015625f), _358, ((1.0f - exp2(-1.1541561f - (dot(float3(_252, _253, 0.0f), float3(_99, _91, 0.0f)) * 4.039546f))) * 1.0280913f)), 0.0f);
-      _372 = _368.x * exp2((((_286 + (_ozoneRatio * 2.0556001e-06f)) * _274) + _294) * -1.442695f);
+      // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+      // Description: Routes the exact native ozone absorption literal(s) through the shared spectral constants; each constant resolves to the original float value.
+      _372 = _368.x * exp2((((_286 + (_ozoneRatio * SKY_OZONE_1)) * _274) + _294) * -1.442695f);
+      // RenoDX: <<< [Patch: SkySpectralOzone]
       _373 = _372 * _267;
-      _374 = _368.y * exp2((((_287 + (_ozoneRatio * 4.9788005e-06f)) * _274) + _294) * -1.442695f);
+      // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+      // Description: Routes the exact native ozone absorption literal(s) through the shared spectral constants; each constant resolves to the original float value.
+      _374 = _368.y * exp2((((_287 + (_ozoneRatio * SKY_OZONE_2)) * _274) + _294) * -1.442695f);
+      // RenoDX: <<< [Patch: SkySpectralOzone]
       _375 = _374 * _267;
-      _376 = _368.z * exp2((((_288 + (_ozoneRatio * 2.1360002e-07f)) * _274) + _294) * -1.442695f);
+      // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.13.00]
+      // Description: Routes the exact native ozone absorption literal(s) through the shared spectral constants; each constant resolves to the original float value.
+      _376 = _368.z * exp2((((_288 + (_ozoneRatio * SKY_OZONE_3)) * _274) + _294) * -1.442695f);
+      // RenoDX: <<< [Patch: SkySpectralOzone]
       _377 = _376 * _267;
       _378 = _372 * _268;
       _379 = _374 * _268;

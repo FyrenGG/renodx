@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the shared RenoDX option macros required by Contact Micro Shadows; this declaration changes no native output by itself.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture2D<float4> __3__36__0__0__g_terrainShadowDepth : register(t41, space36);
 
 Texture2DArray<float4> __3__36__0__0__g_dynamicShadowDepthArray : register(t237, space36);
@@ -180,6 +185,14 @@ uint firstbithigh_msb(uint value) { return (value == 0) ? 0xFFFFFFFF : (31u - fi
 
 static const int _global_0[16] = { 1, -3, -1, 3, 5, 1, -3, -5, -5, 5, -7, -1, 3, 7, 7, -7 };
 
+// RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+// Description: Pulls in the shared depth-bias micro detail shadow helper used by the contact
+//              shadow region later in this shader. The include sits here rather than at the top
+//              of the file because the helper references the shader-local resource and cbuffer
+//              declarations above it. The helper returns its input unchanged when Contact Micro
+//              Shadows is Off, so pulling it in adds no behavior on the vanilla path.
+#include "micro_detail_shadows.hlsli"
+// RenoDX: <<< [Patch: ContactMicroShadowsFamily]
 [numthreads(8, 8, 1)]
 void main(
   uint3 SV_DispatchThreadID : SV_DispatchThreadID,
@@ -187,6 +200,21 @@ void main(
   uint3 SV_GroupThreadID : SV_GroupThreadID,
   uint SV_GroupIndex : SV_GroupIndex
 ) {
+    // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+    // Description: Zero-initialized carrier variables for the contact-shadow ray direction used by
+    //              the micro detail shadow helper later in this shader. The native direction
+    //              temporaries they copy are only assigned inside the shadow-evaluation gate that
+    //              follows; reading those raw temporaries at the helper call site outside the gate
+    //              compiles to undefined values on the gate's skip edge (phi-undef in DXIL). The
+    //              helper call is gated on the same condition, so the zero fallbacks are never
+    //              actually marched; they exist so every control path carries defined values. The
+    //              march origin needs no carrier in this variant because it comes from the shaded
+    //              world position, which is computed before this gate. These are storage only and do
+    //              not affect any native computation.
+    float _rndxMicroDirX = 0.0f;
+    float _rndxMicroDirY = 0.0f;
+    float _rndxMicroDirZ = 0.0f;
+    // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
   int4 _32;
   int _42;
   int _46;
@@ -1522,6 +1550,13 @@ void main(
   _76 = (uint)((uint)(_74.x)) >> 24;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
   _79 = ((float)((uint)((uint)(_74.x & 16777215)))) * 5.960465e-08f;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
   _80 = _76 & 127;
+  // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
+  // Description: Per-pixel connected-patch relief state. Evaluated lazily at most once, and only
+  // if the far march produces a suppression candidate, so pixels without one pay nothing.
+  bool _rndxCpeReady = false;
+  bool _rndxCpeEst = false;
+  float _rndxCpeE = 0.0f;
+  // RenoDX: <<< [Patch: ConnectedPatchEnvelope]
   _82 = __3__36__0__0__g_sceneNormal.Load(int3(_58, _59, 0));  // [sem: _3__36__0__0__g_sceneNormal_load]
   _98 = min(1.0f, ((((float)((uint)((uint)(_82.x & 1023)))) * 0.0019569471f) + -1.0f));  // [sem: _3__36__0__0__g_sceneNormal_load_derived]
   _99 = min(1.0f, ((((float)((uint)((uint)(((uint)((uint)(_82.x)) >> 10) & 1023)))) * 0.0019569471f) + -1.0f));  // [sem: _3__36__0__0__g_sceneNormal_load_derived]
@@ -3044,6 +3079,16 @@ void main(
         _5304 = _moonDirection.y;
         _5305 = _moonDirection.z;
       }
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: Seeds the contact-shadow ray direction carriers with the dominant light direction
+      //              the native path just selected. Runs on the main path of the native
+      //              shadow-evaluation gate, so the carriers hold the native values on every path that
+      //              can reach the micro detail helper call (which is gated on the same condition).
+      //              This block only copies values and changes no native result.
+      _rndxMicroDirX = _5303;
+      _rndxMicroDirY = _5304;
+      _rndxMicroDirZ = _5305;
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       _5306 = _58 & 3;
       _5310 = _59 & 3;
       _5316 = (uint)((uint)((uint)(_frameNumber.x)) * (uint)(1551)) + (uint)((uint)((int)(((int)((int)((int)(_5310) << 1) | (int)(_5310)) << 1) & 10) | (int)(((int)((int)(_5306) << 1) | (int)(_5306)) & 5)));
@@ -3066,13 +3111,44 @@ void main(
       _5390 = mad(_5366, _5303, mad(_5373, _5380, ((((_5381 * _5303) * _5378) + 1.0f) * _5372)));
       _5394 = mad(_5366, _5304, mad(_5373, (_5375 + (_5379 * _5304)), ((_5372 * _5375) * _5380)));
       _5398 = mad(_5366, _5305, mad(_5373, (-0.0f - _5304), (-0.0f - (_5381 * _5372))));
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: The vanilla contact-shadow ray direction is the sun/moon direction rotated onto a
+      //              randomly sampled cone that changes every frame, which the shadow denoiser is expected
+      //              to resolve. Contact Micro Shadows adds extra sub-pixel occlusion on top of this march,
+      //              and the per-frame cone wobble makes that added detail crawl and shimmer between frames.
+      //              While any Contact Micro Shadows quality level is active this substitutes the unrotated
+      //              light direction so the added detail is temporally stable; with the feature Off the
+      //              vanilla jittered direction is left untouched.
+      if (CONTACT_SHADOW_STABLE_DIRECTION == 1.f) {
+        _5390 = _5303;
+        _5394 = _5304;
+        _5398 = _5305;
+      }
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       _5399 = select(_5284, 10, 8);
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: The vanilla screen-space contact-shadow ray takes only 8 or 10 march steps depending
+      //              on the material class, which undersamples thin and small occluders and leaves gaps in
+      //              the contact darkening. While a Contact Micro Shadows quality level is active this
+      //              raises the step count toward the quality-dependent ray-traced-lane target; at the Off
+      //              value the tuning weight is 0 and the vanilla step count is used unchanged.
+      if (CONTACT_SHADOW_DETAIL_PATH == 1.f) {
+        _5399 = (int)(lerp(float(_5399), CONTACT_SHADOW_RT_MARCH_SAMPLES, CONTACT_SHADOW_RT_TUNING) + 0.5f);
+      }
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       if (!_170) {
         _5405 = min(0.5f, ((_115 * 0.0025f) + 0.25f));
       } else {
         _5405 = 1.0f;
       }
-      _5411 = ((abs(_5304) * (select(_5286, 12.0f, 2.0f) - _5287)) + _5287) * select(_170, 0.01f, 0.1f);
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: Sets how far along the light direction the contact shadow is allowed to march.
+      //              Vanilla caps this path at a 0.01 world-space reach, which is too short to pick up
+      //              contact occlusion from anything larger than immediate sub-pixel detail. The lerp
+      //              extends the reach toward the quality-dependent ray-traced-lane target; at the Off
+      //              value the tuning weight is 0 and the lerp returns the vanilla 0.01 exactly.
+      _5411 = ((abs(_5304) * (select(_5286, 12.0f, 2.0f) - _5287)) + _5287) * select(_170, lerp(0.01f, CONTACT_SHADOW_RT_REACH_TARGET, CONTACT_SHADOW_RT_TUNING), 0.1f);
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       if (!_170) {
         _5419 = max((_115 * select(((uint)((int)(_80) + (int)(-11)) < (uint)9), 0.008f, 0.03f)), _5411);
       } else {
@@ -3109,7 +3185,16 @@ void main(
         _5597 = (((float)((uint)((uint)(((int)((uint)((uint)(_5591)) * (uint)(48271))) & 16777215)))) * 5.9604645e-08f);
       }
       if ((_80 == 15) && (!(_5285 || ((_80 != 15) && ((uint)((int)(_80) + (int)(-12)) < (uint)7))))) {
-        _5609 = ((10.0f - (saturate(_115 * 0.001f) * 9.0f)) * _5597);
+        // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+        // Description: The contact ray's first sample is offset by a per-pixel random value scaled by this
+        //              factor, so neighbouring pixels start at different distances and the march dithers
+        //              instead of banding. On this depth-faded material branch vanilla scales the random by
+        //              up to 10 units, which pushes the first sample past small nearby occluders and loses
+        //              their contact darkening entirely. The lerp pulls the start scale toward the
+        //              quality-dependent ray-traced-lane target; at the Off value the tuning weight is 0 and
+        //              the vanilla scale is returned exactly.
+        _5609 = ((lerp((10.0f - (saturate(_115 * 0.001f) * 9.0f)), CONTACT_SHADOW_RT_START_TARGET, CONTACT_SHADOW_RT_TUNING)) * _5597);
+        // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
       } else {
         _5609 = _5597;
       }
@@ -3163,7 +3248,15 @@ void main(
         _5777 = 0.0f;
         while(true) {
           // [sem: _3__36__0__0__g_depthStencil_load]
-          _5786 = __3__36__0__0__g_depthStencil.Load(int3(((int)(min(max(_5770, _5767), (1.0f - _5767)) * _bufferSizeAndInvSize.x)), ((int)(_5771 * _bufferSizeAndInvSize.y)), 0));
+          // RenoDX: >>> [Patch: ShadowEdgeNoiseFix] [Version: 1.16.00]
+          // Description: Replaces the vanilla X clamp at this contact-shadow depth load. Vanilla clamps the
+          //              sampled X coordinate to the first/last half texel while leaving Y unclamped, so a ray
+          //              that walks off the left or right edge of the screen keeps re-reading the same border
+          //              column and smears or flickers the shadow it produces there. The macro keeps the
+          //              vanilla clamp when the fix is off and passes X through unclamped when it is on, so the
+          //              out-of-bounds sample fails instead of stretching the edge column.
+          _5786 = __3__36__0__0__g_depthStencil.Load(int3(((int)(SHADOW_CONTACT_SAMPLE_X(_5770, _5767) * _bufferSizeAndInvSize.x)), ((int)(_5771 * _bufferSizeAndInvSize.y)), 0));
+          // RenoDX: <<< [Patch: ShadowEdgeNoiseFix]
           _5788 = (uint)((uint)(_5786.x)) >> 24;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _5791 = ((float)((uint)((uint)(_5786.x & 16777215)))) * 5.960465e-08f;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _5792 = _5788 & 127;
@@ -3222,7 +3315,20 @@ void main(
             _5877 = (1.0f - _5874) + (_5874 * _5872);
             _5892 = _5792;
             // [sem: expr_sat]
-            _5893 = saturate(((saturate(1.0f - ((_5877 * _5877) * _5872)) * (1.0f - _5777)) * saturate((-0.0f - _5801) / (_5773 * 0.0046548597f))) + _5777);
+            // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+            // Description: Rewrites the contact-shadow accumulation so the occlusion term can be scaled
+            //              without disturbing the base shadow it is added to. The vanilla expression is
+            //              saturate(((saturate(1 - d*d*s) * (1 - base)) * fade) + base): d*d*s is the
+            //              accumulated ray occlusion, (1 - base) limits the contribution to the light that is
+            //              still unshadowed, and fade is an occluder thickness/penetration confidence ramp
+            //              that discards hits whose depth delta is too large to be a real contact. The whole
+            //              product is hoisted into a named value and multiplied by a quality-dependent gain so
+            //              the ray-traced lane can deepen its own coarse contact term to match the finer
+            //              sub-pixel detail composited later. At the Off value the tuning weight is 0, the gain
+            //              is exactly 1.0, and the expression reduces to the vanilla one bit for bit.
+            float _microNearAccum = (saturate(1.0f - ((_5877 * _5877) * _5872)) * (1.0f - _5777)) * saturate((-0.0f - _5801) / (_5773 * 0.0046548597f));
+            _5893 = saturate((_microNearAccum * lerp(1.0f, CONTACT_SHADOW_RT_ACCUM_STRENGTH, CONTACT_SHADOW_RT_TUNING)) + _5777);
+            // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
           } else {
             _5892 = _5769;
             _5893 = _5777;  // [sem: expr_sat]
@@ -3308,9 +3414,41 @@ void main(
         _6063 = 0;
         _6064 = 0.0f;
         _6065 = 0.0f;
+        // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+        // Description: Builds camera- and light-facing receiver tangent-plane slopes once for the far contact
+        // march. The plane is anchored to the receiver's stored device depth, making receiver identity exact
+        // while leaving cross-class and degenerate-plane samples on the native path.
+        // This body reconstructs position as M . v (row dots), so the plane is transformed with the
+        // transpose - column dots. Verify this against the native position reconstruction after any
+        // decompiler change; the two conventions are silent mirror images of each other.
+        float _rndxSiPlaneW = -mad(_105, _154, mad(_104, _153, (_103 * _152)));
+        float _rndxSiPlaneA = mad(_rndxSiPlaneW, (_invViewProjRelative[3].x), mad(_105, (_invViewProjRelative[2].x), mad(_104, (_invViewProjRelative[1].x), (_103 * (_invViewProjRelative[0].x)))));
+        float _rndxSiPlaneB = mad(_rndxSiPlaneW, (_invViewProjRelative[3].y), mad(_105, (_invViewProjRelative[2].y), mad(_104, (_invViewProjRelative[1].y), (_103 * (_invViewProjRelative[0].y)))));
+        float _rndxSiPlaneC = mad(_rndxSiPlaneW, (_invViewProjRelative[3].z), mad(_105, (_invViewProjRelative[2].z), mad(_104, (_invViewProjRelative[1].z), (_103 * (_invViewProjRelative[0].z)))));
+        bool _rndxSiReceiverVulnerable = (((uint)(_80 - 1) < 3u) || (_80 == 15) || (_80 == 97));
+        float _rndxSiNdotL = mad(_105, _5398, mad(_104, _5394, (_103 * _5390)));
+        bool _rndxSiPlaneValid = _rndxSiReceiverVulnerable && (_rndxSiNdotL > 0.0f) && (_rndxSiPlaneW > 0.0f) && (abs(_rndxSiPlaneC) >= 1.1754943508222875e-38f);
+        float _rndxSiInvC = select(_rndxSiPlaneValid, rcp(_rndxSiPlaneC), 0.0f);
+        float _rndxSiQx = -_rndxSiPlaneA * _rndxSiInvC;
+        float _rndxSiQy = -_rndxSiPlaneB * _rndxSiInvC;
+        float _rndxSiPlaneSide = select((_rndxSiPlaneC >= 0.0f), 1.0f, -1.0f);
+        // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
         while(true) {
           // [sem: _3__36__0__0__g_depthStencil_load]
-          _6074 = __3__36__0__0__g_depthStencil.Load(int3(((int)(min(max(_6060, _6055), (1.0f - _6055)) * _bufferSizeAndInvSize.x)), ((int)(_6061 * _bufferSizeAndInvSize.y)), 0));
+          // RenoDX: >>> [Patch: ShadowEdgeNoiseFix] [Version: 1.16.00]
+          // Description: Replaces the vanilla X clamp at this contact-shadow depth load. Vanilla clamps the
+          //              sampled X coordinate to the first/last half texel while leaving Y unclamped, so a ray
+          //              that walks off the left or right edge of the screen keeps re-reading the same border
+          //              column and smears or flickers the shadow it produces there. The macro keeps the
+          //              vanilla clamp when the fix is off and passes X through unclamped when it is on, so the
+          //              out-of-bounds sample fails instead of stretching the edge column.
+          // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+          // Description: Materializes the exact integer texel used by the far depth load so the
+          // receiver-plane test evaluates that raster sample rather than the continuous march coordinate.
+          int2 _rndxSiSampleTexel = int2(((int)(SHADOW_CONTACT_SAMPLE_X(_6060, _6055) * _bufferSizeAndInvSize.x)), ((int)(_6061 * _bufferSizeAndInvSize.y)));
+          // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
+          _6074 = __3__36__0__0__g_depthStencil.Load(int3(_rndxSiSampleTexel, 0));
+          // RenoDX: <<< [Patch: ShadowEdgeNoiseFix]
           _6076 = (uint)((uint)(_6074.x)) >> 24;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _6079 = ((float)((uint)((uint)(_6074.x & 16777215)))) * 5.960465e-08f;  // [sem: _3__36__0__0__g_depthStencil_load_derived]
           _6080 = _6076 & 127;
@@ -3335,6 +3473,10 @@ void main(
           } else {
             _6137 = _6094;
           }
+          // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+          // Description: Only a natively accepted sample can be reclassified as a self-intersection miss.
+          bool _rndxSiReject = false;
+          // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
           if (!(_6137 == 0)) {
             if ((uint)_6080 > (uint)11) {
               if (!((uint)_6080 < (uint)16)) {
@@ -3367,14 +3509,189 @@ void main(
             }
             _6162 = saturate(_6086 * 0.015625f);  // [sem: expr_sat]
             _6165 = (1.0f - _6162) + (_6162 * _6160);
-            _6180 = _6080;
+            // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+            // Description: Reclassifies only strict same-class samples that are not provably in front of the
+            // anchored receiver plane. The finite envelope is fixed by the D24 depth and 10-bit normal
+            // representation; a rejected sample takes the native miss state and preserves the previous owner.
+            if (_rndxSiPlaneValid && (_6080 == _80)) {
+              float _rndxSiNdcX = mad(2.0f, (float(_rndxSiSampleTexel.x) + 0.5f) * _bufferSizeAndInvSize.z, -1.0f);
+              float _rndxSiNdcY = mad(-2.0f, (float(_rndxSiSampleTexel.y) + 0.5f) * _bufferSizeAndInvSize.w, 1.0f);
+              float _rndxSiPlaneZ = mad(_rndxSiQy, (_rndxSiNdcY - _72), mad(_rndxSiQx, (_rndxSiNdcX - _70), _114));
+              float _rndxSiEps = 1.7881395564245394e-07f + (0.001956947147846222f * abs(_rndxSiPlaneZ - _114));
+              float _rndxSiFront = _rndxSiPlaneSide * (_6079 - _rndxSiPlaneZ);
+              _rndxSiReject = (SHADOW_BAND_FIX != 0.f) && isfinite(_rndxSiPlaneZ) && (_rndxSiPlaneZ >= 0.0f) && (_rndxSiPlaneZ <= 1.0f) && (_rndxSiFront <= _rndxSiEps);
+            }
+            // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
+            // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
+            // Description: Suppresses far contact hits finer than the receiver surface's own measured relief.
+            // E is the maximum nearer-side deviation, in unorm24 depth codes, of the depth-continuous
+            // same-class pixel run along the march direction from that run's fitted slope; a per-step code
+            // jump above the window-span bound is a real discontinuity and ends the run, so crests and
+            // silhouettes bound E instead of inflating it. A surface cannot cast contact shadows finer than
+            // its own representable relief, so hits within E plus one quantization code are LOD/quantization
+            // self-structure while genuine occluders sit far outside it. Scope is deliberately narrow: only
+            // vulnerable receivers, only same-class samples the native march accepts with no linear
+            // separation bound, and only when the run establishes a connected surface - depth-chaotic
+            // geometry such as foliage yields no surface evidence and stays fully native. A fully suppressed
+            // sample takes the native miss path, preserving the previous owner and accumulator and never
+            // terminalizing.
+            float _rndxCpeFactor = 1.0f;
+            if ((SHADOW_BAND_FIX != 0.f) && (!_rndxSiReject)) {
+              bool _rndxCpeListA = ((uint)((int)(_6080) + (int)(-19)) < (uint)2) || ((_6080 == 18) || (((_6076 & 125) == 105) || ((_6080 == 106) || (((uint)((int)(_6080) + (int)(-27)) < (uint)2) || ((_6080 == 26) || ((_6080 == 107) || (((uint)((int)(_6080) + (int)(-5)) < (uint)2) || (((_6076 & 126) == 66) || ((_6080 == 7) || (_6080 == 53))))))))));
+              bool _rndxCpeTerrain = (_6080 != 67) && ((uint)((int)(_6080) + (int)(-52)) < (uint)16);
+              if ((_rndxSiReceiverVulnerable) && ((_6080 == _80) && ((!_rndxCpeListA) && (!_rndxCpeTerrain)))) {
+                if (!_rndxCpeReady) {
+                  _rndxCpeReady = true;
+                  float2 _rndxCpeDirPx = float2((_6038) * _bufferSizeAndInvSize.x, (_6040) * _bufferSizeAndInvSize.y);
+                  float _rndxCpeLen = max(abs(_rndxCpeDirPx.x), abs(_rndxCpeDirPx.y));
+                  float2 _rndxCpeStep = select((_rndxCpeLen > 9.999999974752427e-07f), (_rndxCpeDirPx / _rndxCpeLen), float2(1.0f, 0.0f));
+                  float _rndxCpeC0 = (float)((uint)(_74.x & 16777215));
+                  int _rndxCpeW = ((int)(_bufferSizeAndInvSize.x)) - 1;
+                  int _rndxCpeH = ((int)(_bufferSizeAndInvSize.y)) - 1;
+                  float _rndxCpePlaneStep = (mad(((_rndxSiQy * -2.0f) * _bufferSizeAndInvSize.w), _rndxCpeStep.y, (((_rndxSiQx * 2.0f) * _bufferSizeAndInvSize.z) * _rndxCpeStep.x))) * 16777216.0f;
+                  float _rndxCpePlaneMag = select((_rndxSiPlaneValid && isfinite(_rndxCpePlaneStep)), abs(_rndxCpePlaneStep), 0.0f);
+                  float _rndxCpeCm2 = _rndxCpeC0;
+                  float _rndxCpeCp2 = _rndxCpeC0;
+                  bool _rndxCpeVm2 = false;
+                  bool _rndxCpeVp2 = false;
+                  {
+                    int _rndxCpeRx = ((int)(_58)) - ((int)(round(_rndxCpeStep.x * 2.0f)));
+                    int _rndxCpeRy = ((int)(_59)) - ((int)(round(_rndxCpeStep.y * 2.0f)));
+                    bool _rndxCpeOn = ((_rndxCpeRx >= 0) && ((_rndxCpeRx <= _rndxCpeW) && ((_rndxCpeRy >= 0) && (_rndxCpeRy <= _rndxCpeH))));
+                    uint _rndxCpeWd = __3__36__0__0__g_depthStencil.Load(int3(min(max(_rndxCpeRx, 0), _rndxCpeW), min(max(_rndxCpeRy, 0), _rndxCpeH), 0)).x;
+                    if ((_rndxCpeOn) && ((((int)((_rndxCpeWd >> 24) & 127)) == _80))) {
+                      _rndxCpeCm2 = (float)((uint)(_rndxCpeWd & 16777215));
+                      _rndxCpeVm2 = true;
+                    }
+                  }
+                  {
+                    int _rndxCpeRx = ((int)(_58)) + ((int)(round(_rndxCpeStep.x * 2.0f)));
+                    int _rndxCpeRy = ((int)(_59)) + ((int)(round(_rndxCpeStep.y * 2.0f)));
+                    bool _rndxCpeOn = ((_rndxCpeRx >= 0) && ((_rndxCpeRx <= _rndxCpeW) && ((_rndxCpeRy >= 0) && (_rndxCpeRy <= _rndxCpeH))));
+                    uint _rndxCpeWd = __3__36__0__0__g_depthStencil.Load(int3(min(max(_rndxCpeRx, 0), _rndxCpeW), min(max(_rndxCpeRy, 0), _rndxCpeH), 0)).x;
+                    if ((_rndxCpeOn) && ((((int)((_rndxCpeWd >> 24) & 127)) == _80))) {
+                      _rndxCpeCp2 = (float)((uint)(_rndxCpeWd & 16777215));
+                      _rndxCpeVp2 = true;
+                    }
+                  }
+                  float _rndxCpeSp = (_rndxCpeCp2 - _rndxCpeC0) * 0.5f;
+                  float _rndxCpeSm = (_rndxCpeC0 - _rndxCpeCm2) * 0.5f;
+                  float _rndxCpeSaneCap = mad(4.0f, _rndxCpePlaneMag, 2.0f);
+                  bool _rndxCpeVp2s = (_rndxCpeVp2) && (abs(_rndxCpeSp) <= _rndxCpeSaneCap);
+                  bool _rndxCpeVm2s = (_rndxCpeVm2) && (abs(_rndxCpeSm) <= _rndxCpeSaneCap);
+                  float _rndxCpeSmag;
+                  float _rndxCpeSfit;
+                  if ((_rndxCpeVp2s) && (_rndxCpeVm2s)) {
+                    _rndxCpeSmag = min(abs(_rndxCpeSp), abs(_rndxCpeSm));
+                    _rndxCpeSfit = (_rndxCpeCp2 - _rndxCpeCm2) * 0.25f;
+                  } else {
+                    if (_rndxCpeVp2s) {
+                      _rndxCpeSmag = abs(_rndxCpeSp);
+                      _rndxCpeSfit = _rndxCpeSp;
+                    } else {
+                      if (_rndxCpeVm2s) {
+                        _rndxCpeSmag = abs(_rndxCpeSm);
+                        _rndxCpeSfit = _rndxCpeSm;
+                      } else {
+                        _rndxCpeSmag = _rndxCpePlaneMag;
+                        _rndxCpeSfit = select(_rndxSiPlaneValid, _rndxCpePlaneStep, 0.0f);
+                      }
+                    }
+                  }
+                  float _rndxCpeSref = max(_rndxCpeSmag, _rndxCpePlaneMag);
+                  float _rndxCpeSlim = _rndxCpeSref + 2.0f;
+                  _rndxCpeSfit = min(max(_rndxCpeSfit, (-0.0f - _rndxCpeSlim)), _rndxCpeSlim);
+                  float _rndxCpeB = mad(8.0f, _rndxCpeSref, 2.0f);
+                  float _rndxCpePrev = _rndxCpeC0;
+                  bool _rndxCpeRun = true;
+                  {
+                    int _rndxCpeRx = ((int)(_58)) + ((int)(round(_rndxCpeStep.x * 1.0f)));
+                    int _rndxCpeRy = ((int)(_59)) + ((int)(round(_rndxCpeStep.y * 1.0f)));
+                    bool _rndxCpeOn = ((_rndxCpeRx >= 0) && ((_rndxCpeRx <= _rndxCpeW) && ((_rndxCpeRy >= 0) && (_rndxCpeRy <= _rndxCpeH))));
+                    uint _rndxCpeWd = __3__36__0__0__g_depthStencil.Load(int3(min(max(_rndxCpeRx, 0), _rndxCpeW), min(max(_rndxCpeRy, 0), _rndxCpeH), 0)).x;
+                    float _rndxCpeC = (float)((uint)(_rndxCpeWd & 16777215));
+                    if ((_rndxCpeOn) && ((((int)((_rndxCpeWd >> 24) & 127)) == _80) && (abs(_rndxCpeC - _rndxCpePrev) <= _rndxCpeB))) {
+                      _rndxCpeE = max(_rndxCpeE, (_rndxCpeC - (_rndxCpeC0 + (_rndxCpeSfit * 1.0f))));
+                      _rndxCpePrev = _rndxCpeC;
+                    } else {
+                      _rndxCpeRun = false;
+                    }
+                  }
+                  if (_rndxCpeRun) {
+                    if ((_rndxCpeVp2) && (abs(_rndxCpeCp2 - _rndxCpePrev) <= _rndxCpeB)) {
+                      _rndxCpeE = max(_rndxCpeE, (_rndxCpeCp2 - (_rndxCpeC0 + (_rndxCpeSfit * 2.0f))));
+                      _rndxCpePrev = _rndxCpeCp2;
+                      _rndxCpeEst = true;
+                    } else {
+                      _rndxCpeRun = false;
+                    }
+                  }
+                  [unroll] for (int _rndxCpeK = 0; _rndxCpeK < 4; _rndxCpeK++) {
+                    if (!_rndxCpeRun) { break; }
+                    float _rndxCpeD = ((_rndxCpeK == 0) ? 3.0f : ((_rndxCpeK == 1) ? 4.0f : ((_rndxCpeK == 2) ? 6.0f : 8.0f)));
+                    int _rndxCpeRx = ((int)(_58)) + ((int)(round(_rndxCpeStep.x * _rndxCpeD)));
+                    int _rndxCpeRy = ((int)(_59)) + ((int)(round(_rndxCpeStep.y * _rndxCpeD)));
+                    bool _rndxCpeOn = ((_rndxCpeRx >= 0) && ((_rndxCpeRx <= _rndxCpeW) && ((_rndxCpeRy >= 0) && (_rndxCpeRy <= _rndxCpeH))));
+                    uint _rndxCpeWd = __3__36__0__0__g_depthStencil.Load(int3(min(max(_rndxCpeRx, 0), _rndxCpeW), min(max(_rndxCpeRy, 0), _rndxCpeH), 0)).x;
+                    float _rndxCpeC = (float)((uint)(_rndxCpeWd & 16777215));
+                    if ((_rndxCpeOn) && ((((int)((_rndxCpeWd >> 24) & 127)) == _80) && (abs(_rndxCpeC - _rndxCpePrev) <= _rndxCpeB))) {
+                      _rndxCpeE = max(_rndxCpeE, (_rndxCpeC - (_rndxCpeC0 + (_rndxCpeSfit * _rndxCpeD))));
+                      _rndxCpePrev = _rndxCpeC;
+                    } else {
+                      _rndxCpeRun = false;
+                    }
+                  }
+                }
+                if (_rndxCpeEst) {
+                  float _rndxCpeCodeLin = ((_6086) * (_6086)) / (_nearFarProj.x * 16777216.0f);
+                  float _rndxCpeSepCodes = abs(_6089) / max(_rndxCpeCodeLin, 9.999999960041972e-13f);
+                  float _rndxCpeHalfW = _rndxCpeE + 1.0f;
+                  float _rndxCpeT = saturate((_rndxCpeSepCodes - _rndxCpeHalfW) / _rndxCpeHalfW);
+                  _rndxCpeFactor = ((_rndxCpeT * _rndxCpeT) * (3.0f - (2.0f * _rndxCpeT)));
+                }
+              }
+            }
+            if (_rndxCpeFactor <= 0.0f) {
+              _rndxSiReject = true;
+            }
+            // RenoDX: <<< [Patch: ConnectedPatchEnvelope]
+            // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+            // Description: A suppressed sample keeps the previous owner class instead of claiming ownership.
+            _6180 = select(_rndxSiReject, _6063, _6080);
+            // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
             // [sem: expr_sat]
-            _6181 = saturate(((saturate(1.0f - ((_6165 * _6165) * _6160)) * (1.0f - _6065)) * saturate((-0.0f - _6089) / (_6059 * 0.0046548597f))) + _6065);
+            // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+            // Description: Rewrites the contact-shadow accumulation so the occlusion term can be scaled
+            //              without disturbing the base shadow it is added to. The vanilla expression is
+            //              saturate(((saturate(1 - d*d*s) * (1 - base)) * fade) + base): d*d*s is the
+            //              accumulated ray occlusion, (1 - base) limits the contribution to the light that is
+            //              still unshadowed, and fade is an occluder thickness/penetration confidence ramp
+            //              that discards hits whose depth delta is too large to be a real contact. The whole
+            //              product is hoisted into a named value and multiplied by a quality-dependent gain so
+            //              the ray-traced lane can deepen its own coarse contact term to match the finer
+            //              sub-pixel detail composited later. At the Off value the tuning weight is 0, the gain
+            //              is exactly 1.0, and the expression reduces to the vanilla one bit for bit.
+            // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
+            // Description: Scales this accepted sample's occlusion by the connected-patch envelope factor.
+            // Every native factor already in the product is carried through unchanged and the envelope
+            // factor is appended, never substituted. A suppressed sample carries the prior accumulation.
+            if (!_rndxSiReject) {
+              float _microFarAccum = (saturate(1.0f - ((_6165 * _6165) * _6160)) * (1.0f - _6065)) * saturate((-0.0f - _6089) / (_6059 * 0.0046548597f)) * _rndxCpeFactor;
+              _6181 = saturate((_microFarAccum * lerp(1.0f, CONTACT_SHADOW_RT_ACCUM_STRENGTH, CONTACT_SHADOW_RT_TUNING)) + _6065);
+            } else {
+              _6181 = _6065;
+            }
+            // RenoDX: <<< [Patch: ConnectedPatchEnvelope]
+            // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
           } else {
             _6180 = _6063;
             _6181 = _6065;  // [sem: expr_sat]
           }
-          if ((_6080 != 0) && (_6181 > 0.95f)) {
+          // RenoDX: >>> [Patch: ContactSelfIntersectionGuard] [Version: 1.16.00]
+          // Description: Prevents a suppressed sample from terminalizing on carried accumulation.
+          // Native-rejected, cross-class and genuine samples keep the original exit test.
+          if ((!_rndxSiReject) && ((_6080 != 0) && (_6181 > 0.95f))) {
+          // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
             if (!_6081) {
               _6213 = (saturate((_6064 - _6079) / (_6064 - _6062)) - min(_6059, _6082));
             } else {
@@ -3582,6 +3899,77 @@ void main(
     } else {
       _6418 = 1.0f;  // [sem: expr_sat]
     }
+    // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+    // Description: The native contact-shadow march is a short ray with very few steps, so it misses
+    //              sub-pixel and small-scale occluders and leaves surface detail such as ground litter,
+    //              pebbles, cloth folds and foliage sitting on the ground without any contact darkening.
+    //              The pre-helper value is captured first so a later block can weigh the helper result
+    //              against the unaided one. The shared depth-bias micro detail shadow helper re-marches
+    //              the depth buffer with a continuous thickness window instead of a binary hit test and
+    //              returns a darkened contact value; it returns its input unchanged when Contact Micro
+    //              Shadows is Off, so the vanilla shadow value is preserved. The whole region is gated
+    //              on the same native shadow-evaluation condition that seeds the ray carriers: when
+    //              that gate is skipped the carriers were never given real values, and the native
+    //              composite below takes min(gateValue, contactValue). On that edge the native else-branch
+    //              sets contactValue to exactly 1.0 and gateValue is <= 0, so the min returns the gate value
+    //              and the helper result could not affect the output there. The same holds if gateValue is
+    //              NaN: the native if/else still yields 1.0 and the min resolves to the non-NaN operand, so
+    //              gating actually restores vanilla for that pixel, where the un-gated form would have
+    //              marched with unseeded carriers and could have returned less than 1.0. The gate makes the
+    //              skip explicit instead of marching with unseeded carriers.
+    if (_5273 > 0.0f) {
+      float _rndxMicroBaseContact = _6418;
+      _6418 = ApplyContactMicroDetailShadow(
+          _6418,
+          float2(_60, _61),
+          _115,
+          _80,
+          float3(_rndxMicroDirX, _rndxMicroDirY, _rndxMicroDirZ),
+          float3(_152, _153, _154),
+          CONTACT_MICRO_DETAIL_STRENGTH_RT,
+          (CONTACT_SHADOW_IS_FULL ? CONTACT_MICRO_FADE_SLOPE_RT_FULL : -0.025f),
+          (CONTACT_SHADOW_IS_FULL ? CONTACT_MICRO_FADE_OFFSET_RT_FULL : 3.0f),
+          CONTACT_MICRO_RANGE_NEAR_RT,
+          CONTACT_MICRO_RANGE_FAR_RT,
+          CONTACT_MICRO_THICKNESS_MULTIPLIER_RT,
+          CONTACT_MICRO_OCCLUSION_SCALE_RT,
+          CONTACT_MICRO_SELF_REJECT_PIXELS_RT,
+          CONTACT_MICRO_SELF_FADE_PIXELS_RT,
+          CONTACT_MICRO_FOLIAGE_THICKNESS_BOOST_RT,
+          CONTACT_MICRO_FOLIAGE_OCCLUSION_BOOST_RT);
+      // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
+      // RenoDX: >>> [Patch: ContactMicroShadowsFamily] [Version: 1.16.00]
+      // Description: Final compositing step for the ray-traced contact lane. Both the unaided native
+      //              contact value and the micro-detail-assisted value are deepened by the same
+      //              quality-dependent final-strength gain, applied in occlusion space (1 - value) so the
+      //              fully lit case stays fully lit. The two are then blended by distance to the frame
+      //              border: the micro detail helper marches in screen space, so near the edges its ray
+      //              walks out of the depth buffer, loses occluders and would otherwise leave an abrupt
+      //              brightness seam, so the border falls back to the unaided value. The whole block is
+      //              gated on the ray-traced tuning weight, which is 0 when Contact Micro Shadows is Off,
+      //              leaving the vanilla value untouched.
+      if (CONTACT_SHADOW_RT_TUNING > 0.f) {
+        float _rndxMicroWithHelper = _6418;
+        float _rndxMicroBaseBoosted = _rndxMicroBaseContact;
+        float _rndxMicroHelperBoosted = _rndxMicroWithHelper;
+        if (_rndxMicroBaseBoosted < 1.0f) {
+          _rndxMicroBaseBoosted = saturate(1.0f - ((1.0f - _rndxMicroBaseBoosted) * lerp(1.0f, CONTACT_SHADOW_RT_FINAL_STRENGTH, CONTACT_SHADOW_RT_TUNING)));
+        }
+        if (_rndxMicroHelperBoosted < 1.0f) {
+          _rndxMicroHelperBoosted = saturate(1.0f - ((1.0f - _rndxMicroHelperBoosted) * lerp(1.0f, CONTACT_SHADOW_RT_FINAL_STRENGTH, CONTACT_SHADOW_RT_TUNING)));
+        }
+        if (CONTACT_SHADOW_DETAIL_PATH == 1.f && _rndxMicroHelperBoosted < _rndxMicroBaseBoosted) {
+          float2 _rndxMicroScreenUV = float2((_60 + 0.5f) * _bufferSizeAndInvSize.z,
+                                             (_61 + 0.5f) * _bufferSizeAndInvSize.w);
+          float2 _rndxMicroEdgeDist = min(_rndxMicroScreenUV, 1.0f - _rndxMicroScreenUV);
+          float _rndxMicroEdgeFade = saturate(min(_rndxMicroEdgeDist.x, _rndxMicroEdgeDist.y) * 10.0f);
+          _6418 = lerp(_rndxMicroBaseBoosted, _rndxMicroHelperBoosted, _rndxMicroEdgeFade);
+        } else {
+          _6418 = _rndxMicroHelperBoosted;
+        }
+      }
+    }
+    // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
     _6419 = min(_5273, _6418);
     _6433 = float(half(_6419 * float(_5249)));
     _6434 = float(half(_6419 * float(_5250)));

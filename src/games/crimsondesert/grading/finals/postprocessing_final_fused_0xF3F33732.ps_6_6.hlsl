@@ -93,6 +93,14 @@ cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
   float3 _sceneConstantDummy : packoffset(c172.y);
 };
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Reuses this shader's native SceneConstantBuffer time field, imports the shared tonemap declarations consumed by the fused final grading path, and begins suppressing the duplicate native exposure declaration.
+#define RENODX_TONEMAP_EXTERNAL_SCENE_CONSTANT_BUFFER 1
+#define RENODX_TONEMAP_SCENE_TIME_W _time.w
+#include "../tonemap.hlsli"
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure0 : packoffset(c000.x);
   float4 _exposure1 : packoffset(c001.x);
@@ -100,7 +108,15 @@ cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure3 : packoffset(c003.x);
   float4 _exposure4 : packoffset(c004.x);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of the native ExposureConstantBuffer so any intervening unrelated native declarations remain live.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Begins suppressing native GlobalPushConstants because tonemap.hlsli provides the ABI-compatible live declaration consumed by the fused final grading path.
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   float4 _postProcessParams : packoffset(c000.x);
   float4 _postProcessParams1 : packoffset(c001.x);
@@ -117,12 +133,24 @@ cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   int _nightToneParm : packoffset(c012.x);
   int3 _padding : packoffset(c012.y);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of native GlobalPushConstants so the following unrelated native declarations remain live.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Begins suppressing the native ColorBlindConstantBuffer because tonemap.hlsli provides the ABI-compatible live declaration used by the fused final grading path.
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
   float4 _colorBlind0 : packoffset(c000.x);
   float4 _colorBlind1 : packoffset(c001.x);
   float4 _colorBlind2 : packoffset(c002.x);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of the native ColorBlindConstantBuffer so all following native declarations compile normally.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
 SamplerState __0__4__0__0__g_staticBilinearClamp : register(s3, space4);
 
@@ -517,7 +545,17 @@ float4 main(
     _40 = _17.x;
     _41 = _17.z;
   }
-  if (_slopeParams.w > 0.0f) {
+  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: 1.16.00]
+  // Description: Scales only the native red/blue chromatic-aberration offsets between the unchanged center sample and native shifted samples. The effective scalar is 1 when RenoDX is Off, preserving the native offsets.
+  _40 = lerp(_17.x, _40, CUSTOM_CHROMATIC_ABERRATION);
+  _41 = lerp(_17.z, _41, CUSTOM_CHROMATIC_ABERRATION);
+  // RenoDX: <<< [Patch: FinalChromaticAberration]
+
+  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: 1.16.00]
+  // Description: Keeps the native film-grain branch enabled only when its native strength is positive and RenoDX custom film grain is not selected. RenoDX Off clears the custom type flag, restoring the native condition.
+  bool vanilla_film_grain = (_slopeParams.w > 0.0f) && CUSTOM_FILM_GRAIN_TYPE == 0;
+  if (vanilla_film_grain) {
+  // RenoDX: <<< [Patch: CustomFilmGrainGate]
     _51 = ((TEXCOORD.y + 4.0f) * (TEXCOORD.x + 4.0f)) * _time.x;
     _52 = _51 * 0.7692308f;
     _56 = frac(abs(_52));
@@ -538,437 +576,37 @@ float4 main(
   _123 = _93 * _slopeParams.x;
   _125 = _93 * _slopeParams.y;
   _127 = _93 * _slopeParams.z;
-  _141 = exp2(log2(max(0.0f, (_offsetParams.x + (_123 * max(0.0f, (((_85 * 1.70505f) - (_86 * 0.62179f)) - (_87 * 0.08326f))))))) * _powerParams.x);
-  _142 = exp2(log2(max(0.0f, (_offsetParams.y + (_125 * max(0.0f, (((_86 * 1.1408f) - (_85 * 0.13026f)) - (_87 * 0.01055f))))))) * _powerParams.y);
-  _143 = exp2(log2(max(0.0f, ((_127 * max(0.0f, (((_85 * -0.024f) - (_86 * 0.12897f)) + (_87 * 1.15297f)))) + _offsetParams.z))) * _powerParams.z);
-  _145 = dot(float3(_141, _142, _143), float3(0.212671f, 0.71516f, 0.072169f));
-  _152 = ((_141 - _145) * _powerParams.w) + _145;
-  _155 = (lerp(_145, _142, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _156 = (lerp(_145, _143, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _159 = mad(-1.7106533e-05f, _156, mad(0.00040110573f, _155, (_152 * 3.0009599f)));
-  _162 = mad(-2.34209e-05f, _156, mad(0.9997657f, _155, (_152 * -6.0908147e-05f)));
-  _165 = mad(1.0005832f, _156, mad(8.34018e-05f, _155, (_152 * 4.855916e-05f)));
-  _168 = mad(0.04736635f, _165, mad(0.33951214f, _162, (_159 * 0.61319155f)));
-  _171 = mad(0.013450007f, _165, mad(0.91633576f, _162, (_159 * 0.07020692f)));
-  _174 = mad(0.8696068f, _165, mad(0.1095673f, _162, (_159 * 0.020618873f)));
-  _175 = dot(float3(_168, _171, _174), float3(0.27222872f, 0.67408174f, 0.053689517f));
-  _179 = (_168 / _175) + -1.0f;
-  _180 = (_171 / _175) + -1.0f;
-  _181 = (_174 / _175) + -1.0f;
-  _190 = (1.0f - exp2((_175 * _175) * -4.0f)) * (1.0f - exp2(dot(float3(_179, _180, _181), float3(_179, _180, _181)) * -4.0f));
-  _206 = ((mad(-0.06368284f, _174, mad(-0.3292913f, _171, (_168 * 1.3704128f))) - _168) * _190) + _168;
-  _207 = ((mad(-0.010861567f, _174, mad(1.0970908f, _171, (_168 * -0.08343426f))) - _171) * _190) + _171;
-  _208 = ((mad(1.2036945f, _174, mad(-0.098625645f, _171, (_168 * -0.02579326f))) - _174) * _190) + _174;
-  _222 = ((mad(0.061360642f, _208, mad(-4.5401976e-09f, _207, (_206 * 0.9386394f))) - _206) * 0.6f) + _206;
-  _223 = ((mad(0.1692059f, _208, mad(0.8307942f, _207, (_206 * 6.775372e-08f))) - _207) * 0.6f) + _207;
-  _224 = (mad(-2.3283064e-10f, _207, (_206 * -9.313226e-10f)) * 0.6f) + _208;
-  _227 = mad(0.16386905f, _224, mad(0.14067869f, _223, (_222 * 0.6954522f)));
-  _230 = mad(0.095534325f, _224, mad(0.8596711f, _223, (_222 * 0.04479458f)));
-  _233 = mad(1.0015007f, _224, mad(0.00402521f, _223, (_222 * -0.005525883f)));
-  _237 = max(max(_227, _230), _233);
-  _242 = (max(_237, 1e-10f) - max(min(min(_227, _230), _233), 1e-10f)) / max(_237, 0.01f);
-  _255 = ((_230 + _227) + _233) + (sqrt((((_233 - _230) * _233) + ((_230 - _227) * _230)) + ((_227 - _233) * _227)) * 1.75f);
-  _256 = _255 * 0.33333334f;
-  _257 = _242 + -0.4f;
-  _258 = _257 * 5.0f;
-  _262 = max((1.0f - abs(_257 * 2.5f)), 0.0f);
-  _273 = ((((float)((int)((int)((int)(uint)((int)(_258 > 0.0f))) - (int)((int)(uint)((int)(_258 < 0.0f)))))) * (1.0f - (_262 * _262))) + 1.0f) * 0.025f;
-  if (!(_256 <= 0.053333335f)) {
-    if (!(_256 >= 0.16f)) {
-      _282 = (((0.24f / _255) + -0.5f) * _273);
-    } else {
-      _282 = 0.0f;
-    }
-  } else {
-    _282 = _273;
+  // RenoDX: >>> [Patch: FusedFinalTonemapReplace] [Version: 1.13.00]
+  // Description: This standalone-final permutation inlines the vanilla tonemap pipeline directly in the final pass and runs it unconditionally on the raw scene color, so an unreplaced permutation renders the whole screen with the vanilla look whenever the game selects it. This block replaces everything from the color-matrix grade through the per-permutation tone curve and output transform with the shared TonemapReplacer. The vanilla screen fade that was fused with the curve output is re-emitted below so the untouched downstream suite - wash, user brightness and contrast, user gamma, color-blind matrix where present, vignette, letterbox, and the alpha passthrough - keeps running unchanged on the replaced color.
+  float3 _rndx_tonemapped_color = TonemapReplacer(float3(_85, _86, _87));
+  // RenoDX: <<< [Patch: FusedFinalTonemapReplace]
+  // RenoDX: >>> [Patch: FusedFinalSharpening] [Version: 1.13.00]
+  // Description: The standalone final pass is where RenoDX RCAS sharpening runs, but this fused permutation tonemaps inside the final pass itself, so no completed final-color texture exists to sample neighbor pixels from. Reconstruct the four RCAS neighbor taps by sampling the raw scene color one texel away in each direction and pass each tap through the same TonemapReplacer applied to the center pixel, then run the shared RCAS resolve. The fused vanilla sharpener, where this permutation carried one, was removed together with the replaced tonemap segment above.
+  if (CUSTOM_SHARPENING_TYPE == 1 && CUSTOM_SHARPENING > 0.f) {
+    uint _rndx_scene_w, _rndx_scene_h;
+    __3__36__0__0__g_sceneColor.GetDimensions(_rndx_scene_w, _rndx_scene_h);
+    float2 _rndx_texel = 1.0f / float2(_rndx_scene_w, _rndx_scene_h);
+    float3 _rndx_tap_b = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(0.0f, -_rndx_texel.y), 0).rgb);
+    float3 _rndx_tap_d = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(-_rndx_texel.x, 0.0f), 0).rgb);
+    float3 _rndx_tap_f = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(_rndx_texel.x, 0.0f), 0).rgb);
+    float3 _rndx_tap_h = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(0.0f, _rndx_texel.y), 0).rgb);
+    _rndx_tonemapped_color = ApplyRCASTaps(_rndx_tonemapped_color, _rndx_tap_b, _rndx_tap_d, _rndx_tap_f, _rndx_tap_h);
   }
-  _283 = _282 + 1.0f;
-  _284 = _283 * _227;
-  _285 = _283 * _230;
-  _286 = _283 * _233;
-  if (!((_284 == _285) && (_285 == _286))) {
-    _293 = ((_284 * 2.0f) - _285) - _286;
-    _296 = ((_230 - _233) * 1.7320508f) * _283;
-    _298 = atan(_296 / _293);
-    _301 = (_293 < 0.0f);
-    _302 = (_293 == 0.0f);
-    _303 = (_296 >= 0.0f);
-    _304 = (_296 < 0.0f);
-    _313 = select((_303 && _302), 90.0f, select((_304 && _302), -90.0f, (select((_304 && _301), (_298 + -3.1415927f), select((_303 && _301), (_298 + 3.1415927f), _298)) * 57.295776f)));
-    if (_313 < 0.0f) {
-      _318 = (_313 + 360.0f);
-    } else {
-      _318 = _313;
-    }
-  } else {
-    _318 = 0.0f;
+  // RenoDX: <<< [Patch: FusedFinalSharpening]
+  // RenoDX: >>> [Patch: FusedFinalFilmGrain] [Version: 1.13.00]
+  // Description: The standalone final pass is where RenoDX custom film grain runs. This fused permutation is the visible final output whenever it draws, so apply the custom film grain to the tonemapped color here, in the same pipeline position the slim standalone finals apply it. The vanilla film grain earlier in this shader stays under the CustomFilmGrainGate patch and only runs when custom grain is off.
+  if (CUSTOM_FILM_GRAIN_TYPE != 0) {
+    _rndx_tonemapped_color = renodx::effects::ApplyFilmGrain(_rndx_tonemapped_color, TEXCOORD, CUSTOM_RANDOM, CUSTOM_FILM_GRAIN_STRENGTH * 0.03f);
   }
-  _320 = min(max(_318, 0.0f), 360.0f);
-  if (_320 < -180.0f) {
-    _329 = (_320 + 360.0f);
-  } else {
-    if (_320 > 180.0f) {
-      _329 = (_320 + -360.0f);
-    } else {
-      _329 = _320;
-    }
-  }
-  _333 = saturate(1.0f - abs(_329 * 0.014814815f));  // [sem: expr_sat]
-  _337 = (_333 * _333) * (3.0f - (_333 * 2.0f));
-  _343 = ((_337 * _337) * ((_242 * 0.18f) * (0.03f - _284))) + _284;
-  _356 = log2(max(0.0f, mad(-0.21492857f, _286, mad(-0.23651075f, _285, (_343 * 1.4514393f)))));
-  _357 = log2(max(0.0f, mad(-0.09967592f, _286, mad(1.1762297f, _285, (_343 * -0.07655378f)))));
-  _358 = log2(max(0.0f, mad(0.9977163f, _286, mad(-0.0060324497f, _285, (_343 * 0.008316148f)))));
-  _359 = _356 * 0.30103f;
-  _360 = _357 * 0.30103f;
-  _361 = _358 * 0.30103f;
-  _363 = (_356 * 0.2739373f) + 0.7790625f;
-  _365 = (_357 * 0.2739373f) + 0.7790625f;
-  _367 = (_358 * 0.2739373f) + 0.7790625f;
-  _404 = select((_359 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_356 * 1.43712f)) + 1.0f)), _363);
-  _405 = select((_360 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_357 * 1.43712f)) + 1.0f)), _365);
-  _406 = select((_361 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_358 * 1.43712f)) + 1.0f)), _367);
-  _422 = 1.0f - saturate(-0.78987026f - (_356 * 0.9446112f));
-  _423 = 1.0f - saturate(-0.78987026f - (_357 * 0.9446112f));
-  _424 = 1.0f - saturate(-0.78987026f - (_358 * 0.9446112f));
-  _446 = max(0.0f, ((((_422 * _422) * (select((_359 > -0.57039833f), (1.04f - (1.56f / (exp2((_356 * 1.013354f) + 1.9201254f) + 1.0f))), _363) - _404)) * (3.0f - (_422 * 2.0f))) + _404));
-  _447 = max(0.0f, ((((_423 * _423) * (select((_360 > -0.57039833f), (1.04f - (1.56f / (exp2((_357 * 1.013354f) + 1.9201254f) + 1.0f))), _365) - _405)) * (3.0f - (_423 * 2.0f))) + _405));
-  _448 = max(0.0f, ((((_424 * _424) * (select((_361 > -0.57039833f), (1.04f - (1.56f / (exp2((_358 * 1.013354f) + 1.9201254f) + 1.0f))), _367) - _406)) * (3.0f - (_424 * 2.0f))) + _406));
-  _464 = ((mad(-0.06537104f, _448, mad(1.4518155e-06f, _447, (_446 * 1.0653747f))) - _446) * 0.6f) + _446;
-  _465 = ((mad(-0.2036677f, _448, mad(1.2036635f, _447, (_446 * -2.5716145e-07f))) - _447) * 0.6f) + _447;
-  _466 = ((mad(0.99999964f, _448, mad(2.0954758e-08f, _447, (_446 * 1.8626451e-08f))) - _448) * 0.6f) + _448;
-  _479 = saturate(max(0.0f, mad(-0.08325848f, _466, mad(-0.6217906f, _465, (_464 * 1.7050515f)))));  // [sem: expr_sat]
-  _480 = saturate(max(0.0f, mad(-0.010548528f, _466, mad(1.1408027f, _465, (_464 * -0.13025719f)))));  // [sem: expr_sat]
-  _481 = saturate(max(0.0f, mad(1.1529719f, _466, mad(-0.12896876f, _465, (_464 * -0.024003278f)))));  // [sem: expr_sat]
-  _484 = _localToneMappingParams.x * _85;
-  _485 = _localToneMappingParams.x * _86;
-  _486 = _localToneMappingParams.x * _87;
-  _520 = exp2(log2(max(0.0f, ((_123 * max(0.0f, (((_484 * 1.70505f) - (_485 * 0.62179f)) - (_486 * 0.08326f)))) + _offsetParams.x))) * _powerParams.x);
-  _521 = exp2(log2(max(0.0f, ((_125 * max(0.0f, (((_485 * 1.1408f) - (_484 * 0.13026f)) - (_486 * 0.01055f)))) + _offsetParams.y))) * _powerParams.y);
-  _522 = exp2(log2(max(0.0f, ((_127 * max(0.0f, (((_484 * -0.024f) - (_485 * 0.12897f)) + (_486 * 1.15297f)))) + _offsetParams.z))) * _powerParams.z);
-  _523 = dot(float3(_520, _521, _522), float3(0.212671f, 0.71516f, 0.072169f));
-  _530 = ((_520 - _523) * _powerParams.w) + _523;
-  _533 = (lerp(_523, _521, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _534 = (lerp(_523, _522, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _537 = mad(-1.7106533e-05f, _534, mad(0.00040110573f, _533, (_530 * 3.0009599f)));
-  _540 = mad(-2.34209e-05f, _534, mad(0.9997657f, _533, (_530 * -6.0908147e-05f)));
-  _543 = mad(1.0005832f, _534, mad(8.34018e-05f, _533, (_530 * 4.855916e-05f)));
-  _546 = mad(0.04736635f, _543, mad(0.33951214f, _540, (_537 * 0.61319155f)));
-  _549 = mad(0.013450007f, _543, mad(0.91633576f, _540, (_537 * 0.07020692f)));
-  _552 = mad(0.8696068f, _543, mad(0.1095673f, _540, (_537 * 0.020618873f)));
-  _553 = dot(float3(_546, _549, _552), float3(0.27222872f, 0.67408174f, 0.053689517f));
-  _557 = (_546 / _553) + -1.0f;
-  _558 = (_549 / _553) + -1.0f;
-  _559 = (_552 / _553) + -1.0f;
-  _568 = (1.0f - exp2((_553 * _553) * -4.0f)) * (1.0f - exp2(dot(float3(_557, _558, _559), float3(_557, _558, _559)) * -4.0f));
-  _584 = ((mad(-0.06368284f, _552, mad(-0.3292913f, _549, (_546 * 1.3704128f))) - _546) * _568) + _546;
-  _585 = ((mad(-0.010861567f, _552, mad(1.0970908f, _549, (_546 * -0.08343426f))) - _549) * _568) + _549;
-  _586 = ((mad(1.2036945f, _552, mad(-0.098625645f, _549, (_546 * -0.02579326f))) - _552) * _568) + _552;
-  _600 = ((mad(0.061360642f, _586, mad(-4.5401976e-09f, _585, (_584 * 0.9386394f))) - _584) * 0.6f) + _584;
-  _601 = ((mad(0.1692059f, _586, mad(0.8307942f, _585, (_584 * 6.775372e-08f))) - _585) * 0.6f) + _585;
-  _602 = (mad(-2.3283064e-10f, _585, (_584 * -9.313226e-10f)) * 0.6f) + _586;
-  _605 = mad(0.16386905f, _602, mad(0.14067869f, _601, (_600 * 0.6954522f)));
-  _608 = mad(0.095534325f, _602, mad(0.8596711f, _601, (_600 * 0.04479458f)));
-  _611 = mad(1.0015007f, _602, mad(0.00402521f, _601, (_600 * -0.005525883f)));
-  _615 = max(max(_605, _608), _611);
-  _620 = (max(_615, 1e-10f) - max(min(min(_605, _608), _611), 1e-10f)) / max(_615, 0.01f);
-  _633 = ((_608 + _605) + _611) + (sqrt((((_611 - _608) * _611) + ((_608 - _605) * _608)) + ((_605 - _611) * _605)) * 1.75f);
-  _634 = _633 * 0.33333334f;
-  _635 = _620 + -0.4f;
-  _636 = _635 * 5.0f;
-  _640 = max((1.0f - abs(_635 * 2.5f)), 0.0f);
-  _651 = ((((float)((int)((int)((int)(uint)((int)(_636 > 0.0f))) - (int)((int)(uint)((int)(_636 < 0.0f)))))) * (1.0f - (_640 * _640))) + 1.0f) * 0.025f;
-  if (!(_634 <= 0.053333335f)) {
-    if (!(_634 >= 0.16f)) {
-      _660 = (((0.24f / _633) + -0.5f) * _651);
-    } else {
-      _660 = 0.0f;
-    }
-  } else {
-    _660 = _651;
-  }
-  _661 = _660 + 1.0f;
-  _662 = _661 * _605;
-  _663 = _661 * _608;
-  _664 = _661 * _611;
-  if (!((_662 == _663) && (_663 == _664))) {
-    _671 = ((_662 * 2.0f) - _663) - _664;
-    _674 = ((_608 - _611) * 1.7320508f) * _661;
-    _676 = atan(_674 / _671);
-    _679 = (_671 < 0.0f);
-    _680 = (_671 == 0.0f);
-    _681 = (_674 >= 0.0f);
-    _682 = (_674 < 0.0f);
-    _691 = select((_681 && _680), 90.0f, select((_682 && _680), -90.0f, (select((_682 && _679), (_676 + -3.1415927f), select((_681 && _679), (_676 + 3.1415927f), _676)) * 57.295776f)));
-    if (_691 < 0.0f) {
-      _696 = (_691 + 360.0f);
-    } else {
-      _696 = _691;
-    }
-  } else {
-    _696 = 0.0f;
-  }
-  _698 = min(max(_696, 0.0f), 360.0f);
-  if (_698 < -180.0f) {
-    _707 = (_698 + 360.0f);
-  } else {
-    if (_698 > 180.0f) {
-      _707 = (_698 + -360.0f);
-    } else {
-      _707 = _698;
-    }
-  }
-  _711 = saturate(1.0f - abs(_707 * 0.014814815f));  // [sem: expr_sat]
-  _715 = (_711 * _711) * (3.0f - (_711 * 2.0f));
-  _721 = ((_715 * _715) * ((_620 * 0.18f) * (0.03f - _662))) + _662;
-  _734 = log2(max(0.0f, mad(-0.21492857f, _664, mad(-0.23651075f, _663, (_721 * 1.4514393f)))));
-  _735 = log2(max(0.0f, mad(-0.09967592f, _664, mad(1.1762297f, _663, (_721 * -0.07655378f)))));
-  _736 = log2(max(0.0f, mad(0.9977163f, _664, mad(-0.0060324497f, _663, (_721 * 0.008316148f)))));
-  _737 = _734 * 0.30103f;
-  _738 = _735 * 0.30103f;
-  _739 = _736 * 0.30103f;
-  _741 = (_734 * 0.2739373f) + 0.7790625f;
-  _743 = (_735 * 0.2739373f) + 0.7790625f;
-  _745 = (_736 * 0.2739373f) + 0.7790625f;
-  _782 = select((_737 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_734 * 1.43712f)) + 1.0f)), _741);
-  _783 = select((_738 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_735 * 1.43712f)) + 1.0f)), _743);
-  _784 = select((_739 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_736 * 1.43712f)) + 1.0f)), _745);
-  _800 = 1.0f - saturate(-0.78987026f - (_734 * 0.9446112f));
-  _801 = 1.0f - saturate(-0.78987026f - (_735 * 0.9446112f));
-  _802 = 1.0f - saturate(-0.78987026f - (_736 * 0.9446112f));
-  _824 = max(0.0f, ((((_800 * _800) * (select((_737 > -0.57039833f), (1.04f - (1.56f / (exp2((_734 * 1.013354f) + 1.9201254f) + 1.0f))), _741) - _782)) * (3.0f - (_800 * 2.0f))) + _782));
-  _825 = max(0.0f, ((((_801 * _801) * (select((_738 > -0.57039833f), (1.04f - (1.56f / (exp2((_735 * 1.013354f) + 1.9201254f) + 1.0f))), _743) - _783)) * (3.0f - (_801 * 2.0f))) + _783));
-  _826 = max(0.0f, ((((_802 * _802) * (select((_739 > -0.57039833f), (1.04f - (1.56f / (exp2((_736 * 1.013354f) + 1.9201254f) + 1.0f))), _745) - _784)) * (3.0f - (_802 * 2.0f))) + _784));
-  _842 = ((mad(-0.06537104f, _826, mad(1.4518155e-06f, _825, (_824 * 1.0653747f))) - _824) * 0.6f) + _824;
-  _843 = ((mad(-0.2036677f, _826, mad(1.2036635f, _825, (_824 * -2.5716145e-07f))) - _825) * 0.6f) + _825;
-  _844 = ((mad(0.99999964f, _826, mad(2.0954758e-08f, _825, (_824 * 1.8626451e-08f))) - _826) * 0.6f) + _826;
-  _863 = dot(float3(saturate(saturate(max(0.0f, mad(-0.08325848f, _844, mad(-0.6217906f, _843, (_842 * 1.7050515f)))))), saturate(saturate(max(0.0f, mad(-0.010548528f, _844, mad(1.1408027f, _843, (_842 * -0.13025719f)))))), saturate(saturate(max(0.0f, mad(1.1529719f, _844, mad(-0.12896876f, _843, (_842 * -0.024003278f))))))), float3(0.1f, 0.7f, 0.2f));
-  _867 = dot(float3(saturate(_479), saturate(_480), saturate(_481)), float3(0.1f, 0.7f, 0.2f));
-  _869 = _localToneMappingParams.y * _85;
-  _870 = _localToneMappingParams.y * _86;
-  _871 = _localToneMappingParams.y * _87;
-  _905 = exp2(log2(max(0.0f, ((_123 * max(0.0f, (((_869 * 1.70505f) - (_870 * 0.62179f)) - (_871 * 0.08326f)))) + _offsetParams.x))) * _powerParams.x);
-  _906 = exp2(log2(max(0.0f, ((_125 * max(0.0f, (((_870 * 1.1408f) - (_869 * 0.13026f)) - (_871 * 0.01055f)))) + _offsetParams.y))) * _powerParams.y);
-  _907 = exp2(log2(max(0.0f, ((_127 * max(0.0f, (((_869 * -0.024f) - (_870 * 0.12897f)) + (_871 * 1.15297f)))) + _offsetParams.z))) * _powerParams.z);
-  _908 = dot(float3(_905, _906, _907), float3(0.212671f, 0.71516f, 0.072169f));
-  _915 = ((_905 - _908) * _powerParams.w) + _908;
-  _918 = (lerp(_908, _906, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _919 = (lerp(_908, _907, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _922 = mad(-1.7106533e-05f, _919, mad(0.00040110573f, _918, (_915 * 3.0009599f)));
-  _925 = mad(-2.34209e-05f, _919, mad(0.9997657f, _918, (_915 * -6.0908147e-05f)));
-  _928 = mad(1.0005832f, _919, mad(8.34018e-05f, _918, (_915 * 4.855916e-05f)));
-  _931 = mad(0.04736635f, _928, mad(0.33951214f, _925, (_922 * 0.61319155f)));
-  _934 = mad(0.013450007f, _928, mad(0.91633576f, _925, (_922 * 0.07020692f)));
-  _937 = mad(0.8696068f, _928, mad(0.1095673f, _925, (_922 * 0.020618873f)));
-  _938 = dot(float3(_931, _934, _937), float3(0.27222872f, 0.67408174f, 0.053689517f));
-  _942 = (_931 / _938) + -1.0f;
-  _943 = (_934 / _938) + -1.0f;
-  _944 = (_937 / _938) + -1.0f;
-  _953 = (1.0f - exp2((_938 * _938) * -4.0f)) * (1.0f - exp2(dot(float3(_942, _943, _944), float3(_942, _943, _944)) * -4.0f));
-  _969 = ((mad(-0.06368284f, _937, mad(-0.3292913f, _934, (_931 * 1.3704128f))) - _931) * _953) + _931;
-  _970 = ((mad(-0.010861567f, _937, mad(1.0970908f, _934, (_931 * -0.08343426f))) - _934) * _953) + _934;
-  _971 = ((mad(1.2036945f, _937, mad(-0.098625645f, _934, (_931 * -0.02579326f))) - _937) * _953) + _937;
-  _985 = ((mad(0.061360642f, _971, mad(-4.5401976e-09f, _970, (_969 * 0.9386394f))) - _969) * 0.6f) + _969;
-  _986 = ((mad(0.1692059f, _971, mad(0.8307942f, _970, (_969 * 6.775372e-08f))) - _970) * 0.6f) + _970;
-  _987 = (mad(-2.3283064e-10f, _970, (_969 * -9.313226e-10f)) * 0.6f) + _971;
-  _990 = mad(0.16386905f, _987, mad(0.14067869f, _986, (_985 * 0.6954522f)));
-  _993 = mad(0.095534325f, _987, mad(0.8596711f, _986, (_985 * 0.04479458f)));
-  _996 = mad(1.0015007f, _987, mad(0.00402521f, _986, (_985 * -0.005525883f)));
-  _1000 = max(max(_990, _993), _996);
-  _1005 = (max(_1000, 1e-10f) - max(min(min(_990, _993), _996), 1e-10f)) / max(_1000, 0.01f);
-  _1018 = ((_993 + _990) + _996) + (sqrt((((_996 - _993) * _996) + ((_993 - _990) * _993)) + ((_990 - _996) * _990)) * 1.75f);
-  _1019 = _1018 * 0.33333334f;
-  _1020 = _1005 + -0.4f;
-  _1021 = _1020 * 5.0f;
-  _1025 = max((1.0f - abs(_1020 * 2.5f)), 0.0f);
-  _1036 = ((((float)((int)((int)((int)(uint)((int)(_1021 > 0.0f))) - (int)((int)(uint)((int)(_1021 < 0.0f)))))) * (1.0f - (_1025 * _1025))) + 1.0f) * 0.025f;
-  if (!(_1019 <= 0.053333335f)) {
-    if (!(_1019 >= 0.16f)) {
-      _1045 = (((0.24f / _1018) + -0.5f) * _1036);
-    } else {
-      _1045 = 0.0f;
-    }
-  } else {
-    _1045 = _1036;
-  }
-  _1046 = _1045 + 1.0f;
-  _1047 = _1046 * _990;
-  _1048 = _1046 * _993;
-  _1049 = _1046 * _996;
-  if (!((_1047 == _1048) && (_1048 == _1049))) {
-    _1056 = ((_1047 * 2.0f) - _1048) - _1049;
-    _1059 = ((_993 - _996) * 1.7320508f) * _1046;
-    _1061 = atan(_1059 / _1056);
-    _1064 = (_1056 < 0.0f);
-    _1065 = (_1056 == 0.0f);
-    _1066 = (_1059 >= 0.0f);
-    _1067 = (_1059 < 0.0f);
-    _1076 = select((_1066 && _1065), 90.0f, select((_1067 && _1065), -90.0f, (select((_1067 && _1064), (_1061 + -3.1415927f), select((_1066 && _1064), (_1061 + 3.1415927f), _1061)) * 57.295776f)));
-    if (_1076 < 0.0f) {
-      _1081 = (_1076 + 360.0f);
-    } else {
-      _1081 = _1076;
-    }
-  } else {
-    _1081 = 0.0f;
-  }
-  _1083 = min(max(_1081, 0.0f), 360.0f);
-  if (_1083 < -180.0f) {
-    _1092 = (_1083 + 360.0f);
-  } else {
-    if (_1083 > 180.0f) {
-      _1092 = (_1083 + -360.0f);
-    } else {
-      _1092 = _1083;
-    }
-  }
-  _1096 = saturate(1.0f - abs(_1092 * 0.014814815f));  // [sem: expr_sat]
-  _1100 = (_1096 * _1096) * (3.0f - (_1096 * 2.0f));
-  _1106 = ((_1100 * _1100) * ((_1005 * 0.18f) * (0.03f - _1047))) + _1047;
-  _1119 = log2(max(0.0f, mad(-0.21492857f, _1049, mad(-0.23651075f, _1048, (_1106 * 1.4514393f)))));
-  _1120 = log2(max(0.0f, mad(-0.09967592f, _1049, mad(1.1762297f, _1048, (_1106 * -0.07655378f)))));
-  _1121 = log2(max(0.0f, mad(0.9977163f, _1049, mad(-0.0060324497f, _1048, (_1106 * 0.008316148f)))));
-  _1122 = _1119 * 0.30103f;
-  _1123 = _1120 * 0.30103f;
-  _1124 = _1121 * 0.30103f;
-  _1126 = (_1119 * 0.2739373f) + 0.7790625f;
-  _1128 = (_1120 * 0.2739373f) + 0.7790625f;
-  _1130 = (_1121 * 0.2739373f) + 0.7790625f;
-  _1167 = select((_1122 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_1119 * 1.43712f)) + 1.0f)), _1126);
-  _1168 = select((_1123 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_1120 * 1.43712f)) + 1.0f)), _1128);
-  _1169 = select((_1124 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_1121 * 1.43712f)) + 1.0f)), _1130);
-  _1185 = 1.0f - saturate(-0.78987026f - (_1119 * 0.9446112f));
-  _1186 = 1.0f - saturate(-0.78987026f - (_1120 * 0.9446112f));
-  _1187 = 1.0f - saturate(-0.78987026f - (_1121 * 0.9446112f));
-  _1209 = max(0.0f, ((((_1185 * _1185) * (select((_1122 > -0.57039833f), (1.04f - (1.56f / (exp2((_1119 * 1.013354f) + 1.9201254f) + 1.0f))), _1126) - _1167)) * (3.0f - (_1185 * 2.0f))) + _1167));
-  _1210 = max(0.0f, ((((_1186 * _1186) * (select((_1123 > -0.57039833f), (1.04f - (1.56f / (exp2((_1120 * 1.013354f) + 1.9201254f) + 1.0f))), _1128) - _1168)) * (3.0f - (_1186 * 2.0f))) + _1168));
-  _1211 = max(0.0f, ((((_1187 * _1187) * (select((_1124 > -0.57039833f), (1.04f - (1.56f / (exp2((_1121 * 1.013354f) + 1.9201254f) + 1.0f))), _1130) - _1169)) * (3.0f - (_1187 * 2.0f))) + _1169));
-  _1227 = ((mad(-0.06537104f, _1211, mad(1.4518155e-06f, _1210, (_1209 * 1.0653747f))) - _1209) * 0.6f) + _1209;
-  _1228 = ((mad(-0.2036677f, _1211, mad(1.2036635f, _1210, (_1209 * -2.5716145e-07f))) - _1210) * 0.6f) + _1210;
-  _1229 = ((mad(0.99999964f, _1211, mad(2.0954758e-08f, _1210, (_1209 * 1.8626451e-08f))) - _1211) * 0.6f) + _1211;
-  _1248 = dot(float3(saturate(saturate(max(0.0f, mad(-0.08325848f, _1229, mad(-0.6217906f, _1228, (_1227 * 1.7050515f)))))), saturate(saturate(max(0.0f, mad(-0.010548528f, _1229, mad(1.1408027f, _1228, (_1227 * -0.13025719f)))))), saturate(saturate(max(0.0f, mad(1.1529719f, _1229, mad(-0.12896876f, _1228, (_1227 * -0.024003278f))))))), float3(0.1f, 0.7f, 0.2f));
-  _1249 = _863 + -0.5f;
-  _1250 = _867 + -0.5f;
-  _1251 = _1248 + -0.5f;
-  _1253 = _localToneMappingParams.z * -0.7213475f;
-  _1260 = exp2((_1249 * _1249) * _1253);
-  _1261 = exp2((_1250 * _1250) * _1253);
-  _1262 = exp2((_1251 * _1251) * _1253);
-  _1264 = dot(float3(_1260, _1261, _1262), float3(1.0f, 1.0f, 1.0f)) + 1e-05f;
-  _1276 = dot(float3(max(_479, 0.0f), max(_480, 0.0f), max(_481, 0.0f)), float3(0.1f, 0.7f, 0.2f)) + 1e-05f;
-  _1278 = max(dot(float3(((_1260 / _1264) * _863), ((_1261 / _1264) * _867), ((_1262 / _1264) * _1248)), float3(1.0f, 1.0f, 1.0f)), 0.0f) / _1276;
-  if (!(_1276 > 0.007f)) {
-    _1287 = ((((_1276 * _1276) * 20408.16f) * (_1278 + -1.0f)) + 1.0f);
-  } else {
-    _1287 = _1278;
-  }
-  _1288 = _1287 * _85;
-  _1289 = _1287 * _86;
-  _1290 = _1287 * _87;
-  _1324 = exp2(log2(max(0.0f, ((_123 * max(0.0f, (((_1288 * 1.70505f) - (_1289 * 0.62179f)) - (_1290 * 0.08326f)))) + _offsetParams.x))) * _powerParams.x);
-  _1325 = exp2(log2(max(0.0f, ((_125 * max(0.0f, (((_1289 * 1.1408f) - (_1288 * 0.13026f)) - (_1290 * 0.01055f)))) + _offsetParams.y))) * _powerParams.y);
-  _1326 = exp2(log2(max(0.0f, ((_127 * max(0.0f, (((_1288 * -0.024f) - (_1289 * 0.12897f)) + (_1290 * 1.15297f)))) + _offsetParams.z))) * _powerParams.z);
-  _1327 = dot(float3(_1324, _1325, _1326), float3(0.212671f, 0.71516f, 0.072169f));
-  _1334 = ((_1324 - _1327) * _powerParams.w) + _1327;
-  _1337 = (lerp(_1327, _1325, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _1338 = (lerp(_1327, _1326, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _1341 = mad(-1.7106533e-05f, _1338, mad(0.00040110573f, _1337, (_1334 * 3.0009599f)));
-  _1344 = mad(-2.34209e-05f, _1338, mad(0.9997657f, _1337, (_1334 * -6.0908147e-05f)));
-  _1347 = mad(1.0005832f, _1338, mad(8.34018e-05f, _1337, (_1334 * 4.855916e-05f)));
-  _1350 = mad(0.04736635f, _1347, mad(0.33951214f, _1344, (_1341 * 0.61319155f)));
-  _1353 = mad(0.013450007f, _1347, mad(0.91633576f, _1344, (_1341 * 0.07020692f)));
-  _1356 = mad(0.8696068f, _1347, mad(0.1095673f, _1344, (_1341 * 0.020618873f)));
-  _1357 = dot(float3(_1350, _1353, _1356), float3(0.27222872f, 0.67408174f, 0.053689517f));
-  _1361 = (_1350 / _1357) + -1.0f;
-  _1362 = (_1353 / _1357) + -1.0f;
-  _1363 = (_1356 / _1357) + -1.0f;
-  _1372 = (1.0f - exp2((_1357 * _1357) * -4.0f)) * (1.0f - exp2(dot(float3(_1361, _1362, _1363), float3(_1361, _1362, _1363)) * -4.0f));
-  _1388 = ((mad(-0.06368284f, _1356, mad(-0.3292913f, _1353, (_1350 * 1.3704128f))) - _1350) * _1372) + _1350;
-  _1389 = ((mad(-0.010861567f, _1356, mad(1.0970908f, _1353, (_1350 * -0.08343426f))) - _1353) * _1372) + _1353;
-  _1390 = ((mad(1.2036945f, _1356, mad(-0.098625645f, _1353, (_1350 * -0.02579326f))) - _1356) * _1372) + _1356;
-  _1404 = ((mad(0.061360642f, _1390, mad(-4.5401976e-09f, _1389, (_1388 * 0.9386394f))) - _1388) * 0.6f) + _1388;
-  _1405 = ((mad(0.1692059f, _1390, mad(0.8307942f, _1389, (_1388 * 6.775372e-08f))) - _1389) * 0.6f) + _1389;
-  _1406 = (mad(-2.3283064e-10f, _1389, (_1388 * -9.313226e-10f)) * 0.6f) + _1390;
-  _1409 = mad(0.16386905f, _1406, mad(0.14067869f, _1405, (_1404 * 0.6954522f)));
-  _1412 = mad(0.095534325f, _1406, mad(0.8596711f, _1405, (_1404 * 0.04479458f)));
-  _1415 = mad(1.0015007f, _1406, mad(0.00402521f, _1405, (_1404 * -0.005525883f)));
-  _1419 = max(max(_1409, _1412), _1415);
-  _1424 = (max(_1419, 1e-10f) - max(min(min(_1409, _1412), _1415), 1e-10f)) / max(_1419, 0.01f);
-  _1437 = ((_1412 + _1409) + _1415) + (sqrt((((_1415 - _1412) * _1415) + ((_1412 - _1409) * _1412)) + ((_1409 - _1415) * _1409)) * 1.75f);
-  _1438 = _1437 * 0.33333334f;
-  _1439 = _1424 + -0.4f;
-  _1440 = _1439 * 5.0f;
-  _1444 = max((1.0f - abs(_1439 * 2.5f)), 0.0f);
-  _1455 = ((((float)((int)((int)((int)(uint)((int)(_1440 > 0.0f))) - (int)((int)(uint)((int)(_1440 < 0.0f)))))) * (1.0f - (_1444 * _1444))) + 1.0f) * 0.025f;
-  if (!(_1438 <= 0.053333335f)) {
-    if (!(_1438 >= 0.16f)) {
-      _1464 = (((0.24f / _1437) + -0.5f) * _1455);
-    } else {
-      _1464 = 0.0f;
-    }
-  } else {
-    _1464 = _1455;
-  }
-  _1465 = _1464 + 1.0f;
-  _1466 = _1465 * _1409;
-  _1467 = _1465 * _1412;
-  _1468 = _1465 * _1415;
-  if (!((_1466 == _1467) && (_1467 == _1468))) {
-    _1475 = ((_1466 * 2.0f) - _1467) - _1468;
-    _1478 = ((_1412 - _1415) * 1.7320508f) * _1465;
-    _1480 = atan(_1478 / _1475);
-    _1483 = (_1475 < 0.0f);
-    _1484 = (_1475 == 0.0f);
-    _1485 = (_1478 >= 0.0f);
-    _1486 = (_1478 < 0.0f);
-    _1495 = select((_1485 && _1484), 90.0f, select((_1486 && _1484), -90.0f, (select((_1486 && _1483), (_1480 + -3.1415927f), select((_1485 && _1483), (_1480 + 3.1415927f), _1480)) * 57.295776f)));
-    if (_1495 < 0.0f) {
-      _1500 = (_1495 + 360.0f);
-    } else {
-      _1500 = _1495;
-    }
-  } else {
-    _1500 = 0.0f;
-  }
-  _1502 = min(max(_1500, 0.0f), 360.0f);
-  if (_1502 < -180.0f) {
-    _1511 = (_1502 + 360.0f);
-  } else {
-    if (_1502 > 180.0f) {
-      _1511 = (_1502 + -360.0f);
-    } else {
-      _1511 = _1502;
-    }
-  }
-  _1515 = saturate(1.0f - abs(_1511 * 0.014814815f));  // [sem: expr_sat]
-  _1519 = (_1515 * _1515) * (3.0f - (_1515 * 2.0f));
-  _1525 = ((_1519 * _1519) * ((_1424 * 0.18f) * (0.03f - _1466))) + _1466;
-  _1538 = log2(max(0.0f, mad(-0.21492857f, _1468, mad(-0.23651075f, _1467, (_1525 * 1.4514393f)))));
-  _1539 = log2(max(0.0f, mad(-0.09967592f, _1468, mad(1.1762297f, _1467, (_1525 * -0.07655378f)))));
-  _1540 = log2(max(0.0f, mad(0.9977163f, _1468, mad(-0.0060324497f, _1467, (_1525 * 0.008316148f)))));
-  _1541 = _1538 * 0.30103f;
-  _1542 = _1539 * 0.30103f;
-  _1543 = _1540 * 0.30103f;
-  _1545 = (_1538 * 0.2739373f) + 0.7790625f;
-  _1547 = (_1539 * 0.2739373f) + 0.7790625f;
-  _1549 = (_1540 * 0.2739373f) + 0.7790625f;
-  _1586 = select((_1541 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_1538 * 1.43712f)) + 1.0f)), _1545);
-  _1587 = select((_1542 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_1539 * 1.43712f)) + 1.0f)), _1547);
-  _1588 = select((_1543 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_1540 * 1.43712f)) + 1.0f)), _1549);
-  _1604 = 1.0f - saturate(-0.78987026f - (_1538 * 0.9446112f));
-  _1605 = 1.0f - saturate(-0.78987026f - (_1539 * 0.9446112f));
-  _1606 = 1.0f - saturate(-0.78987026f - (_1540 * 0.9446112f));
-  _1628 = max(0.0f, ((((_1604 * _1604) * (select((_1541 > -0.57039833f), (1.04f - (1.56f / (exp2((_1538 * 1.013354f) + 1.9201254f) + 1.0f))), _1545) - _1586)) * (3.0f - (_1604 * 2.0f))) + _1586));
-  _1629 = max(0.0f, ((((_1605 * _1605) * (select((_1542 > -0.57039833f), (1.04f - (1.56f / (exp2((_1539 * 1.013354f) + 1.9201254f) + 1.0f))), _1547) - _1587)) * (3.0f - (_1605 * 2.0f))) + _1587));
-  _1630 = max(0.0f, ((((_1606 * _1606) * (select((_1543 > -0.57039833f), (1.04f - (1.56f / (exp2((_1540 * 1.013354f) + 1.9201254f) + 1.0f))), _1549) - _1588)) * (3.0f - (_1606 * 2.0f))) + _1588));
-  _1646 = ((mad(-0.06537104f, _1630, mad(1.4518155e-06f, _1629, (_1628 * 1.0653747f))) - _1628) * 0.6f) + _1628;
-  _1647 = ((mad(-0.2036677f, _1630, mad(1.2036635f, _1629, (_1628 * -2.5716145e-07f))) - _1629) * 0.6f) + _1629;
-  _1648 = ((mad(0.99999964f, _1630, mad(2.0954758e-08f, _1629, (_1628 * 1.8626451e-08f))) - _1630) * 0.6f) + _1630;
+  // RenoDX: <<< [Patch: FusedFinalFilmGrain]
+  // RenoDX: >>> [Patch: FusedFinalFadeRestore] [Version: 1.13.00]
+  // Description: Re-emits the vanilla screen-fade lines that were fused with the replaced tone curve so the downstream final-output suite consumes the replaced color through the original variables.
   _1673 = 1.0f - abs(_etcParams.w);
-  _1677 = saturate(_etcParams.w);  // [sem: expr_sat]
-  _1678 = (_1673 * saturate(max(saturate(max(0.0f, mad(-0.08325848f, _1648, mad(-0.6217906f, _1647, (_1646 * 1.7050515f))))), 0.0f))) + _1677;
-  _1679 = (_1673 * saturate(max(saturate(max(0.0f, mad(-0.010548528f, _1648, mad(1.1408027f, _1647, (_1646 * -0.13025719f))))), 0.0f))) + _1677;
-  _1680 = (_1673 * saturate(max(saturate(max(0.0f, mad(1.1529719f, _1648, mad(-0.12896876f, _1647, (_1646 * -0.024003278f))))), 0.0f))) + _1677;
+  _1677 = saturate(_etcParams.w);
+  _1678 = (_1673 * saturate(_rndx_tonemapped_color.x)) + _1677;
+  _1679 = (_1673 * saturate(_rndx_tonemapped_color.y)) + _1677;
+  _1680 = (_1673 * saturate(_rndx_tonemapped_color.z)) + _1677;
+  // RenoDX: <<< [Patch: FusedFinalFadeRestore]
   if (_colorGradingParams.w > 0.0f) {
     _1685 = saturate(_colorGradingParams.w);  // [sem: expr_sat]
     _1702 = (((max(0.0f, (1.0f - _1678)) - _1678) * _1685) + _1678);
@@ -998,7 +636,10 @@ float4 main(
   }
   _1808 = abs(_1758);
   _1809 = abs(_1759 + -1.0f);
-  _1813 = saturate(1.0f - ((_1805 * _postProcessParams.x) * dot(float2(_1808, _1809), float2(_1808, _1809))));  // [sem: expr_sat]
+  // RenoDX: >>> [Patch: FinalVignetteStrength] [Version: 1.16.00]
+  // Description: The native final pass derives its vignette attenuation from _postProcessParams.x and the squared screen-space radius. This block multiplies only that native coefficient by CUSTOM_VIGNETTE so the control scales the existing vignette without changing its center, falloff equation, saturation, or output routing. CUSTOM_VIGNETTE resolves to 1 when RenoDX is Off, restoring the native expression.
+  _1813 = saturate(1.0f - ((_1805 * _postProcessParams.x * CUSTOM_VIGNETTE) * dot(float2(_1808, _1809), float2(_1808, _1809))));  // [sem: expr_sat]
+  // RenoDX: <<< [Patch: FinalVignetteStrength]
   if (!(SV_Position.y < _viewDir.w)) {
     if (!(SV_Position.y >= (_screenSizeAndInvSize.y - _viewDir.w))) {
       _1827 = (_1813 * exp2(log2(saturate(mad(_colorBlind0.z, _1717, mad(_colorBlind0.y, _1716, (_colorBlind0.x * _1715))))) * _1747));
@@ -1018,5 +659,10 @@ float4 main(
   SV_Target.y = _1828;
   SV_Target.z = _1829;
   SV_Target.w = _17.w;
+
+  // RenoDX: >>> [Patch: FinalizePostProcessSDR] [Version: 1.13.00]
+  // Description: Runs the shared SDR finalizer after the native output has been assembled so enabled RenoDX display adjustments are applied once. Its effective controls are neutral when RenoDX is Off.
+  SV_Target.xyz = FinalizeSDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);
+  // RenoDX: <<< [Patch: FinalizePostProcessSDR]
   return SV_Target;
 }

@@ -1,3 +1,9 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below; Imports "../local-direct-lighting/local_light_common.hlsl" for the local-light color and attenuation helpers used below; Imports "../lighting/diffuse_brdf.hlsli" for the shared diffuse-BRDF helpers used below.
+#include "../shared.h"
+#include "../local-direct-lighting/local_light_common.hlsl"
+#include "../lighting/diffuse_brdf.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct ManyLightsData {
   float4 _position;
   float4 _color;
@@ -653,6 +659,22 @@ void main(
         _442 = __3__37__0__0__g_manyLightsDataBuffer[_435]._color.x;
         _443 = __3__37__0__0__g_manyLightsDataBuffer[_435]._color.y;
         _444 = __3__37__0__0__g_manyLightsDataBuffer[_435]._color.z;
+        // RenoDX: >>> [Patch: LocalLightHueCorrection] [Version: 1.16.00]
+        // Description: Corrects the resolved local-light RGB toward the configured warm-fire hue and saturation before
+        //              the color reaches its alpha, geometry, or scene-composite consumers. Only the already-resolved
+        //              X/Y/Z color channels are rewritten; the W channel and resource index remain untouched.
+        //              The explicit neutral-settings gate performs no helper call or RGB write when hue is 0 and
+        //              saturation is 1, so the disabled path is the exact successor-A dataflow.
+        if (LOCAL_LIGHT_HUE_CORRECTION > 0.0f || abs(LOCAL_LIGHT_SATURATION - 1.0f) > 1e-6f) {
+          float3 _rndx_local_light_corrected = ApplyLocalLightHueCorrection(
+              float3(_442, _443, _444),
+              LOCAL_LIGHT_HUE_CORRECTION,
+              LOCAL_LIGHT_SATURATION);
+          _442 = _rndx_local_light_corrected.x;
+          _443 = _rndx_local_light_corrected.y;
+          _444 = _rndx_local_light_corrected.z;
+        }
+        // RenoDX: <<< [Patch: LocalLightHueCorrection]
         _445 = __3__37__0__0__g_manyLightsDataBuffer[_435]._color.w;
         _447 = __3__37__0__0__g_manyLightsDataBuffer[_435]._up.x;
         _448 = __3__37__0__0__g_manyLightsDataBuffer[_435]._up.y;
@@ -747,7 +769,24 @@ void main(
           _653 = (max((((_617 * _383) + _616) * _642), 0.0f) * _625);
           _654 = (max((((_617 * _384) + _616) * _642), 0.0f) * _625);
           _655 = (max((((_617 * _385) + _616) * _642), 0.0f) * _625);
-          _656 = (_600 * 0.31830987f);
+          // RenoDX: >>> [Patch: MaterialDiffuseBRDF] [Version: 1.16.00]
+          // Description: The native punctual-light diffuse term is a plain Lambert lobe (NdotL / pi), which loses the
+          //              retro-reflection and rough-surface energy that microfacet diffuse models reproduce, so rough
+          //              dielectrics lit by local lights look flat. This block optionally substitutes a physically based
+          //              diffuse scalar (EON at mode 2, Hammon at mode 1) evaluated from the same NdotL, NdotV, LdotV/
+          //              VdotH and roughness inputs the native lobe uses. Mode 0 is the default and keeps the exact
+          //              native Lambert expression.
+          if (DIFFUSE_BRDF_MODE >= 2.0f) {
+            float _rndx_sNdotL = saturate(_600);
+            float _rndx_LdotV = dot(float3(_589, _590, _591), float3(_555, _556, _557));
+            _656 = _rndx_sNdotL * EON_DiffuseScalar(_rndx_sNdotL, _603, _rndx_LdotV, _417);
+          } else if (DIFFUSE_BRDF_MODE >= 1.0f) {
+            float _rndx_sNdotL = saturate(_600);
+            _656 = _rndx_sNdotL * HammonDiffuseScalar(_rndx_sNdotL, _603, _605, _606, _417);
+          } else {
+            _656 = (_600 * 0.31830987f);
+          }
+          // RenoDX: <<< [Patch: MaterialDiffuseBRDF]
         } else {
           _653 = 0.0f;
           _654 = 0.0f;
@@ -772,6 +811,39 @@ void main(
           _711 = _654;
           _712 = _655;
         }
+        // RenoDX: >>> [Patch: MaterialDiffraction] [Version: 1.16.00]
+        // Description: Smooth conductive and coated surfaces show a wavelength-dependent colour shift and fine
+        //              speckle when lit by a small bright source; the native specular lobe is achromatic and cannot
+        //              produce it. This block multiplies the local-light specular RGB by a per-channel diffraction
+        //              tint derived from the half-vector geometry, roughness and screen position, weighted by the
+        //              material gate so only materials flagged for it are affected. The multiplier is
+        //              lerp(1, shift, DIFFRACTION * gate), so at strength 0 the specular is left exactly as native.
+        if (DIFFRACTION > 0.0f && float(_341) > 0.0f) {
+          float3 _rndx_dShift = DiffractionShiftAndSpeckleCS(
+              _605, _603, _417,
+              float2(_92, _93), (_nearFarProj.x / _83),
+              float3(_597, _598, _599),
+              float3(_414, _415, _416),
+              float3(_383, _384, _385));
+          float3 _rndx_dMod = lerp(1.0f, _rndx_dShift, DIFFRACTION * float(_341));
+          _710 *= _rndx_dMod.x;
+          _711 *= _rndx_dMod.y;
+          _712 *= _rndx_dMod.z;
+        }
+        // RenoDX: <<< [Patch: MaterialDiffraction]
+        // RenoDX: >>> [Patch: MaterialSmoothTerminator] [Version: 1.16.00]
+        // Description: Softens the geometric shadow terminator after this branch has resolved its diffuse
+        //              scalar and specular RGB. The factor is derived from the matched N.L, V.H, and N.H
+        //              roles and multiplies all four resolved outputs at their shared post-branch boundary.
+        //              The entire mutation is inside the SMOOTH_TERMINATOR gate; at 0 no output is written.
+        if (SMOOTH_TERMINATOR > 0.0f) {
+          float _rndx_st = CallistoSmoothTerminator(_600, _606, _605, SMOOTH_TERMINATOR, 0.5f);
+          _656 *= _rndx_st;
+          _710 *= _rndx_st;
+          _711 *= _rndx_st;
+          _712 *= _rndx_st;
+        }
+        // RenoDX: <<< [Patch: MaterialSmoothTerminator]
         // [sem: expr_sat]
         _714 = saturate(select((_540 > 99999.0f), 1.0f, (1.0f / max((_540 * _540), (_462 * _462))))) * (((float)((bool)((((float)((uint)((uint)(_425.x & 65535)))) * 0.01560998f) >= 1000.0f))) * asfloat(_425.y));
         _715 = _714 * _537;

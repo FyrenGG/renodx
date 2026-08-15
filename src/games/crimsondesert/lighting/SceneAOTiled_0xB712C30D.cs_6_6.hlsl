@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the shared options and helpers used by this shader's RenoDX patches. This dependency-only prefix adds no native executable statement; removing it restores the native shader body byte-for-byte.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<uint> __3__36__0__0__g_depthStencil : register(t52, space36);
 
 Texture2D<uint> __3__36__0__0__g_sceneNormal : register(t24, space36);
@@ -594,7 +598,14 @@ void main(
           }
           _752 = ((int)((int)(uint)((int)((uint)((int)(_663) + (int)(-52)) < (uint)16))) | (int)(_650));
           // [sem: expr_sat]
-          _753 = saturate((saturate(1.0f - exp2(log2(select((_terrainNormalParams.z > 0.0f), 0.2f, 0.6f)) * max(_731, (((_671 * 20.0f) * (1.0f - saturate(max((_670 + -100.0f), 0.0f) * 0.05f))) / ((_670 * 0.2f) + 1.0f))))) * (1.0f - _651)) + _651);
+          // RenoDX: >>> [Patch: FoliageAORange] [Version: 1.16.00]
+          // Description: Foliage stencil pixels can retain scene AO farther into the mid-distance. The feature-off and non-foliage paths route the exact native distance fade into the otherwise unchanged AO expression.
+          float _renodxAODistanceFade = 1.0f - saturate(max((_670 + -100.0f), 0.0f) * 0.05f);
+          if (FOLIAGE_AO_STRENGTH > 0.0f && ((uint)(_113 - 12) < 7u)) {
+            _renodxAODistanceFade = 1.0f - saturate(max((_670 + -200.0f), 0.0f) * 0.005f);
+          }
+          _753 = saturate((saturate(1.0f - exp2(log2(select((_terrainNormalParams.z > 0.0f), 0.2f, 0.6f)) * max(_731, (((_671 * 20.0f) * (_renodxAODistanceFade)) / ((_670 * 0.2f) + 1.0f))))) * (1.0f - _651)) + _651);
+          // RenoDX: <<< [Patch: FoliageAORange]
         } else {
           _752 = _650;
           _753 = _651;  // [sem: expr_sat]
@@ -836,6 +847,12 @@ void main(
           }
           __3__38__0__1__g_bentConeResultUAV[int2(_58, _59)] = float4(((_1016 * 0.5f) + 0.5f), ((_1017 * 0.5f) + 0.5f), ((_1018 * 0.5f) + 0.5f), saturate(1.0f - _1007));
           _1041 = ((_shadowAOParams.w + _1027) - (_shadowAOParams.w * _1027));
+          // RenoDX: >>> [Patch: FoliageAOBentConeVisibility] [Version: 1.16.00]
+          // Description: After the AO solve, the native code softens bent-cone visibility toward white by blending with the global AO strength parameter, which washes out the contact occlusion that foliage relies on. When the foliage AO feature is enabled, this block blends foliage stencil pixels (stencil ids 12-18) back toward the unsoftened bent-cone visibility so downstream diffuse lighting receives stronger leaf and grass occlusion. The blend weight is the feature strength, so at strength 0 the value is the native softened result and non-foliage stencil ids are never touched.
+          if (FOLIAGE_AO_STRENGTH > 0.0f && ((uint)(_113 - 12) < 7u)) {
+            _1041 = lerp(_1041, _1027, FOLIAGE_AO_STRENGTH);
+          }
+          // RenoDX: <<< [Patch: FoliageAOBentConeVisibility]
           _1042 = _997;
           break;
         }

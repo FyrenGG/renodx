@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture2D<float3> __3__36__0__0__g_glareSource : register(t21, space36);
 
 Texture2D<float3> __3__36__0__0__g_colorAdatationSource : register(t88, space36);
@@ -117,7 +122,23 @@ void main(
   _16 = (int)((int)(SV_DispatchThreadID.y)) | (int)((int)(SV_DispatchThreadID.x));
   _26 = ((((float)((uint)(SV_DispatchThreadID.x))) * 2.0f) + 1.0f) * _textureSizeAndInvSize.z;
   _27 = ((((float)((uint)(SV_DispatchThreadID.y))) * 2.0f) + 1.0f) * _textureSizeAndInvSize.w;
+  // RenoDX: >>> [Patch: GlareSourcePreFilter] [Version: 1.16.00]
+  // Description: Temporal jitter can make a single glare-source tap shimmer. Perceptual auto exposure uses a normalized
+  //              five-tap tent instead; the feature-off branch executes the exact native single tap.
+  [branch]
+  if (IMPROVED_AUTO_EXPOSURE >= 1) {
+    float3 _renodxGlareCenter = __3__36__0__0__g_glareSource.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_26, _27), 0.0f);
+    float _renodxGlareOffsetX = _textureSizeAndInvSize.z;
+    float _renodxGlareOffsetY = _textureSizeAndInvSize.w;
+    float3 _renodxGlareTopLeft = __3__36__0__0__g_glareSource.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_26 - _renodxGlareOffsetX, _27 - _renodxGlareOffsetY), 0.0f);
+    float3 _renodxGlareTopRight = __3__36__0__0__g_glareSource.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_26 + _renodxGlareOffsetX, _27 - _renodxGlareOffsetY), 0.0f);
+    float3 _renodxGlareBottomLeft = __3__36__0__0__g_glareSource.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_26 - _renodxGlareOffsetX, _27 + _renodxGlareOffsetY), 0.0f);
+    float3 _renodxGlareBottomRight = __3__36__0__0__g_glareSource.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_26 + _renodxGlareOffsetX, _27 + _renodxGlareOffsetY), 0.0f);
+    _30 = _renodxGlareCenter * 0.5f + (_renodxGlareTopLeft + _renodxGlareTopRight + _renodxGlareBottomLeft + _renodxGlareBottomRight) * 0.125f;
+  } else {
   _30 = __3__36__0__0__g_glareSource.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_26, _27), 0.0f);  // [sem: _3__36__0__0__g_glareSource_sampleLod]
+  }
+  // RenoDX: <<< [Patch: GlareSourcePreFilter]
   _35 = __3__36__0__0__g_colorAdatationSource.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(_26, _27), 0.0f);  // [sem: _3__36__0__0__g_colorAdatationSource_sampleLod]
   _global_0[min((uint)(((int)((uint)(0) + (uint)((uint)(SV_GroupIndex) * (uint)(3))))), 3071u)] = _30.x;
   _global_0[min((uint)(((int)((uint)(1) + (uint)((uint)(SV_GroupIndex) * (uint)(3))))), 3071u)] = _30.y;

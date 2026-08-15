@@ -95,6 +95,14 @@ cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
   float3 _sceneConstantDummy : packoffset(c172.y);
 };
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Reuses this shader's native SceneConstantBuffer time field, imports the shared tonemap declarations consumed by the fused final grading path, and begins suppressing the duplicate native exposure declaration.
+#define RENODX_TONEMAP_EXTERNAL_SCENE_CONSTANT_BUFFER 1
+#define RENODX_TONEMAP_SCENE_TIME_W _time.w
+#include "../tonemap.hlsli"
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure0 : packoffset(c000.x);
   float4 _exposure1 : packoffset(c001.x);
@@ -102,7 +110,15 @@ cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure3 : packoffset(c003.x);
   float4 _exposure4 : packoffset(c004.x);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of the native ExposureConstantBuffer so any intervening unrelated native declarations remain live.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Begins suppressing native GlobalPushConstants because tonemap.hlsli provides the ABI-compatible live declaration consumed by the fused final grading path.
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   float4 _postProcessParams : packoffset(c000.x);
   float4 _postProcessParams1 : packoffset(c001.x);
@@ -119,12 +135,24 @@ cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   int _nightToneParm : packoffset(c012.x);
   int3 _padding : packoffset(c012.y);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of native GlobalPushConstants so the following unrelated native declarations remain live.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Begins suppressing the native ColorBlindConstantBuffer because tonemap.hlsli provides the ABI-compatible live declaration used by the fused final grading path.
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
   float4 _colorBlind0 : packoffset(c000.x);
   float4 _colorBlind1 : packoffset(c001.x);
   float4 _colorBlind2 : packoffset(c002.x);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of the native ColorBlindConstantBuffer so all following native declarations compile normally.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
 SamplerState __0__4__0__0__g_staticBilinearClamp : register(s3, space4);
 
@@ -347,7 +375,17 @@ float4 main(
     _41 = _18.x;
     _42 = _18.z;
   }
-  if (_slopeParams.w > 0.0f) {
+  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: 1.16.00]
+  // Description: Scales only the native red/blue chromatic-aberration offsets between the unchanged center sample and native shifted samples. The effective scalar is 1 when RenoDX is Off, preserving the native offsets.
+  _41 = lerp(_18.x, _41, CUSTOM_CHROMATIC_ABERRATION);
+  _42 = lerp(_18.z, _42, CUSTOM_CHROMATIC_ABERRATION);
+  // RenoDX: <<< [Patch: FinalChromaticAberration]
+
+  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: 1.16.00]
+  // Description: Keeps the native film-grain branch enabled only when its native strength is positive and RenoDX custom film grain is not selected. RenoDX Off clears the custom type flag, restoring the native condition.
+  bool vanilla_film_grain = (_slopeParams.w > 0.0f) && CUSTOM_FILM_GRAIN_TYPE == 0;
+  if (vanilla_film_grain) {
+  // RenoDX: <<< [Patch: CustomFilmGrainGate]
     _52 = ((TEXCOORD.y + 4.0f) * (TEXCOORD.x + 4.0f)) * _time.x;
     _53 = _52 * 0.7692308f;
     _57 = frac(abs(_53));
@@ -369,180 +407,37 @@ float4 main(
   _124 = _94 * _slopeParams.x;
   _126 = _94 * _slopeParams.y;
   _128 = _94 * _slopeParams.z;
-  _142 = exp2(log2(max(0.0f, (_offsetParams.x + (_124 * max(0.0f, (((_86 * 1.70505f) - (_87 * 0.62179f)) - (_88 * 0.08326f))))))) * _powerParams.x);
-  _143 = exp2(log2(max(0.0f, (_offsetParams.y + (_126 * max(0.0f, (((_87 * 1.1408f) - (_86 * 0.13026f)) - (_88 * 0.01055f))))))) * _powerParams.y);
-  _144 = exp2(log2(max(0.0f, ((_128 * max(0.0f, (((_86 * -0.024f) - (_87 * 0.12897f)) + (_88 * 1.15297f)))) + _offsetParams.z))) * _powerParams.z);
-  _146 = dot(float3(_142, _143, _144), float3(0.212671f, 0.71516f, 0.072169f));
-  _153 = ((_142 - _146) * _powerParams.w) + _146;
-  _154 = ((_143 - _146) * _powerParams.w) + _146;
-  _155 = ((_144 - _146) * _powerParams.w) + _146;
-  _166 = ((_toneMapParams0.x - _toneMapParams0.z) * _toneMapParams0.w) / _toneMapParams0.y;
-  _170 = (_toneMapParams0.x - _toneMapParams0.z) - (_166 * _toneMapParams0.y);
-  _174 = _153 / _toneMapParams0.z;
-  _175 = _154 / _toneMapParams0.z;
-  _176 = _155 / _toneMapParams0.z;
-  _177 = saturate(_174);  // [sem: _174_sat]
-  _178 = saturate(_175);  // [sem: _175_sat]
-  _179 = saturate(_176);  // [sem: _176_sat]
-  _187 = (_177 * _177) * (3.0f - (_177 * 2.0f));
-  _189 = (_178 * _178) * (3.0f - (_178 * 2.0f));
-  _191 = (_179 * _179) * (3.0f - (_179 * 2.0f));
-  _195 = _166 + _toneMapParams0.z;
-  _199 = select((_153 < _195), 0.0f, 1.0f);
-  _200 = select((_154 < _195), 0.0f, 1.0f);
-  _201 = select((_155 < _195), 0.0f, 1.0f);
-  _220 = _153 - _toneMapParams0.z;
-  _222 = _154 - _toneMapParams0.z;
-  _224 = _155 - _toneMapParams0.z;
-  _226 = ((-0.0f - ((_toneMapParams0.x * _toneMapParams0.y) / _170)) / _toneMapParams0.x) * 1.442695f;
-  // [sem: expr_sat]
-  _260 = saturate((((((pow(_174, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _187)) + ((_187 - _199) * ((_220 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_220 - _166)) * _170)) * _199));
-  // [sem: expr_sat]
-  _261 = saturate((((((pow(_175, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _189)) + ((_189 - _200) * ((_222 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_222 - _166)) * _170)) * _200));
-  // [sem: expr_sat]
-  _262 = saturate((((((pow(_176, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _191)) + ((_191 - _201) * ((_224 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_224 - _166)) * _170)) * _201));
-  _265 = _localToneMappingParams.x * _86;
-  _266 = _localToneMappingParams.x * _87;
-  _267 = _localToneMappingParams.x * _88;
-  _301 = exp2(log2(max(0.0f, ((_124 * max(0.0f, (((_265 * 1.70505f) - (_266 * 0.62179f)) - (_267 * 0.08326f)))) + _offsetParams.x))) * _powerParams.x);
-  _302 = exp2(log2(max(0.0f, ((_126 * max(0.0f, (((_266 * 1.1408f) - (_265 * 0.13026f)) - (_267 * 0.01055f)))) + _offsetParams.y))) * _powerParams.y);
-  _303 = exp2(log2(max(0.0f, ((_128 * max(0.0f, (((_265 * -0.024f) - (_266 * 0.12897f)) + (_267 * 1.15297f)))) + _offsetParams.z))) * _powerParams.z);
-  _304 = dot(float3(_301, _302, _303), float3(0.212671f, 0.71516f, 0.072169f));
-  _311 = ((_301 - _304) * _powerParams.w) + _304;
-  _312 = ((_302 - _304) * _powerParams.w) + _304;
-  _313 = ((_303 - _304) * _powerParams.w) + _304;
-  _314 = _311 / _toneMapParams0.z;
-  _315 = _312 / _toneMapParams0.z;
-  _316 = _313 / _toneMapParams0.z;
-  _317 = saturate(_314);  // [sem: _314_sat]
-  _318 = saturate(_315);  // [sem: _315_sat]
-  _319 = saturate(_316);  // [sem: _316_sat]
-  _327 = (_317 * _317) * (3.0f - (_317 * 2.0f));
-  _329 = (_318 * _318) * (3.0f - (_318 * 2.0f));
-  _331 = (_319 * _319) * (3.0f - (_319 * 2.0f));
-  _338 = select((_311 < _195), 0.0f, 1.0f);
-  _339 = select((_312 < _195), 0.0f, 1.0f);
-  _340 = select((_313 < _195), 0.0f, 1.0f);
-  _359 = _311 - _toneMapParams0.z;
-  _361 = _312 - _toneMapParams0.z;
-  _363 = _313 - _toneMapParams0.z;
-  _404 = dot(float3(saturate(saturate((((((pow(_314, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _327)) + ((_327 - _338) * ((_359 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_359 - _166)) * _170)) * _338))), saturate(saturate((((((pow(_315, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _329)) + ((_329 - _339) * ((_361 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_361 - _166)) * _170)) * _339))), saturate(saturate((((((pow(_316, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _331)) + ((_331 - _340) * ((_363 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_363 - _166)) * _170)) * _340)))), float3(0.1f, 0.7f, 0.2f));
-  _408 = dot(float3(saturate(_260), saturate(_261), saturate(_262)), float3(0.1f, 0.7f, 0.2f));
-  _410 = _localToneMappingParams.y * _86;
-  _411 = _localToneMappingParams.y * _87;
-  _412 = _localToneMappingParams.y * _88;
-  _446 = exp2(log2(max(0.0f, ((_124 * max(0.0f, (((_410 * 1.70505f) - (_411 * 0.62179f)) - (_412 * 0.08326f)))) + _offsetParams.x))) * _powerParams.x);
-  _447 = exp2(log2(max(0.0f, ((_126 * max(0.0f, (((_411 * 1.1408f) - (_410 * 0.13026f)) - (_412 * 0.01055f)))) + _offsetParams.y))) * _powerParams.y);
-  _448 = exp2(log2(max(0.0f, ((_128 * max(0.0f, (((_410 * -0.024f) - (_411 * 0.12897f)) + (_412 * 1.15297f)))) + _offsetParams.z))) * _powerParams.z);
-  _449 = dot(float3(_446, _447, _448), float3(0.212671f, 0.71516f, 0.072169f));
-  _456 = ((_446 - _449) * _powerParams.w) + _449;
-  _457 = ((_447 - _449) * _powerParams.w) + _449;
-  _458 = ((_448 - _449) * _powerParams.w) + _449;
-  _459 = _456 / _toneMapParams0.z;
-  _460 = _457 / _toneMapParams0.z;
-  _461 = _458 / _toneMapParams0.z;
-  _462 = saturate(_459);  // [sem: _459_sat]
-  _463 = saturate(_460);  // [sem: _460_sat]
-  _464 = saturate(_461);  // [sem: _461_sat]
-  _472 = (_462 * _462) * (3.0f - (_462 * 2.0f));
-  _474 = (_463 * _463) * (3.0f - (_463 * 2.0f));
-  _476 = (_464 * _464) * (3.0f - (_464 * 2.0f));
-  _483 = select((_456 < _195), 0.0f, 1.0f);
-  _484 = select((_457 < _195), 0.0f, 1.0f);
-  _485 = select((_458 < _195), 0.0f, 1.0f);
-  _504 = _456 - _toneMapParams0.z;
-  _506 = _457 - _toneMapParams0.z;
-  _508 = _458 - _toneMapParams0.z;
-  _549 = dot(float3(saturate(saturate((((((pow(_459, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _472)) + ((_472 - _483) * ((_504 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_504 - _166)) * _170)) * _483))), saturate(saturate((((((pow(_460, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _474)) + ((_474 - _484) * ((_506 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_506 - _166)) * _170)) * _484))), saturate(saturate((((((pow(_461, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _476)) + ((_476 - _485) * ((_508 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_508 - _166)) * _170)) * _485)))), float3(0.1f, 0.7f, 0.2f));
-  _550 = _404 + -0.5f;
-  _551 = _408 + -0.5f;
-  _552 = _549 + -0.5f;
-  _554 = _localToneMappingParams.z * -0.7213475f;
-  _561 = exp2((_550 * _550) * _554);
-  _562 = exp2((_551 * _551) * _554);
-  _563 = exp2((_552 * _552) * _554);
-  _565 = dot(float3(_561, _562, _563), float3(1.0f, 1.0f, 1.0f)) + 1e-05f;
-  _577 = dot(float3(max(_260, 0.0f), max(_261, 0.0f), max(_262, 0.0f)), float3(0.1f, 0.7f, 0.2f)) + 1e-05f;
-  _579 = max(dot(float3(((_561 / _565) * _404), ((_562 / _565) * _408), ((_563 / _565) * _549)), float3(1.0f, 1.0f, 1.0f)), 0.0f) / _577;
-  if (!(_577 > 0.007f)) {
-    _588 = ((((_577 * _577) * 20408.16f) * (_579 + -1.0f)) + 1.0f);
-  } else {
-    _588 = _579;
+  // RenoDX: >>> [Patch: FusedFinalTonemapReplace] [Version: 1.13.00]
+  // Description: This standalone-final permutation inlines the vanilla tonemap pipeline directly in the final pass and runs it unconditionally on the raw scene color, so an unreplaced permutation renders the whole screen with the vanilla look whenever the game selects it. This block replaces everything from the color-matrix grade through the per-permutation tone curve and output transform with the shared TonemapReplacer. The vanilla screen fade that was fused with the curve output is re-emitted below so the untouched downstream suite - wash, user brightness and contrast, user gamma, color-blind matrix where present, vignette, letterbox, and the alpha passthrough - keeps running unchanged on the replaced color.
+  float3 _rndx_tonemapped_color = TonemapReplacer(float3(_86, _87, _88));
+  // RenoDX: <<< [Patch: FusedFinalTonemapReplace]
+  // RenoDX: >>> [Patch: FusedFinalSharpening] [Version: 1.13.00]
+  // Description: The standalone final pass is where RenoDX RCAS sharpening runs, but this fused permutation tonemaps inside the final pass itself, so no completed final-color texture exists to sample neighbor pixels from. Reconstruct the four RCAS neighbor taps by sampling the raw scene color one texel away in each direction and pass each tap through the same TonemapReplacer applied to the center pixel, then run the shared RCAS resolve. The fused vanilla sharpener, where this permutation carried one, was removed together with the replaced tonemap segment above.
+  if (CUSTOM_SHARPENING_TYPE == 1 && CUSTOM_SHARPENING > 0.f) {
+    uint _rndx_scene_w, _rndx_scene_h;
+    __3__36__0__0__g_sceneColor.GetDimensions(_rndx_scene_w, _rndx_scene_h);
+    float2 _rndx_texel = 1.0f / float2(_rndx_scene_w, _rndx_scene_h);
+    float3 _rndx_tap_b = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(0.0f, -_rndx_texel.y), 0).rgb);
+    float3 _rndx_tap_d = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(-_rndx_texel.x, 0.0f), 0).rgb);
+    float3 _rndx_tap_f = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(_rndx_texel.x, 0.0f), 0).rgb);
+    float3 _rndx_tap_h = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(0.0f, _rndx_texel.y), 0).rgb);
+    _rndx_tonemapped_color = ApplyRCASTaps(_rndx_tonemapped_color, _rndx_tap_b, _rndx_tap_d, _rndx_tap_f, _rndx_tap_h);
   }
-  _589 = _588 * _86;
-  _590 = _588 * _87;
-  _591 = _588 * _88;
-  _594 = _userImageAdjust.z * _91;
-  _635 = exp2(log2(max(0.0f, (((_594 * max(0.0f, (((_589 * 1.70505f) - (_590 * 0.62179f)) - (_591 * 0.08326f)))) * _slopeParams.x) + _offsetParams.x))) * _powerParams.x);
-  _636 = exp2(log2(max(0.0f, (((max(0.0f, (((_590 * 1.1408f) - (_589 * 0.13026f)) - (_591 * 0.01055f))) * _594) * _slopeParams.y) + _offsetParams.y))) * _powerParams.y);
-  _637 = exp2(log2(max(0.0f, (((max(0.0f, (((_589 * -0.024f) - (_590 * 0.12897f)) + (_591 * 1.15297f))) * _594) * _slopeParams.z) + _offsetParams.z))) * _powerParams.z);
-  _638 = dot(float3(_635, _636, _637), float3(0.212671f, 0.71516f, 0.072169f));
-  _645 = ((_635 - _638) * _powerParams.w) + _638;
-  _646 = ((_636 - _638) * _powerParams.w) + _638;
-  _647 = ((_637 - _638) * _powerParams.w) + _638;
-  _648 = _645 / _toneMapParams0.z;
-  _649 = _646 / _toneMapParams0.z;
-  _650 = _647 / _toneMapParams0.z;
-  _651 = saturate(_648);  // [sem: _648_sat]
-  _652 = saturate(_649);  // [sem: _649_sat]
-  _653 = saturate(_650);  // [sem: _650_sat]
-  _661 = (_651 * _651) * (3.0f - (_651 * 2.0f));
-  _663 = (_652 * _652) * (3.0f - (_652 * 2.0f));
-  _665 = (_653 * _653) * (3.0f - (_653 * 2.0f));
-  _672 = select((_645 < _195), 0.0f, 1.0f);
-  _673 = select((_646 < _195), 0.0f, 1.0f);
-  _674 = select((_647 < _195), 0.0f, 1.0f);
-  _693 = _645 - _toneMapParams0.z;
-  _695 = _646 - _toneMapParams0.z;
-  _697 = _647 - _toneMapParams0.z;
-  _735 = max(saturate((((((pow(_648, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _661)) + ((_661 - _672) * ((_693 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_693 - _166)) * _170)) * _672)), 0.0f);
-  _736 = max(saturate((((((pow(_649, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _663)) + ((_663 - _673) * ((_695 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_695 - _166)) * _170)) * _673)), 0.0f);
-  _737 = max(saturate((((((pow(_650, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _665)) + ((_665 - _674) * ((_697 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_697 - _166)) * _170)) * _674)), 0.0f);
-  _740 = __3__36__0__0__g_depth.Sample(__0__4__0__0__g_staticPointBlackBorder, float2(TEXCOORD.x, TEXCOORD.y));  // [sem: _3__36__0__0__g_depth_sample]
-  if (!((_740.x < 1e-07f) || (_740.x == 1.0f))) {
-    _749 = select((_postProcessParams.z >= 1.0f), 1.0f, 0.25f);
-    _764 = exp2(log2(max(0.0f, _offsetParams.x)) * _powerParams.x);
-    _765 = exp2(log2(max(0.0f, _offsetParams.y)) * _powerParams.y);
-    _766 = exp2(log2(max(0.0f, _offsetParams.z)) * _powerParams.z);
-    _767 = dot(float3(_764, _765, _766), float3(0.212671f, 0.71516f, 0.072169f));
-    _774 = ((_764 - _767) * _powerParams.w) + _767;
-    _775 = ((_765 - _767) * _powerParams.w) + _767;
-    _776 = ((_766 - _767) * _powerParams.w) + _767;
-    _777 = _774 / _toneMapParams0.z;
-    _778 = _775 / _toneMapParams0.z;
-    _779 = _776 / _toneMapParams0.z;
-    _780 = saturate(_777);  // [sem: _777_sat]
-    _781 = saturate(_778);  // [sem: _778_sat]
-    _782 = saturate(_779);  // [sem: _779_sat]
-    _790 = (_780 * _780) * (3.0f - (_780 * 2.0f));
-    _792 = (_781 * _781) * (3.0f - (_781 * 2.0f));
-    _794 = (_782 * _782) * (3.0f - (_782 * 2.0f));
-    _801 = select((_774 < _195), 0.0f, 1.0f);
-    _802 = select((_775 < _195), 0.0f, 1.0f);
-    _803 = select((_776 < _195), 0.0f, 1.0f);
-    _822 = _774 - _toneMapParams0.z;
-    _824 = _775 - _toneMapParams0.z;
-    _826 = _776 - _toneMapParams0.z;
-    // [sem: expr_sat]
-    _862 = saturate((((((pow(_778, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _792)) + ((_792 - _802) * ((_824 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_824 - _166)) * _170)) * _802));
-    _871 = max(max(_736, _862), max(max(_862, _862), _862));
-    _878 = sqrt(saturate(min(min(min(_736, _862), min(min(_862, _862), _862)), (1.0f - _871)) * (1.0f / _871))) * (-1.0f / (((1.0f - _749) * 8.0f) + (_749 * 5.0f)));
-    _881 = 1.0f / ((_878 * 4.0f) + 1.0f);
-    // [sem: expr_sat]
-    _898 = saturate((((saturate((((((pow(_777, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _790)) + ((_790 - _801) * ((_822 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_822 - _166)) * _170)) * _801)) * 4.0f) * _878) + _735) * _881);
-    _899 = saturate((((_862 * 4.0f) * _878) + _736) * _881);  // [sem: expr_sat]
-    // [sem: expr_sat]
-    _900 = saturate((((saturate((((((pow(_779, _toneMapParams1.x)) * _toneMapParams0.z) + _toneMapParams1.y) * (1.0f - _794)) + ((_794 - _803) * ((_826 * _toneMapParams0.y) + _toneMapParams0.z))) + ((_toneMapParams0.x - (exp2(_226 * (_826 - _166)) * _170)) * _803)) * 4.0f) * _878) + _737) * _881);
-  } else {
-    _898 = _735;  // [sem: expr_sat]
-    _899 = _736;  // [sem: expr_sat]
-    _900 = _737;  // [sem: expr_sat]
+  // RenoDX: <<< [Patch: FusedFinalSharpening]
+  // RenoDX: >>> [Patch: FusedFinalFilmGrain] [Version: 1.13.00]
+  // Description: The standalone final pass is where RenoDX custom film grain runs. This fused permutation is the visible final output whenever it draws, so apply the custom film grain to the tonemapped color here, in the same pipeline position the slim standalone finals apply it. The vanilla film grain earlier in this shader stays under the CustomFilmGrainGate patch and only runs when custom grain is off.
+  if (CUSTOM_FILM_GRAIN_TYPE != 0) {
+    _rndx_tonemapped_color = renodx::effects::ApplyFilmGrain(_rndx_tonemapped_color, TEXCOORD, CUSTOM_RANDOM, CUSTOM_FILM_GRAIN_STRENGTH * 0.03f);
   }
+  // RenoDX: <<< [Patch: FusedFinalFilmGrain]
+  // RenoDX: >>> [Patch: FusedFinalFadeRestore] [Version: 1.13.00]
+  // Description: Re-emits the vanilla screen-fade lines that were fused with the replaced tone curve so the downstream final-output suite consumes the replaced color through the original variables.
   _907 = 1.0f - abs(_etcParams.w);
-  _911 = saturate(_etcParams.w);  // [sem: expr_sat]
-  _912 = (_907 * saturate(_898)) + _911;
-  _913 = (_907 * saturate(_899)) + _911;
-  _914 = (_907 * saturate(_900)) + _911;
+  _911 = saturate(_etcParams.w);
+  _912 = (_907 * saturate(_rndx_tonemapped_color.x)) + _911;
+  _913 = (_907 * saturate(_rndx_tonemapped_color.y)) + _911;
+  _914 = (_907 * saturate(_rndx_tonemapped_color.z)) + _911;
+  // RenoDX: <<< [Patch: FusedFinalFadeRestore]
   if (_colorGradingParams.w > 0.0f) {
     _919 = saturate(_colorGradingParams.w);  // [sem: expr_sat]
     _936 = (((max(0.0f, (1.0f - _912)) - _912) * _919) + _912);
@@ -572,7 +467,10 @@ float4 main(
   }
   _1043 = abs(_992);
   _1044 = abs(_993 + -1.0f);
-  _1048 = saturate(1.0f - ((_1040 * _postProcessParams.x) * dot(float2(_1043, _1044), float2(_1043, _1044))));  // [sem: expr_sat]
+  // RenoDX: >>> [Patch: FinalVignetteStrength] [Version: 1.16.00]
+  // Description: The native final pass derives its vignette attenuation from _postProcessParams.x and the squared screen-space radius. This block multiplies only that native coefficient by CUSTOM_VIGNETTE so the control scales the existing vignette without changing its center, falloff equation, saturation, or output routing. CUSTOM_VIGNETTE resolves to 1 when RenoDX is Off, restoring the native expression.
+  _1048 = saturate(1.0f - ((_1040 * _postProcessParams.x * CUSTOM_VIGNETTE) * dot(float2(_1043, _1044), float2(_1043, _1044))));  // [sem: expr_sat]
+  // RenoDX: <<< [Patch: FinalVignetteStrength]
   if (!(SV_Position.y < _viewDir.w)) {
     if (!(SV_Position.y >= (_screenSizeAndInvSize.y - _viewDir.w))) {
       _1062 = (_1048 * exp2(log2(saturate(mad(_colorBlind0.z, _951, mad(_colorBlind0.y, _950, (_colorBlind0.x * _949))))) * _981));
@@ -592,5 +490,10 @@ float4 main(
   SV_Target.y = _1063;
   SV_Target.z = _1064;
   SV_Target.w = _18.w;
+
+  // RenoDX: >>> [Patch: FinalizePostProcessSDR] [Version: 1.13.00]
+  // Description: Runs the shared SDR finalizer after the native output has been assembled so enabled RenoDX display adjustments are applied once. Its effective controls are neutral when RenoDX is Off.
+  SV_Target.xyz = FinalizeSDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);
+  // RenoDX: <<< [Patch: FinalizePostProcessSDR]
   return SV_Target;
 }

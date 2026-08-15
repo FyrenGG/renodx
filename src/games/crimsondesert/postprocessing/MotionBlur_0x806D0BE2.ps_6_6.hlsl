@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture3D<float4> __3__36__0__0__g_texFroxel : register(t153, space36);
 
 Texture2D<float4> __3__36__0__0__g_sceneColor : register(t12, space36);
@@ -845,9 +850,35 @@ float4 main(
     _376 = __3__36__0__0__g_glareResult.SampleLevel(__0__4__0__0__g_staticBilinearBlackBorder, float2(TEXCOORD.x, TEXCOORD.y), 0.0f);
     // [sem: _3__36__0__0__g_glareResult_sampleLod]
     _381 = __3__36__0__0__g_glareResult.SampleLevel(__0__4__0__0__g_staticPointClamp, float2(TEXCOORD.x, TEXCOORD.y), 0.0f);
-    _386 = (_381.z + _376.z) / _exposure0.x;
-    _389 = (_381.y + _376.y) / _exposure0.x;
-    _392 = (_381.x + _376.x) / _exposure0.x;
+    // RenoDX: >>> [Patch: BloomExposureDecodeMatch] [Version: 1.16.00]
+    // Description: The glare/bloom buffer is written pre-multiplied by whatever exposure value the
+    //              histogram/auto-exposure pass used when it encoded it, and this pass divides that
+    //              factor back out. The native path always divides by the instantaneous exposure
+    //              (_exposure0.x). When the RenoDX improved auto-exposure path is active the encode
+    //              side uses the slow/filtered exposure instead, so dividing by the instantaneous
+    //              value here leaves a mismatched scale and bloom visibly pumps or flickers as the
+    //              exposure adapts. This block selects the matching slow-filtered exposure
+    //              (_exposure4.z, floored to avoid a divide by zero) whenever the improved
+    //              auto-exposure path is enabled, and falls back to the untouched native
+    //              _exposure0.x otherwise.
+    float _bloomDecodeExp = (IMPROVED_AUTO_EXPOSURE >= 1) ? max(_exposure4.z, 0.001f) : _exposure0.x;
+    _386 = (_381.z + _376.z) / _bloomDecodeExp;
+    _389 = (_381.y + _376.y) / _bloomDecodeExp;
+    _392 = (_381.x + _376.x) / _bloomDecodeExp;
+    // RenoDX: <<< [Patch: BloomExposureDecodeMatch]
+
+    // RenoDX: >>> [Patch: BloomStrength] [Version: 1.16.00]
+    // Description: Scales the decoded bloom/glare contribution before it is mixed into the scene
+    //              colour so the effect's overall intensity becomes user controllable. The scale is
+    //              1.0 at the default setting, which reproduces the native bloom amount exactly,
+    //              and 0.0 removes bloom entirely.
+    {
+      float _bloomScale = BLOOM_STRENGTH;
+      _386 *= _bloomScale;
+      _389 *= _bloomScale;
+      _392 *= _bloomScale;
+    }
+    // RenoDX: <<< [Patch: BloomStrength]
     _397 = ((((_389 * 0.33951f) + (_392 * 0.61312f)) + (_386 * 0.04737f)) * 0.5f) + _365;
     _404 = ((((_389 * 0.91636f) + (_392 * 0.0702f)) + (_386 * 0.01345f)) * 0.5f) + _366;
     _411 = ((((_389 * 0.10958f) + (_392 * 0.02062f)) + (_386 * 0.8698f)) * 0.5f) + _367;
@@ -916,9 +947,34 @@ float4 main(
     _699 = -0.0f - _697;
     // [sem: _3__36__0__0__g_glareResult_sampleLod]
     _701 = __3__36__0__0__g_glareResult.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(TEXCOORD.x, TEXCOORD.y), 0.0f);
-    _705 = _701.x / _exposure0.x;  // [sem: _3__36__0__0__g_glareResult_sampleLod_derived]
-    _706 = _701.y / _exposure0.x;  // [sem: _3__36__0__0__g_glareResult_sampleLod_derived]
-    _707 = _701.z / _exposure0.x;  // [sem: _3__36__0__0__g_glareResult_sampleLod_derived]
+    // RenoDX: >>> [Patch: BloomExposureDecodeMatch] [Version: 1.16.00]
+    // Description: High-motion branch counterpart of the bloom decode fix. The glare/bloom buffer is
+    //              stored pre-multiplied by the exposure value used when it was encoded, and this
+    //              pass divides that factor back out. The native path always divides by the instantaneous
+    //              exposure (_exposure0.x); when the RenoDX improved auto-exposure path is active the
+    //              encode side uses the slow/filtered exposure, so the native divisor leaves a
+    //              mismatched scale and bloom pumps as the exposure adapts. This block selects the
+    //              matching slow-filtered exposure (_exposure4.z, floored to avoid a divide by zero)
+    //              when the improved auto-exposure path is enabled and otherwise keeps the native
+    //              _exposure0.x divisor.
+    float _bloomDecodeExp2 = (IMPROVED_AUTO_EXPOSURE >= 1) ? max(_exposure4.z, 0.001f) : _exposure0.x;
+    _705 = _701.x / _bloomDecodeExp2;  // [sem: _3__36__0__0__g_glareResult_sampleLod_derived]
+    _706 = _701.y / _bloomDecodeExp2;  // [sem: _3__36__0__0__g_glareResult_sampleLod_derived]
+    _707 = _701.z / _bloomDecodeExp2;  // [sem: _3__36__0__0__g_glareResult_sampleLod_derived]
+    // RenoDX: <<< [Patch: BloomExposureDecodeMatch]
+
+    // RenoDX: >>> [Patch: BloomStrength] [Version: 1.16.00]
+    // Description: High-motion branch counterpart of the bloom intensity control. Scales the decoded
+    //              bloom/glare contribution before it is mixed into the scene colour. The scale is
+    //              1.0 at the default setting, reproducing the native bloom amount exactly, and 0.0
+    //              removes bloom entirely.
+    {
+      float _bloomScale2 = BLOOM_STRENGTH;
+      _705 *= _bloomScale2;
+      _706 *= _bloomScale2;
+      _707 *= _bloomScale2;
+    }
+    // RenoDX: <<< [Patch: BloomStrength]
     if ((_189 * _189) > (_369 * 0.4f)) {
       _722 = _35 * 0.25f;
       _723 = (1.0f - _35) * 0.25f;

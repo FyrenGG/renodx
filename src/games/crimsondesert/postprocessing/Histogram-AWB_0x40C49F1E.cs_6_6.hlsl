@@ -1,3 +1,7 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 struct GlareInstanceData {
   float4 _data0;
   float4 _data1;
@@ -371,8 +375,36 @@ void main(
   _96 = (mad((_invViewProjRelative[2].z), 1e-07f, mad((_invViewProjRelative[2].y), _40, ((_invViewProjRelative[2].x) * _38))) + (_invViewProjRelative[2].w)) / _93;
   _98 = rsqrt(dot(float3(_94, _95, _96), float3(_94, _95, _96)));  // [sem: invLength]
   _99 = (_57 == 0);
+  // RenoDX: >>> [Patch: SunBloomExclusion] [Version: 1.16.00]
+  // Description: Declares the wider sun-disk test used further down to keep the sun out of the
+  //              bloom/glare extraction input. The stock test only covers the sun disk itself
+  //              (angle < _sunSizeAngle); the visible corona and near-disk glow extend well beyond
+  //              it, so the bloom pyramid still picks the sun up and smears a large halo over the
+  //              sky. This flag marks any sky pixel whose angle to the sun direction is within 2.5x
+  //              the sun's angular radius, matching the radius the sky material uses for the sun's
+  //              own corona falloff. It is only computed here; it is consumed at the glare-source
+  //              store.
+  bool _sunBloomExclude = false;
+  // RenoDX: <<< [Patch: SunBloomExclusion]
   if (_99) {
     _119 = (dot(float3((_98 * _94), (_98 * _95), (_98 * _96)), float3(_sunDirection.x, _sunDirection.y, _sunDirection.z)) > _sunSizeAngleCosine);
+    // RenoDX: >>> [Patch: SunBloomExclusion] [Version: 1.16.00]
+    // Description: Evaluates the widened sun-disk test for sky pixels. _sunSizeAngle is the sun's
+    //              angular radius in degrees, so it is converted to radians and compared against the
+    //              angle between the view ray and the sun direction. The 2.5x multiplier widens the
+    //              disk to also cover the corona and near-disk glow, which the stock
+    //              _sunSizeAngleCosine test excludes.
+    {
+      float _sunAngleRadius = _sunSizeAngle * 0.01745329238474369f;
+      // The dot product is clamped to acos's valid domain: both operands are only approximately unit
+      // length, so rounding can push the product a few ULP past 1.0, and acos outside [-1, 1] returns
+      // NaN. Every comparison against NaN is false, so an overshoot would silently report "not the
+      // sun" for the pixel pointing most directly at it - exactly the pixel this test exists to
+      // exclude. Clamping costs nothing and changes no in-domain result.
+      float _sunCosAngle = clamp(dot(float3((_98 * _94), (_98 * _95), (_98 * _96)), float3(_sunDirection.x, _sunDirection.y, _sunDirection.z)), -1.0f, 1.0f);
+      _sunBloomExclude = (acos(_sunCosAngle) < (_sunAngleRadius * 2.5f));
+    }
+    // RenoDX: <<< [Patch: SunBloomExclusion]
     _120 = false;
     _123 = _120;
     _124 = false;
@@ -418,21 +450,42 @@ void main(
   _226 = -0.0f - min(0.0f, (-0.0f - (((((_188 * _167.x) + (_186 * _161.x)) + (_190 * _173.x)) + (_192 * _177.x)) / _195)));
   _227 = -0.0f - min(0.0f, (-0.0f - (((((_188 * _167.y) + (_186 * _161.y)) + (_190 * _173.y)) + (_192 * _177.y)) / _195)));
   _228 = -0.0f - min(0.0f, (-0.0f - (((((_188 * _167.z) + (_186 * _161.z)) + (_190 * _173.z)) + (_192 * _177.z)) / _195)));
+  // RenoDX: >>> [Patch: GlareSourceFilteredExposure] [Version: 1.16.00]
+  // Description: The glare/bloom source intensity is scaled by the auto-exposure value. Vanilla uses
+  //              the fast, per-frame exposure slots (_exposure0.y and _exposure2.x), which move
+  //              every frame with the metering jitter; because bloom is a highly non-linear function
+  //              of that scale, the jitter shows up as visible bloom shimmer and pumping. When the
+  //              improved auto-exposure path is enabled RenoDX maintains slow, temporally filtered
+  //              copies of both quantities, and these two locals route the glare scaling to the
+  //              filtered value with MATCHING UNITS (floored to avoid a divide by zero). With the
+  //              improved auto-exposure path disabled they resolve to the untouched vanilla slots.
+  //              UNIT CAUTION: the two vanilla slots carry different quantities. _exposure0.y is an
+  //              EXPOSURE SCALAR, and its filtered stand-in _exposure4.z (slot 18, low-passed
+  //              scalar) has matching units and stays in use below. _exposure2.x is the clamped
+  //              histogram ARITHMETIC mean luminance, and it has NO valid filtered stand-in: slot 19
+  //              carries the perceptual-mode TRIMMED GEOMETRIC mean, which sits several-fold below
+  //              the arithmetic mean in sun-in-frame scenes. Every _exposure2.x consumer in this
+  //              shader therefore keeps the untouched vanilla expression; see the glare-instance
+  //              threshold below for what substituting the wrong units costs. Do not substitute
+  //              here without a low-passed copy of _exposure2.x ITSELF.
+  float _glareExposure = (IMPROVED_AUTO_EXPOSURE >= 1) ? max(_exposure4.z, 0.001f) : _exposure0.y;
+  float _glareExposure2 = _exposure2.x;
   if (_125) {
-    _245 = (max(min(_exposure2.x, 2.0f), 0.5f) * _glareParam.w);
+    _245 = (max(min(_glareExposure2, 2.0f), 0.5f) * _glareParam.w);
   } else {
     if (_124) {
-      _245 = (120.0f / max(0.2f, min(_exposure0.y, 0.4f)));
+      _245 = (120.0f / max(0.2f, min(_glareExposure, 0.4f)));
     } else {
       _245 = 1.0f;
     }
   }
   _247 = (_140 > 0.0f);
   if (_247) {
-    _258 = ((_140 * 0.004f) * min(_exposure0.y, 20.0f));
+    _258 = ((_140 * 0.004f) * min(_glareExposure, 20.0f));
   } else {
-    _258 = (min(_exposure0.y, 25.0f) * 0.001f);
+    _258 = (min(_glareExposure, 25.0f) * 0.001f);
   }
+  // RenoDX: <<< [Patch: GlareSourceFilteredExposure]
   _259 = _258 * select(_123, 300.0f, _245);
   _260 = _259 * _226;
   _261 = _259 * _227;
@@ -446,7 +499,19 @@ void main(
   _284 = select(_247, (_270 * _270), _260);
   _285 = select(_247, (_271 * _271), _261);
   _286 = select(_247, (_272 * _272), _262);
-  __3__38__0__1__g_glareSourceUAV[int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y))] = float3((((_280 * (_260 - _284)) + _284) * _277), ((lerp(_285, _261, _280)) * _277), ((lerp(_286, _262, _280)) * _277));
+  // RenoDX: >>> [Patch: SunBloomExclusion] [Version: 1.16.00]
+  // Description: Zeroes the glare/bloom extraction source for sky pixels that fall inside the
+  //              widened sun disk. The sun is by far the brightest thing in the frame, so feeding it
+  //              into the bloom pyramid produces an oversized, low-frequency halo that washes out
+  //              the sky and hides cloud detail. Bloom for every other bright source (emissives,
+  //              particles, specular highlights, the moon) is untouched because only the sun-disk
+  //              mask is applied here. The sun's own appearance - disk, corona and Mie halo - is
+  //              produced by the sky material and composited into scene colour, so it is unaffected;
+  //              this only removes the sun from the bloom extraction input. The mask is 1.0
+  //              (no change) unless the sun improvements feature is enabled.
+  float _sunBloomMask = (_sunBloomExclude && SUN_IMPROVEMENTS == 1.f) ? 0.0f : 1.0f;
+  __3__38__0__1__g_glareSourceUAV[int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y))] = float3(((((_280 * (_260 - _284)) + _284) * _277) * _sunBloomMask), (((lerp(_285, _261, _280)) * _277) * _sunBloomMask), (((lerp(_286, _262, _280)) * _277) * _sunBloomMask));
+  // RenoDX: <<< [Patch: SunBloomExclusion]
   _302 = (_whiteBalance.w > 0.001f);
   _305 = ((uint)((int)(_57) + (int)(-105)) < (uint)2) || _126;
   _307 = (_43.x + _43.y) + _43.z;
@@ -456,7 +521,15 @@ void main(
   _320 = (_312 * (_43.y - _308)) + _308;
   _321 = (_312 * (_43.z - _308)) + _308;
   if (_305 || _138) {
-    _333 = ((_308 / max((((_319 + _320) + _321) * 0.33333334f), 0.0001f)) * 0.002f) * min(_exposure0.y, 20.0f);
+    // RenoDX: >>> [Patch: GlareSourceFilteredExposure] [Version: 1.16.00]
+    // Description: Same exposure-source substitution applied to the colour-adaptation source buffer.
+    //              Vanilla scales it by the fast per-frame exposure (_exposure0.y), which carries the
+    //              metering jitter into the adaptation input and makes the white-balance/adaptation
+    //              result wobble frame to frame. _glareExposure resolves to the slow filtered
+    //              exposure when the improved auto-exposure path is enabled and to the untouched
+    //              vanilla _exposure0.y otherwise.
+    _333 = ((_308 / max((((_319 + _320) + _321) * 0.33333334f), 0.0001f)) * 0.002f) * min(_glareExposure, 20.0f);
+    // RenoDX: <<< [Patch: GlareSourceFilteredExposure]
     _334 = _333 * _319;
     _335 = _333 * _320;
     _336 = _333 * _321;
@@ -501,14 +574,66 @@ void main(
   _418 = __3__36__0__0__g_depth.SampleLevel(__0__4__0__0__g_staticPointClamp, float2(_34, _35), 0.0f);  // [sem: _3__36__0__0__g_depth_sampleLod]
   _420 = (_418.x < 1e-07f);  // [sem: _3__36__0__0__g_depth_sampleLod_derived]
   _423 = select((_420 || (_418.x == 1.0f)), 1, 4);
+  // RenoDX: >>> [Patch: PerceptualAEHistogramMetering] [Version: 1.16.00]
+  // Description: Replaces the metering rule that feeds the luminance histogram when the perceptual
+  //              auto-exposure mode is selected. Vanilla meters only a horizontal centre strip of the
+  //              frame (_407 zeroes everything outside it) and bins Rec.709 luminance with a flat
+  //              per-pixel weight. That crop makes exposure lurch whenever bright or dark content
+  //              crosses the strip boundary, and Rec.709 luminance under-weights saturated colours
+  //              relative to how bright they actually look. This block instead meters the whole
+  //              frame, bins a perceptual luminance (Yf) and applies a gaussian centre weight
+  //              (sigma 0.25 in normalised screen space, up to 4x the base sample weight) so the
+  //              centre of the frame still dominates adaptation without a hard cutoff. The three
+  //              scene-colour locals are overwritten with the uncropped scene colour, which also
+  //              removes the crop from the glare-instance brightness threshold computed later from
+  //              the same values.
+  //              Only active when the perceptual auto-exposure mode is selected.
+  [branch]
+  if (IMPROVED_AUTO_EXPOSURE == 2) {
+    _408 = _43.x;
+    _409 = _43.y;
+    _410 = _43.z;
+    _411 = renodx::color::yf::from::BT709(float3(_408, _409, _410));
+    float _psychov17_du = _34 - 0.5f;
+    float _psychov17_dv = _35 - 0.5f;
+    float _psychov17_sigma = 0.25f;
+    float _psychov17_radius2 = (_psychov17_du * _psychov17_du) + (_psychov17_dv * _psychov17_dv);
+    float _psychov17_gaussian = exp((-0.5f * _psychov17_radius2) / (_psychov17_sigma * _psychov17_sigma));
+    _423 = max(_423, (int)(round((float)(_423) * _psychov17_gaussian * 4.0f)));
+  }
+  // RenoDX: <<< [Patch: PerceptualAEHistogramMetering]
   InterlockedAdd(_global_1[min((uint)(((int)((uint)(saturate((log2(dot(float3(_226, _227, _228), float3(0.212671f, 0.71516f, 0.072169f))) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _441);
   InterlockedAdd(_global_0[min((uint)(((int)((uint)(saturate((log2(_411) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _443);
   _446 = !(_418.x == 1.0f);  // [sem: _3__36__0__0__g_depth_sampleLod_derived]
   _448 = (int)(_57) + (int)(-52);
   if (((uint)_448 > (uint)15) && (_446 && (_302 && (!(_418.x < 1e-07f))))) {
-    InterlockedAdd(_global_2[min((uint)(((int)((uint)(saturate((log2(select(_416, _414.x, _411)) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _480);
-    InterlockedAdd(_global_3[min((uint)(((int)((uint)(saturate((log2(select(_416, _414.y, _411)) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _482);
-    InterlockedAdd(_global_4[min((uint)(((int)((uint)(saturate((log2(select(_416, _414.z, _411)) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _484);
+    // RenoDX: >>> [Patch: AWBNeutralHistogramFallback] [Version: 1.16.00]
+    // Description: Keeps the per-channel R/G/B histograms populated when automatic white balance is
+    //              switched off. A later pass packs the R/G/B histogram result into a colour
+    //              correction stored in _exposure1.z, and the many-lights bounds pass uses that
+    //              correction to decide which lights survive. Hero lights and character fill lights
+    //              are authored with negative raw channel values that only become positive once the
+    //              white-balance matrix is applied, so an all-zero correction silently drops them and
+    //              those lights go dark. Writing the neutral luminance bin into all three channels
+    //              gives the three histograms an identical distribution, which packs to a neutral
+    //              (1,1,1) correction and leaves those lights intact while still disabling any actual
+    //              white-balance shift. If hero/fill lights are deliberately disabled as well, the
+    //              write is skipped so the histograms stay zero and those lights are excluded as
+    //              intended. With automatic white balance enabled the original per-channel path runs
+    //              unchanged.
+    if (DISABLE_AWB > 0.0f) {
+      if (DISABLE_HERO_LIGHTS < 0.5f) {
+        InterlockedAdd(_global_2[min((uint)(((int)((uint)(saturate((log2(_411) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _480);
+        InterlockedAdd(_global_3[min((uint)(((int)((uint)(saturate((log2(_411) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _482);
+        InterlockedAdd(_global_4[min((uint)(((int)((uint)(saturate((log2(_411) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _484);
+      }
+    } else {
+      // Original per-channel white-balance histogram writes, unchanged.
+      InterlockedAdd(_global_2[min((uint)(((int)((uint)(saturate((log2(select(_416, _414.x, _411)) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _480);
+      InterlockedAdd(_global_3[min((uint)(((int)((uint)(saturate((log2(select(_416, _414.y, _411)) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _482);
+      InterlockedAdd(_global_4[min((uint)(((int)((uint)(saturate((log2(select(_416, _414.z, _411)) * _histogramParam.x) + _histogramParam.y) * 255.0f)))), 255u)], (uint)((uint)(_423)), _484);
+    }
+    // RenoDX: <<< [Patch: AWBNeutralHistogramFallback]
   }
   GroupMemoryBarrierWithGroupSync();
   InterlockedAdd(__3__39__0__1__g_histogram2UAV[(int)(SV_GroupIndex)], (_global_1[min((uint)((int)(SV_GroupIndex)), 255u)]), _488);
@@ -521,6 +646,16 @@ void main(
   _508 = max(1e-07f, _418.x);  // [sem: _3__36__0__0__g_depth_sampleLod_derived]
   _509 = _nearFarProj.x / _508;
   _511 = (_409 + _408) + _410;
+  // Vanilla, unmodified. _517 is the brightness a pixel must exceed to register as a glare
+  // (lens-flare) instance, derived from the fast per-frame clamped histogram ARITHMETIC MEAN
+  // luminance (_exposure2.x, slot 8 - large in bright scenes). No exposure slot carries a
+  // temporally filtered copy of that quantity: slot 18 is the exposure SCALAR (~1/luminance, small
+  // in bright scenes, inverts the daylight behaviour) and slot 19 is the perceptual-mode TRIMMED
+  // GEOMETRIC mean (several-fold below the arithmetic mean with the sun in frame). Either one
+  // collapses the threshold, and the 0.1x creature-stencil multiplier below then admits
+  // retro-reflective eye glints, which render as a magenta flare at the eye. Do not substitute
+  // without a low-passed copy of _exposure2.x itself, validated in a sun-in-frame scene against
+  // g_glareInstanceCounterUAV holding vanilla counts.
   _517 = ((saturate(_exposure2.x) * 900.0f) + 100.0f) * _exposure2.x;
   _531 = (_57 == 11) || (((_55.x & 126) == 12) || (((_55.x & 125) == 17) || (_57 == 18)));
   _534 = (((saturate(_509 * 0.005f) * 4.0f) * _517) + _517) * select(_531, 0.1f, 1.0f);

@@ -93,6 +93,14 @@ cbuffer __3__35__0__0__SceneConstantBuffer : register(b16, space35) {
   float3 _sceneConstantDummy : packoffset(c172.y);
 };
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Reuses this shader's native SceneConstantBuffer time field, imports the shared tonemap declarations consumed by the fused final grading path, and begins suppressing the duplicate native exposure declaration.
+#define RENODX_TONEMAP_EXTERNAL_SCENE_CONSTANT_BUFFER 1
+#define RENODX_TONEMAP_SCENE_TIME_W _time.w
+#include "../tonemap.hlsli"
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure0 : packoffset(c000.x);
   float4 _exposure1 : packoffset(c001.x);
@@ -100,7 +108,15 @@ cbuffer __3__35__0__0__ExposureConstantBuffer : register(b31, space35) {
   float4 _exposure3 : packoffset(c003.x);
   float4 _exposure4 : packoffset(c004.x);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of the native ExposureConstantBuffer so any intervening unrelated native declarations remain live.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Begins suppressing native GlobalPushConstants because tonemap.hlsli provides the ABI-compatible live declaration consumed by the fused final grading path.
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   float4 _postProcessParams : packoffset(c000.x);
   float4 _postProcessParams1 : packoffset(c001.x);
@@ -117,12 +133,24 @@ cbuffer __3__1__0__0__GlobalPushConstants : register(b0, space1) {
   int _nightToneParm : packoffset(c012.x);
   int3 _padding : packoffset(c012.y);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of native GlobalPushConstants so the following unrelated native declarations remain live.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Begins suppressing the native ColorBlindConstantBuffer because tonemap.hlsli provides the ABI-compatible live declaration used by the fused final grading path.
+#if 0 // Provided by tonemap.hlsli
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 cbuffer __3__35__0__0__ColorBlindConstantBuffer : register(b47, space35) {
   float4 _colorBlind0 : packoffset(c000.x);
   float4 _colorBlind1 : packoffset(c001.x);
   float4 _colorBlind2 : packoffset(c002.x);
 };
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Closes suppression of the native ColorBlindConstantBuffer so all following native declarations compile normally.
+#endif
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 
 SamplerState __0__4__0__0__g_staticBilinearClamp : register(s3, space4);
 
@@ -263,7 +291,17 @@ float4 main(
     _40 = _17.x;
     _41 = _17.z;
   }
-  if (_slopeParams.w > 0.0f) {
+  // RenoDX: >>> [Patch: FinalChromaticAberration] [Version: 1.16.00]
+  // Description: Scales only the native red/blue chromatic-aberration offsets between the unchanged center sample and native shifted samples. The effective scalar is 1 when RenoDX is Off, preserving the native offsets.
+  _40 = lerp(_17.x, _40, CUSTOM_CHROMATIC_ABERRATION);
+  _41 = lerp(_17.z, _41, CUSTOM_CHROMATIC_ABERRATION);
+  // RenoDX: <<< [Patch: FinalChromaticAberration]
+
+  // RenoDX: >>> [Patch: CustomFilmGrainGate] [Version: 1.16.00]
+  // Description: Keeps the native film-grain branch enabled only when its native strength is positive and RenoDX custom film grain is not selected. RenoDX Off clears the custom type flag, restoring the native condition.
+  bool vanilla_film_grain = (_slopeParams.w > 0.0f) && CUSTOM_FILM_GRAIN_TYPE == 0;
+  if (vanilla_film_grain) {
+  // RenoDX: <<< [Patch: CustomFilmGrainGate]
     _51 = ((TEXCOORD.y + 4.0f) * (TEXCOORD.x + 4.0f)) * _time.x;
     _52 = _51 * 0.7692308f;
     _56 = frac(abs(_52));
@@ -281,110 +319,37 @@ float4 main(
     _87 = _41;
   }
   _92 = _userImageAdjust.z * _exposure0.x;
-  _140 = exp2(log2(max(0.0f, (_offsetParams.x + ((max(0.0f, (((_85 * 1.70505f) - (_86 * 0.62179f)) - (_87 * 0.08326f))) * _slopeParams.x) * _92)))) * _powerParams.x);
-  _141 = exp2(log2(max(0.0f, (_offsetParams.y + ((_92 * _slopeParams.y) * max(0.0f, (((_86 * 1.1408f) - (_85 * 0.13026f)) - (_87 * 0.01055f))))))) * _powerParams.y);
-  _142 = exp2(log2(max(0.0f, (((_92 * _slopeParams.z) * max(0.0f, (((_85 * -0.024f) - (_86 * 0.12897f)) + (_87 * 1.15297f)))) + _offsetParams.z))) * _powerParams.z);
-  _144 = dot(float3(_140, _141, _142), float3(0.212671f, 0.71516f, 0.072169f));
-  _151 = ((_140 - _144) * _powerParams.w) + _144;
-  _154 = (lerp(_144, _141, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _155 = (lerp(_144, _142, _powerParams.w)) * 3.0f;  // [sem: blended]
-  _158 = mad(-1.7106533e-05f, _155, mad(0.00040110573f, _154, (_151 * 3.0009599f)));
-  _161 = mad(-2.34209e-05f, _155, mad(0.9997657f, _154, (_151 * -6.0908147e-05f)));
-  _164 = mad(1.0005832f, _155, mad(8.34018e-05f, _154, (_151 * 4.855916e-05f)));
-  _167 = mad(0.04736635f, _164, mad(0.33951214f, _161, (_158 * 0.61319155f)));
-  _170 = mad(0.013450007f, _164, mad(0.91633576f, _161, (_158 * 0.07020692f)));
-  _173 = mad(0.8696068f, _164, mad(0.1095673f, _161, (_158 * 0.020618873f)));
-  _174 = dot(float3(_167, _170, _173), float3(0.27222872f, 0.67408174f, 0.053689517f));
-  _178 = (_167 / _174) + -1.0f;
-  _179 = (_170 / _174) + -1.0f;
-  _180 = (_173 / _174) + -1.0f;
-  _189 = (1.0f - exp2((_174 * _174) * -4.0f)) * (1.0f - exp2(dot(float3(_178, _179, _180), float3(_178, _179, _180)) * -4.0f));
-  _205 = ((mad(-0.06368284f, _173, mad(-0.3292913f, _170, (_167 * 1.3704128f))) - _167) * _189) + _167;
-  _206 = ((mad(-0.010861567f, _173, mad(1.0970908f, _170, (_167 * -0.08343426f))) - _170) * _189) + _170;
-  _207 = ((mad(1.2036945f, _173, mad(-0.098625645f, _170, (_167 * -0.02579326f))) - _173) * _189) + _173;
-  _221 = ((mad(0.061360642f, _207, mad(-4.5401976e-09f, _206, (_205 * 0.9386394f))) - _205) * 0.6f) + _205;
-  _222 = ((mad(0.1692059f, _207, mad(0.8307942f, _206, (_205 * 6.775372e-08f))) - _206) * 0.6f) + _206;
-  _223 = (mad(-2.3283064e-10f, _206, (_205 * -9.313226e-10f)) * 0.6f) + _207;
-  _226 = mad(0.16386905f, _223, mad(0.14067869f, _222, (_221 * 0.6954522f)));
-  _229 = mad(0.095534325f, _223, mad(0.8596711f, _222, (_221 * 0.04479458f)));
-  _232 = mad(1.0015007f, _223, mad(0.00402521f, _222, (_221 * -0.005525883f)));
-  _236 = max(max(_226, _229), _232);
-  _241 = (max(_236, 1e-10f) - max(min(min(_226, _229), _232), 1e-10f)) / max(_236, 0.01f);
-  _254 = ((_229 + _226) + _232) + (sqrt((((_232 - _229) * _232) + ((_229 - _226) * _229)) + ((_226 - _232) * _226)) * 1.75f);
-  _255 = _254 * 0.33333334f;
-  _256 = _241 + -0.4f;
-  _257 = _256 * 5.0f;
-  _261 = max((1.0f - abs(_256 * 2.5f)), 0.0f);
-  _272 = ((((float)((int)((int)((int)(uint)((int)(_257 > 0.0f))) - (int)((int)(uint)((int)(_257 < 0.0f)))))) * (1.0f - (_261 * _261))) + 1.0f) * 0.025f;
-  if (!(_255 <= 0.053333335f)) {
-    if (!(_255 >= 0.16f)) {
-      _281 = (((0.24f / _254) + -0.5f) * _272);
-    } else {
-      _281 = 0.0f;
-    }
-  } else {
-    _281 = _272;
+  // RenoDX: >>> [Patch: FusedFinalTonemapReplace] [Version: 1.13.00]
+  // Description: This standalone-final permutation inlines the vanilla tonemap pipeline directly in the final pass and runs it unconditionally on the raw scene color, so an unreplaced permutation renders the whole screen with the vanilla look whenever the game selects it. This block replaces everything from the color-matrix grade through the per-permutation tone curve and output transform with the shared TonemapReplacer. The vanilla screen fade that was fused with the curve output is re-emitted below so the untouched downstream suite - wash, user brightness and contrast, user gamma, color-blind matrix where present, vignette, letterbox, and the alpha passthrough - keeps running unchanged on the replaced color.
+  float3 _rndx_tonemapped_color = TonemapReplacer(float3(_85, _86, _87));
+  // RenoDX: <<< [Patch: FusedFinalTonemapReplace]
+  // RenoDX: >>> [Patch: FusedFinalSharpening] [Version: 1.13.00]
+  // Description: The standalone final pass is where RenoDX RCAS sharpening runs, but this fused permutation tonemaps inside the final pass itself, so no completed final-color texture exists to sample neighbor pixels from. Reconstruct the four RCAS neighbor taps by sampling the raw scene color one texel away in each direction and pass each tap through the same TonemapReplacer applied to the center pixel, then run the shared RCAS resolve. The fused vanilla sharpener, where this permutation carried one, was removed together with the replaced tonemap segment above.
+  if (CUSTOM_SHARPENING_TYPE == 1 && CUSTOM_SHARPENING > 0.f) {
+    uint _rndx_scene_w, _rndx_scene_h;
+    __3__36__0__0__g_sceneColor.GetDimensions(_rndx_scene_w, _rndx_scene_h);
+    float2 _rndx_texel = 1.0f / float2(_rndx_scene_w, _rndx_scene_h);
+    float3 _rndx_tap_b = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(0.0f, -_rndx_texel.y), 0).rgb);
+    float3 _rndx_tap_d = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(-_rndx_texel.x, 0.0f), 0).rgb);
+    float3 _rndx_tap_f = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(_rndx_texel.x, 0.0f), 0).rgb);
+    float3 _rndx_tap_h = TonemapReplacer(__3__36__0__0__g_sceneColor.SampleLevel(__0__4__0__0__g_staticBilinearClamp, TEXCOORD + float2(0.0f, _rndx_texel.y), 0).rgb);
+    _rndx_tonemapped_color = ApplyRCASTaps(_rndx_tonemapped_color, _rndx_tap_b, _rndx_tap_d, _rndx_tap_f, _rndx_tap_h);
   }
-  _282 = _281 + 1.0f;
-  _283 = _282 * _226;
-  _284 = _282 * _229;
-  _285 = _282 * _232;
-  if (!((_283 == _284) && (_284 == _285))) {
-    _292 = ((_283 * 2.0f) - _284) - _285;
-    _295 = ((_229 - _232) * 1.7320508f) * _282;
-    _297 = atan(_295 / _292);
-    _300 = (_292 < 0.0f);
-    _301 = (_292 == 0.0f);
-    _302 = (_295 >= 0.0f);
-    _303 = (_295 < 0.0f);
-    _312 = select((_302 && _301), 90.0f, select((_303 && _301), -90.0f, (select((_303 && _300), (_297 + -3.1415927f), select((_302 && _300), (_297 + 3.1415927f), _297)) * 57.295776f)));
-    if (_312 < 0.0f) {
-      _317 = (_312 + 360.0f);
-    } else {
-      _317 = _312;
-    }
-  } else {
-    _317 = 0.0f;
+  // RenoDX: <<< [Patch: FusedFinalSharpening]
+  // RenoDX: >>> [Patch: FusedFinalFilmGrain] [Version: 1.13.00]
+  // Description: The standalone final pass is where RenoDX custom film grain runs. This fused permutation is the visible final output whenever it draws, so apply the custom film grain to the tonemapped color here, in the same pipeline position the slim standalone finals apply it. The vanilla film grain earlier in this shader stays under the CustomFilmGrainGate patch and only runs when custom grain is off.
+  if (CUSTOM_FILM_GRAIN_TYPE != 0) {
+    _rndx_tonemapped_color = renodx::effects::ApplyFilmGrain(_rndx_tonemapped_color, TEXCOORD, CUSTOM_RANDOM, CUSTOM_FILM_GRAIN_STRENGTH * 0.03f);
   }
-  _319 = min(max(_317, 0.0f), 360.0f);
-  if (_319 < -180.0f) {
-    _328 = (_319 + 360.0f);
-  } else {
-    if (_319 > 180.0f) {
-      _328 = (_319 + -360.0f);
-    } else {
-      _328 = _319;
-    }
-  }
-  _332 = saturate(1.0f - abs(_328 * 0.014814815f));  // [sem: expr_sat]
-  _336 = (_332 * _332) * (3.0f - (_332 * 2.0f));
-  _342 = ((_336 * _336) * ((_241 * 0.18f) * (0.03f - _283))) + _283;
-  _355 = log2(max(0.0f, mad(-0.21492857f, _285, mad(-0.23651075f, _284, (_342 * 1.4514393f)))));
-  _356 = log2(max(0.0f, mad(-0.09967592f, _285, mad(1.1762297f, _284, (_342 * -0.07655378f)))));
-  _357 = log2(max(0.0f, mad(0.9977163f, _285, mad(-0.0060324497f, _284, (_342 * 0.008316148f)))));
-  _358 = _355 * 0.30103f;
-  _359 = _356 * 0.30103f;
-  _360 = _357 * 0.30103f;
-  _362 = (_355 * 0.2739373f) + 0.7790625f;
-  _364 = (_356 * 0.2739373f) + 0.7790625f;
-  _366 = (_357 * 0.2739373f) + 0.7790625f;
-  _403 = select((_358 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_355 * 1.43712f)) + 1.0f)), _362);
-  _404 = select((_359 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_356 * 1.43712f)) + 1.0f)), _364);
-  _405 = select((_360 < -0.25171694f), (1.1f / (exp2(-1.2016989f - (_357 * 1.43712f)) + 1.0f)), _366);
-  _421 = 1.0f - saturate(-0.78987026f - (_355 * 0.9446112f));
-  _422 = 1.0f - saturate(-0.78987026f - (_356 * 0.9446112f));
-  _423 = 1.0f - saturate(-0.78987026f - (_357 * 0.9446112f));
-  _445 = max(0.0f, ((((_421 * _421) * (select((_358 > -0.57039833f), (1.04f - (1.56f / (exp2((_355 * 1.013354f) + 1.9201254f) + 1.0f))), _362) - _403)) * (3.0f - (_421 * 2.0f))) + _403));
-  _446 = max(0.0f, ((((_422 * _422) * (select((_359 > -0.57039833f), (1.04f - (1.56f / (exp2((_356 * 1.013354f) + 1.9201254f) + 1.0f))), _364) - _404)) * (3.0f - (_422 * 2.0f))) + _404));
-  _447 = max(0.0f, ((((_423 * _423) * (select((_360 > -0.57039833f), (1.04f - (1.56f / (exp2((_357 * 1.013354f) + 1.9201254f) + 1.0f))), _366) - _405)) * (3.0f - (_423 * 2.0f))) + _405));
-  _463 = ((mad(-0.06537104f, _447, mad(1.4518155e-06f, _446, (_445 * 1.0653747f))) - _445) * 0.6f) + _445;
-  _464 = ((mad(-0.2036677f, _447, mad(1.2036635f, _446, (_445 * -2.5716145e-07f))) - _446) * 0.6f) + _446;
-  _465 = ((mad(0.99999964f, _447, mad(2.0954758e-08f, _446, (_445 * 1.8626451e-08f))) - _447) * 0.6f) + _447;
+  // RenoDX: <<< [Patch: FusedFinalFilmGrain]
+  // RenoDX: >>> [Patch: FusedFinalFadeRestore] [Version: 1.13.00]
+  // Description: Re-emits the vanilla screen-fade lines that were fused with the replaced tone curve so the downstream final-output suite consumes the replaced color through the original variables.
   _487 = 1.0f - abs(_etcParams.w);
-  _491 = saturate(_etcParams.w);  // [sem: expr_sat]
-  _492 = (_487 * saturate(saturate(max(0.0f, mad(-0.08325848f, _465, mad(-0.6217906f, _464, (_463 * 1.7050515f))))))) + _491;
-  _493 = (_487 * saturate(saturate(max(0.0f, mad(-0.010548528f, _465, mad(1.1408027f, _464, (_463 * -0.13025719f))))))) + _491;
-  _494 = (_487 * saturate(saturate(max(0.0f, mad(1.1529719f, _465, mad(-0.12896876f, _464, (_463 * -0.024003278f))))))) + _491;
+  _491 = saturate(_etcParams.w);
+  _492 = (_487 * saturate(_rndx_tonemapped_color.x)) + _491;
+  _493 = (_487 * saturate(_rndx_tonemapped_color.y)) + _491;
+  _494 = (_487 * saturate(_rndx_tonemapped_color.z)) + _491;
+  // RenoDX: <<< [Patch: FusedFinalFadeRestore]
   if (_colorGradingParams.w > 0.0f) {
     _499 = saturate(_colorGradingParams.w);  // [sem: expr_sat]
     _516 = (((max(0.0f, (1.0f - _492)) - _492) * _499) + _492);
@@ -414,7 +379,10 @@ float4 main(
   }
   _623 = abs(_572);
   _624 = abs(_573 + -1.0f);
-  _628 = saturate(1.0f - ((_620 * _postProcessParams.x) * dot(float2(_623, _624), float2(_623, _624))));  // [sem: expr_sat]
+  // RenoDX: >>> [Patch: FinalVignetteStrength] [Version: 1.16.00]
+  // Description: The native final pass derives its vignette attenuation from _postProcessParams.x and the squared screen-space radius. This block multiplies only that native coefficient by CUSTOM_VIGNETTE so the control scales the existing vignette without changing its center, falloff equation, saturation, or output routing. CUSTOM_VIGNETTE resolves to 1 when RenoDX is Off, restoring the native expression.
+  _628 = saturate(1.0f - ((_620 * _postProcessParams.x * CUSTOM_VIGNETTE) * dot(float2(_623, _624), float2(_623, _624))));  // [sem: expr_sat]
+  // RenoDX: <<< [Patch: FinalVignetteStrength]
   if (!(SV_Position.y < _viewDir.w)) {
     if (!(SV_Position.y >= (_screenSizeAndInvSize.y - _viewDir.w))) {
       _642 = (_628 * exp2(log2(saturate(mad(_colorBlind0.z, _531, mad(_colorBlind0.y, _530, (_colorBlind0.x * _529))))) * _561));
@@ -434,5 +402,10 @@ float4 main(
   SV_Target.y = _643;
   SV_Target.z = _644;
   SV_Target.w = _17.w;
+
+  // RenoDX: >>> [Patch: FinalizePostProcessSDR] [Version: 1.13.00]
+  // Description: Runs the shared SDR finalizer after the native output has been assembled so enabled RenoDX display adjustments are applied once. Its effective controls are neutral when RenoDX is Off.
+  SV_Target.xyz = FinalizeSDR(SV_Target.xyz, _sunDirection.y, _moonDirection.y);
+  // RenoDX: <<< [Patch: FinalizePostProcessSDR]
   return SV_Target;
 }

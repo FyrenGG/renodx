@@ -1,3 +1,9 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared spectral and/or Dawn/Dusk helpers required by this shader's owned patch families.
+#include "../shared.h"
+#include "aurora_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 struct PostProcessSkyStruct {
   uint _moonTexture;
   uint _milkyWayTexture;
@@ -276,9 +282,60 @@ void main(
     _159 = __0__7__0__0__g_bindlessTextures[((int)((uint)((uint)(select(((uint)_152 < (uint)65000), _152, 0))) + (uint)(0)))].SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(select((_129 && _130), 0.75f, select((_129 && _131), 0.25f, ((select((_128 && _131), (_125 + -3.1415927f), select((_128 && _130), (_125 + 3.1415927f), _125)) * 0.15915494f) + 0.5f))), (acos(mad((_54 * _44), _113, mad(((_53 * _44) + _51), _112, (-0.0f - (_56 * _111))))) * 0.31830987f)), 0.0f);
     _163 = WaveReadLaneFirst(_materialIndex);
     _171 = WaveReadLaneFirst(BindlessParameters_PostProcessSky[((int)((uint)((uint)(select(((uint)_163 < (uint)170000), _163, 0))) + (uint)(0)))].BindlessParameters_PostProcessSky._milkyWayRatio);
-    _172 = _171 * _159.x;
-    _173 = _171 * _159.y;
-    _174 = _171 * _159.z;
+    // RenoDX: >>> [Patch: MilkyWayLightIntensity] [Version: 1.16.00]
+    // Description: Scales only the sampled Milky Way texture contribution in the simple sky material used
+    //              by sky/environment probe paths. The native shader multiplies the Milky Way texture by
+    //              the material-authored ratio with no user control, so the night sky's galactic
+    //              band cannot be brightened or removed independently of stars, moon, aurora, or
+    //              atmospheric scattering. This block folds a user scalar into that same ratio before it
+    //              reaches the three colour channels. The bound setting is normalised by 0.01 so its
+    //              default resolves to 1.0 exactly (100.f * 0.01f is exactly 1.0f in binary32), but the
+    //              default is still not bit-exact against the native: the scale is applied as a two-step
+    //              multiply, ratio * intensity then * 0.01f, and float multiplication is not
+    //              associative, so the rounding can land one ULP away from the single native product.
+    //              The difference is far below visible threshold. The max()
+    //              guards against a negative ratio producing negative radiance. Aurora and other
+    //              night-sky lighting additions remain on their own separate controls. The three
+    //              channel assignments below are the native expressions with the scaled ratio routed
+    //              in place of the native ratio.
+    float _rndx_milkyWayRatio = _171 * max(MILKY_WAY_LIGHT_INTENSITY, 0.0f) * 0.01f;
+    _172 = _rndx_milkyWayRatio * _159.x;
+    _173 = _rndx_milkyWayRatio * _159.y;
+    _174 = _rndx_milkyWayRatio * _159.z;
+    // RenoDX: <<< [Patch: MilkyWayLightIntensity]
+    // RenoDX: >>> [Patch: AuroraProbeLighting] [Version: 1.16.00]
+    // Description: Adds a dampened aurora contribution to the simple sky material used by environment
+    //              probe paths. The visible aurora is injected by a separate patch in the main sky
+    //              shaders, but the probe path here only receives the Milky Way term, so at night the
+    //              indirect lighting, metals, and specular reflections carry no trace of an aurora that is
+    //              plainly visible in the sky - reflections and lit surfaces look mismatched. This block
+    //              evaluates the same aurora function along the probe's normalized world-space view
+    //              direction, attenuates it by the atmospheric transmittance along that same axis
+    //              so grazing/near-horizon directions do not over-contribute, clamps it to a sane range,
+    //              applies the shared brightness dampening, and scales it by the probe-specific GI energy
+    //              factor before adding it into the three colour channels. Preserving the view-axis
+    //              transmittance is what keeps terrain and reflections from becoming over-bright or
+    //              green-shifted. The whole block is gated on AURORA_BOREALIS_ENABLED, which is 0 unless
+    //              the aurora feature is explicitly turned on, so the default path reproduces the native
+    //              result exactly.
+    [branch]
+    if (AURORA_BOREALIS_ENABLED) {
+      float nightGate = ComputeNightGate(_sunDirection.y);
+      float3 aurora = ComputeAurora(
+        float3(_111, _112, _113), _time.x, nightGate, _frameNumber.x,
+        uint2(SV_DispatchThreadID.x, SV_DispatchThreadID.y), _ssaoRandomDirection
+      );
+      float transmittance = AuroraAtmosphereTransmittance(_113, _rayleighScaledHeight, _earthRadius);
+      aurora = clamp(aurora, 0.f, 10.f) * transmittance;
+      aurora *= AuroraBrightnessDampening(AE_DYNAMISM_HIGH);
+
+      // Modulation for sky probe
+      aurora *= AURORA_GI_ENERGY;
+      _172 += aurora.r;
+      _173 += aurora.g;
+      _174 += aurora.b;
+    }
+    // RenoDX: <<< [Patch: AuroraProbeLighting]
     __3__38__0__1__g_postProcessUAV[int2((int)(SV_DispatchThreadID.x), (int)(SV_DispatchThreadID.y))] = float4((((_172 * 0.61312f) + (_173 * 0.33951f)) + (_174 * 0.04737f)), (((_172 * 0.0702f) + (_173 * 0.91636f)) + (_174 * 0.01345f)), (((_172 * 0.02062f) + (_173 * 0.10958f)) + (_174 * 0.8698f)), _postProcessParams.x);
   }
 }

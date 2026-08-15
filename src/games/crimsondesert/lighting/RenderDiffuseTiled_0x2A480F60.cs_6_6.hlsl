@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared option and helper declarations consumed by this shader's annotated RenoDX patches. This dependency-only prefix replaces no native executable statement; removing the block restores successor A byte-for-byte.
+#include "../shared.h"
+#include "foliage_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<float4> __3__36__0__0__g_puddleMask : register(t136, space36);
 
 Texture2D<float4> __3__36__0__0__g_climateSandTex : register(t137, space36);
@@ -350,6 +355,12 @@ void main(
   uint3 SV_GroupThreadID : SV_GroupThreadID,
   uint SV_GroupIndex : SV_GroupIndex
 ) {
+  // RenoDX: >>> [Patch: FoliageTransmission] [Version: 1.16.00]
+  // Description: Declares per-invocation foliage transmission accumulators at main-function scope before the structurally consolidated lighting branches. The hook leaves them at zero when disabled, making the later add-back exactly neutral.
+  float _rndx_foliageTransR = 0.0f;
+  float _rndx_foliageTransG = 0.0f;
+  float _rndx_foliageTransB = 0.0f;
+  // RenoDX: <<< [Patch: FoliageTransmission]
   int _72;
   int _73;
   int4 _81;
@@ -3310,6 +3321,25 @@ void main(
       _1811 = 0.0f;
       _1812 = 0.0f;
     }
+    // RenoDX: >>> [Patch: FoliageColorCorrect] [Version: 1.16.00]
+    // Description: Applies RenoDX foliage color shaping to foliage stencil materials (stencil ids
+    //              12..18) right after the shader has resolved the direct-diffuse base color for the
+    //              pixel. Vanilla foliage albedo reads flat and yellow-green under strong sun, so the
+    //              helper re-balances hue and saturation. The shadow-map visibility term from
+    //              g_sceneShadowColor is passed in so foliage that is shadowed is not pushed through
+    //              the fully sunlit shaping curve, which would otherwise make shaded leaves glow.
+    //              Gated by FOLIAGE_COLOR_CORRECT; at 0 the block does not execute.
+    if (FOLIAGE_COLOR_CORRECT > 0.0f && ((uint)(_119 - 12) < 7u)) {
+      float3 _rndx_fcBaseColor = float3(float(_1808), float(_1809), float(_1810));
+      half4 _rndx_fcShadow = __3__36__0__0__g_sceneShadowColor.Load(int3(_101, _103, 0));
+      float _rndx_fcShadowVis = saturate(dot(float3(_rndx_fcShadow.xyz), float3(0.2126f, 0.7152f, 0.0722f)));
+      float3 _rndx_fcCorrected = FoliageColorCorrect(_rndx_fcBaseColor, _sunDirection.xyz, _rndx_fcShadowVis, float3(1.0f, 1.0f, 1.0f));
+      float3 _rndx_fscColor = FoliageSelectiveColor(_rndx_fcCorrected);
+      _1808 = half(_rndx_fscColor.x);
+      _1809 = half(_rndx_fscColor.y);
+      _1810 = half(_rndx_fscColor.z);
+    }
+    // RenoDX: <<< [Patch: FoliageColorCorrect]
     _1813 = _1703 & -2;
     _1814 = (_1813 == 66);
     _1815 = (_1703 == 53);
@@ -4607,9 +4637,17 @@ void main(
       _4447 = _moonDirection.z;
     }
     _4448 = _lightingParams.x * _4040;
-    _4449 = (((_4235 * 0.61312f) + (_4236 * 0.33951f)) + (_4237 * 0.04737f)) * _4448;
-    _4450 = (((_4235 * 0.0702f) + (_4236 * 0.91636f)) + (_4237 * 0.01345f)) * _4448;
-    _4451 = (((_4235 * 0.02062f) + (_4236 * 0.10958f)) + (_4237 * 0.8698f)) * _4448;
+    // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+    // Description: The game converts the direct beam's transmittance to working space a second time
+    //              here: _4235/_4236/_4237 are already the working-space result of that same matrix
+    //              applied to the exp2 transmittance triple, scaled by the cloud blend. The matrix
+    //              has unit row sums, so applying it twice preserves luminance and only desaturates,
+    //              most visibly at low sun where the beam is strongly tinted. On uses the single
+    //              conversion so low-sun light keeps the colour of the sky it arrives through.
+    _4449 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_4235 * _4448) : ((((_4235 * 0.61312f) + (_4236 * 0.33951f)) + (_4237 * 0.04737f)) * _4448);
+    _4450 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_4236 * _4448) : ((((_4235 * 0.0702f) + (_4236 * 0.91636f)) + (_4237 * 0.01345f)) * _4448);
+    _4451 = (DIRECT_LIGHT_MATRIX_FIX != 0.f) ? (_4237 * _4448) : ((((_4235 * 0.02062f) + (_4236 * 0.10958f)) + (_4237 * 0.8698f)) * _4448);
+    // RenoDX: <<< [Patch: DirectLightMatrixFix]
     _4452 = _4445 - _1053;
     _4453 = _4446 - _1054;
     _4454 = _4447 - _1055;
@@ -5074,6 +5112,38 @@ void main(
                   _4960 = 1.0f - _4463;
                   _4961 = _4960 * _4960;
                   _4988 = (_4947 * 0.31830987f) * ((((_4468 * ((((_4948 * 34.5f) + -59.0f) * _4948) + 24.5f)) * exp2(-0.0f - (max(((_4948 * 73.2f) + -21.2f), 8.9f) * sqrt(_4465)))) + _4953) + ((((1.0f - ((_4955 * _4955) * (_4954 * 0.75f))) * (1.0f - ((_4961 * _4961) * (_4960 * 0.75f)))) - _4953) * saturate((_4948 * 2.2f) + -0.5f)));
+                  // RenoDX: >>> [Patch: FoliageTransmission] [Version: 1.16.00]
+                  // Description: Vanilla shades foliage stencil materials (stencil ids 12..18) with an opaque
+                  //              diffuse lobe, so leaves lit from behind go black instead of glowing. This adds a
+                  //              back-lit transmission term on this direct-light branch: the helper returns the
+                  //              light that passes through the leaf, stored in the accumulators declared before
+                  //              the branch fan-out, plus a replacement scale for the front-facing diffuse lobe so
+                  //              total energy stays bounded. When the helper reports no scale, a wrapped-diffuse
+                  //              fallback derived from the raw N.L is used instead. The shader clones this
+                  //              direct-lighting maths into several mutually exclusive material branches, so this
+                  //              block is repeated in each clone and at most one copy runs per pixel. Gated by
+                  //              FOLIAGE_TRANSMISSION; at 0 nothing here executes.
+                  if (FOLIAGE_TRANSMISSION > 0.0f && (((uint)(_119 - 12) < 7u))) {
+                    FoliageTransmissionResult _rndx_ftResult = FoliageTransmission(
+                        float3(_1817, _1818, _1819),
+                        float3(_4445, _4446, _4447),
+                        float3(_4289, _4290, _4291),
+                        _4460,
+                        float3(_4257, _4258, _4259),
+                        float3(_4235, _4236, _4237),
+                        float3(_4449, _4450, _4451),
+                        FOLIAGE_TRANSMISSION_THICKNESS);
+                    _rndx_foliageTransR = _rndx_ftResult.transmission.x;
+                    _rndx_foliageTransG = _rndx_ftResult.transmission.y;
+                    _rndx_foliageTransB = _rndx_ftResult.transmission.z;
+                    if (_rndx_ftResult.diffuseScale > 0.0f) {
+                      _4988 *= _rndx_ftResult.diffuseScale;
+                    } else {
+                      float _rndx_wrap = 0.25f * (1.0f - FOLIAGE_TRANSMISSION_THICKNESS);
+                      _4988 = max(0.0f, (_4460 + _rndx_wrap) / (1.0f + _rndx_wrap)) * 0.31830987334251404f * 0.75f;
+                    }
+                  }
+                  // RenoDX: <<< [Patch: FoliageTransmission]
                   _4991 = saturate(1.0f - saturate(_4466));  // [sem: expr_sat]
                   _4992 = _4991 * _4991;
                   _4994 = (_4992 * _4992) * _4991;
@@ -6495,6 +6565,12 @@ void main(
     _5762 = _5747 + _3955;
     _5763 = _5748 + _3956;
     _5764 = _5749 + _3957;
+    // RenoDX: >>> [Patch: FoliageTransmission] [Version: 1.16.00]
+    // Description: Adds the gated foliage transmission accumulated above to the three clean-decompile direct-diffuse outputs after all native component equations have completed. With the feature disabled the accumulators are zero, so this insertion is exactly neutral.
+    _5762 += _rndx_foliageTransR;
+    _5763 += _rndx_foliageTransG;
+    _5764 += _rndx_foliageTransB;
+    // RenoDX: <<< [Patch: FoliageTransmission]
     _5767 = (uint)((uint)(_frameNumber.x)) * (uint)(13);
     [branch]
     if ((((int)((int)((uint)((uint)(_5767)) + (uint)((uint)(_101)))) | (int)((int)((uint)((uint)(_5767)) + (uint)((uint)(_103))))) & 31) == 0) {
@@ -6681,6 +6757,25 @@ void main(
         _6212 = _6191;
         _6213 = _6192;
       }
+      // RenoDX: >>> [Patch: FoliageFinalAO] [Version: 1.16.00]
+      // Description: Applies RenoDX foliage ambient-occlusion darkening to the final direct-lit scene
+      //              color for foliage stencil materials (stencil ids 12..18). Vanilla leaves the
+      //              direct sun contribution on foliage almost entirely unoccluded, so dense canopies
+      //              read flat and over-bright. The occlusion factor is the shader's own blended
+      //              multi-tap scene-AO accumulator, and it is mixed in proportionally to how directly
+      //              lit the pixel is, taken from the shadow-map colour, so already shadowed foliage is
+      //              not darkened twice. Gated by FOLIAGE_AO_STRENGTH; at 0 the block does not
+      //              execute, and the lerp keeps the multiplier at exactly 1.0 for fully shadowed
+      //              pixels.
+      if (FOLIAGE_AO_STRENGTH > 0.0f && ((uint)(_119 - 12) < 7u)) {
+        half4 _rndx_shadow = __3__36__0__0__g_sceneShadowColor.Load(int3(_101, _103, 0));
+        float _rndx_directRatio = saturate(dot(float3(_rndx_shadow.xyz), float3(0.333f, 0.333f, 0.333f)));
+        float _rndx_ao = lerp(1.0f, saturate(_1752), _rndx_directRatio * FOLIAGE_AO_STRENGTH);
+        _6211 *= _rndx_ao;
+        _6212 *= _rndx_ao;
+        _6213 *= _rndx_ao;
+      }
+      // RenoDX: <<< [Patch: FoliageFinalAO]
       __3__38__0__1__g_sceneColorUAV[int2(_101, _103)] = float4(_6211, _6212, _6213, 1.0f);
     }
   }

@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the exact shared spectral and/or Dawn/Dusk helpers required by this shader's owned patch families.
+#include "sky_spectral_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture2D<float2> __3__36__0__0__g_texNetDensity : register(t37, space36);
 
 RWTexture3D<float4> __3__48__0__1__g_texPrecomputedLUTSingleRayleighUAV : register(u0, space48);
@@ -347,9 +352,12 @@ void main(
     // [sem: _3__36__0__0__g_texNetDensity_sampleLod]
     _207 = __3__36__0__0__g_texNetDensity.SampleLevel(__0__4__0__0__g_staticBilinearClamp, float2(((exp2(log2(saturate((_166 + -16.0f) / _44)) * 0.5f) * 0.96875f) + 0.015625f), _202), 0.0f);
     _228 = ((_mieAerosolDensity * 2e-05f) * (_mieAerosolAbsorption + 1.0f)) * _207.y;  // [sem: _3__36__0__0__g_texNetDensity_sampleLod_derived]
-    _246 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.0556001e-06f)) * _207.x) + _228) * -1.442695f);
-    _247 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 4.9788005e-06f)) * _207.x) + _228) * -1.442695f);
-    _248 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * 2.1360002e-07f)) * _207.x) + _228) * -1.442695f);
+    // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.16.00]
+    // Description: Routes the exact native ozone absorption literal(s) through the shared spectral constants; each constant resolves to the original float value.
+    _246 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 16) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_1)) * _207.x) + _228) * -1.442695f);
+    _247 = exp2(((((((float)((uint)((uint)(((uint)((uint)(_rayleighScatteringColor)) >> 8) & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_2)) * _207.x) + _228) * -1.442695f);
+    _248 = exp2(((((((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f) + (_ozoneRatio * SKY_OZONE_3)) * _207.x) + _228) * -1.442695f);
+    // RenoDX: <<< [Patch: SkySpectralOzone]
     _256 = _161;
     _257 = _162;
     _258 = (_246 * _161);
@@ -396,9 +404,12 @@ void main(
       _369 = ((float)((uint)((uint)(_rayleighScatteringColor & 255)))) * 1.9607843e-07f;
       _373 = _mieAerosolDensity * 2e-05f;
       _375 = (_373 * (_mieAerosolAbsorption + 1.0f)) * (_345.y + _354);
-      _393 = exp2((((_367 + (_ozoneRatio * 2.0556001e-06f)) * _355) + _375) * -1.442695f);
-      _394 = exp2((((_368 + (_ozoneRatio * 4.9788005e-06f)) * _355) + _375) * -1.442695f);
-      _395 = exp2((((_369 + (_ozoneRatio * 2.1360002e-07f)) * _355) + _375) * -1.442695f);
+      // RenoDX: >>> [Patch: SkySpectralOzone] [Version: 1.16.00]
+      // Description: Routes the exact native ozone absorption literal(s) through the shared spectral constants; each constant resolves to the original float value.
+      _393 = exp2((((_367 + (_ozoneRatio * SKY_OZONE_1)) * _355) + _375) * -1.442695f);
+      _394 = exp2((((_368 + (_ozoneRatio * SKY_OZONE_2)) * _355) + _375) * -1.442695f);
+      _395 = exp2((((_369 + (_ozoneRatio * SKY_OZONE_3)) * _355) + _375) * -1.442695f);
+      // RenoDX: <<< [Patch: SkySpectralOzone]
       _396 = _393 * _296;
       _397 = _394 * _296;
       _398 = _395 * _296;

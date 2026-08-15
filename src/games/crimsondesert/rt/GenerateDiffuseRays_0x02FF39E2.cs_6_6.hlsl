@@ -1,3 +1,9 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports "../shared.h" for the effective RenoDX option gates and injected constants used below; imports "rr_ladder_common.hlsli" for the SPMIS reservoir-sampling helpers.
+#include "../shared.h"
+#include "rr_ladder_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture2D<uint2> __3__36__0__0__g_normalDepthHalf : register(t53, space36);
 
 Texture2D<float4> __3__36__0__0__g_tiledRadianceCachePlanePrev : register(t84, space36);
@@ -531,8 +537,38 @@ void main(
     _176 = (frac(((_165 * 92.0f) + _88) * 0.0078125f) * 128.0f) + -64.34062f;
     _177 = (frac(((_165 * 71.0f) + _89) * 0.0078125f) * 128.0f) + -72.46562f;
     _182 = frac(dot(float3((_176 * _176), (_177 * _177), (_177 * _176)), float3(20.390625f, 60.703125f, 2.4281209f)));
-    _185 = (uint)(_182 * 5.1540816e+07f);
-    _186 = (uint)(_182 * 2.8747837e+08f);
+    // RenoDX: >>> [Patch: SPMISDecorrelation] [Version: 1.13.00]
+    // Description: Decorrelates the Hammersley sample-scrambling keys at the point where
+    // this raygen shader derives its Cranley-Patterson rotation key (_185, 16 bits used)
+    // and its radical-inverse XOR-scramble key (_186, 32 bits used). The native keys come
+    // from a quadratic frac-hash of ((92*frame + x) mod 128, (71*frame + y) mod 128), so
+    // the scramble lattice repeats every 128 pixels across the screen and cycles with
+    // 32/128-frame temporal periods - a shared sampling pattern that violates the
+    // independent-samples assumption DLSS Ray Reconstruction is trained for (NVIDIA
+    // DLSS-RR Integration Guide section 3.5). This scramble decorrelation is part of the
+    // shared conditioning that runs on every exposed SPMIS tier and the unexposed RT_QUALITY==1
+    // conditioning baseline (RT_QUALITY==2 "SPMIS Balanced", ==3 "SPMIS Boosted"); it changes no light energy, only the
+    // cross-pixel/cross-frame sampling correlation, so it is safe on the noise-only RT_QUALITY==1
+    // tier. Off (RT_QUALITY==0) keeps this raygen fully native.
+    // The keys are instead drawn from a second, independent extraction of the
+    // shader's own per-pixel per-frame TEA hash (same Zafar/Olano key schedule and
+    // (pixel_index, frame) seeding as the sampling stream already inlined below; extended
+    // rounds + stream salt keep the keys structurally distinct from and statistically
+    // independent of the sampling stream - no shared seed within any realistic run, and
+    // residual chance collisions of ~2^-32 per word are harmless). Both key
+    // words stay uniformly distributed, so the Hammersley stratification and every
+    // downstream use are distribution-identical; only the cross-pixel/cross-frame
+    // correlation is removed. With the lane off, the native key derivation is executed
+    // unchanged.
+    if (RR_ENABLED == 1.f && (RT_QUALITY == 1.f || RT_QUALITY == 2.f || RT_QUALITY == 3.f)) {
+      const uint2 rr_ladder_keys = RRLadder_TeaSecondExtraction(uint((_56 * _89) + _88), _frameNumber.x, 0u);
+      _185 = rr_ladder_keys.x;
+      _186 = rr_ladder_keys.y;
+    } else {
+      _185 = (uint)(_182 * 5.1540816e+07f);
+      _186 = (uint)(_182 * 2.8747837e+08f);
+    }
+    // RenoDX: <<< [Patch: SPMISDecorrelation]
     _214 = mad((_projToPrevProj[3].z), _64, mad((_projToPrevProj[3].y), _112, ((_projToPrevProj[3].x) * _110))) + (_projToPrevProj[3].w);
     _222 = (((mad((_projToPrevProj[0].z), _64, mad((_projToPrevProj[0].y), _112, ((_projToPrevProj[0].x) * _110))) + (_projToPrevProj[0].w)) / _214) - _110) * 0.5f;
     _223 = (((mad((_projToPrevProj[1].z), _64, mad((_projToPrevProj[1].y), _112, ((_projToPrevProj[1].x) * _110))) + (_projToPrevProj[1].w)) / _214) - _112) * 0.5f;

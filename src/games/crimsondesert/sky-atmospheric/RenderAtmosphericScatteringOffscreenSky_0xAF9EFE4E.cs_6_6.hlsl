@@ -4084,10 +4084,10 @@ void main(
           //              returns identity 1.0 unless ALL of the following hold (there is no dedicated
           //              cloud-reddening toggle): (1) CUSTOM_WEATHER_EDITING resolves to 1 — defined
           //              in shared.h as runtime Ray Reconstruction detection (RR_ENABLED) AND the
-          //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues (WIP)", default On
+          //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues", default On
           //              per the addon.cpp settings list, inert without RR); (2) the step's cloud
           //              optical depth argument is > 0; (3) _dawnDuskFactor > 0, requiring
-          //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On) and
+          //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements", default On) and
           //              sun elevation inside the -0.17..0.26 rad window; (4) the rolled weather
           //              preset's cloudReddening column > 0 (strength comes from that column). The saturating
           //              curve plateaus at 0.65x G/B for thick clouds instead of going black; this
@@ -4203,10 +4203,10 @@ void main(
           //              returns identity 1.0 unless ALL of the following hold (there is no dedicated
           //              cloud-reddening toggle): (1) CUSTOM_WEATHER_EDITING resolves to 1 — defined
           //              in shared.h as runtime Ray Reconstruction detection (RR_ENABLED) AND the
-          //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues (WIP)", default On
+          //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues", default On
           //              per the addon.cpp settings list, inert without RR); (2) the step's cloud
           //              optical depth argument is > 0; (3) _dawnDuskFactor > 0, requiring
-          //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On) and
+          //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements", default On) and
           //              sun elevation inside the -0.17..0.26 rad window; (4) the rolled weather
           //              preset's cloudReddening column > 0 (strength comes from that column). The saturating
           //              curve plateaus at 0.65x G/B for thick clouds instead of going black; this
@@ -4256,10 +4256,10 @@ void main(
             //              returns identity 1.0 unless ALL of the following hold (there is no dedicated
             //              cloud-reddening toggle): (1) CUSTOM_WEATHER_EDITING resolves to 1 — defined
             //              in shared.h as runtime Ray Reconstruction detection (RR_ENABLED) AND the
-            //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues (WIP)", default On
+            //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues", default On
             //              per the addon.cpp settings list, inert without RR); (2) the step's cloud
             //              optical depth argument is > 0; (3) _dawnDuskFactor > 0, requiring
-            //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On) and
+            //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements", default On) and
             //              sun elevation inside the -0.17..0.26 rad window; (4) the rolled weather
             //              preset's cloudReddening column > 0 (strength comes from that column). The saturating
             //              curve plateaus at 0.65x G/B for thick clouds instead of going black; this
@@ -4289,10 +4289,10 @@ void main(
             //              returns identity 1.0 unless ALL of the following hold (there is no dedicated
             //              cloud-reddening toggle): (1) CUSTOM_WEATHER_EDITING resolves to 1 — defined
             //              in shared.h as runtime Ray Reconstruction detection (RR_ENABLED) AND the
-            //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues (WIP)", default On
+            //              CustomWeatherEditing flag bit (UI "Dynamic Dawn/Dusk Hues", default On
             //              per the addon.cpp settings list, inert without RR); (2) the step's cloud
             //              optical depth argument is > 0; (3) _dawnDuskFactor > 0, requiring
-            //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On) and
+            //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements", default On) and
             //              sun elevation inside the -0.17..0.26 rad window; (4) the rolled weather
             //              preset's cloudReddening column > 0 (strength comes from that column). The saturating
             //              curve plateaus at 0.65x G/B for thick clouds instead of going black; this
@@ -6087,7 +6087,7 @@ void main(
   //              variant, because this shader feeds the GI cubemap and full-strength hues
   //              oversaturate indirect lighting; when Dynamic Dawn/Dusk Hues is additionally active
   //              the warm tint shifts per day cycle. Gated by DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk
-  //              Improvements (WIP)", default On per the addon.cpp settings list); when Off (or
+  //              Improvements", default On per the addon.cpp settings list); when Off (or
   //              outside the window) the helper returns (1,1,1) and the multiplies are bit-exact
   //              no-ops.
   // [DAWN_DUSK] Inscatter colour bias
@@ -6106,7 +6106,7 @@ void main(
   //              budget) and K = 500 in the visible-sky shader
   //              (SkyRenderAtmosphericScattering_0x836B77CA); the two coefficients are a matched
   //              pair and must be retuned together. Gated by SNOW_FOG_FIX (UI "Snow / Fog Lighting
-  //              Fixes (WIP)", default On per the addon.cpp settings list); when Off the branch is
+  //              Fixes", default On per the addon.cpp settings list); when Off the branch is
   //              skipped entirely and the output is bit-exact vanilla.
   //              The shader suppresses inscatter below the sea baseline (_atmosphereSeaBaseline)
   //              down to 0.02x but leaves extinction alone, so below that baseline the clamp is
@@ -6147,7 +6147,7 @@ void main(
   //              GI cubemap. Without it the probe's directionless energy flattens and boosts
   //              indirect light at sunrise/sunset, washing out the directional contrast the
   //              companion SHDirectionalBias/DawnDuskAmbientBoost helpers restore. Gated by
-  //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements (WIP)", default On per the
+  //              DAWN_DUSK_IMPROVEMENTS (UI "Dawn/Dusk Improvements", default On per the
   //              addon.cpp settings list); when Off the block is skipped entirely, and outside the
   //              window _dawnDuskFactor = 0 makes the lerp identity, so Off is bit-exact vanilla.
   // [DAWN_DUSK_SKY_PROBE_ENERGY] Inscatter Energy Reduction
@@ -6165,7 +6165,7 @@ void main(
   //              (NightSkyAttenuation, sky_dawn_dusk_common.hlsli). Vanilla scattering brightens the
   //              sky far too early (~3am-4:30am) and keeps it bright well after sunset; this keeps
   //              nights genuinely dark. Gated by NIGHT_SKY_ATTENUATION (UI "Darker Nights/Dawn/Dusk
-  //              (WIP)", default On per the addon.cpp settings list); when Off the helper returns
+  //             ", default On per the addon.cpp settings list); when Off the helper returns
   //              exactly 1.0 and the multiplies are bit-exact no-ops.
   // [NIGHT_SKY_ATTENUATION] Reduce sky brightness when sun is below horizon
   {

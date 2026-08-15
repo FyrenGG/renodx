@@ -1542,11 +1542,10 @@ renodx::utils::settings::Settings settings = {
         .can_reset = true,
         .label = "Spectral Sky",
         .section = "Sky / Celestial",
-        .tooltip = "Converts the sky with a spectral color transform fitted at the game's native wavelengths -\n"
-                   "the sky dome, long-distance haze, and the sky's contribution to ambient light together.\n"
-                   "Off = vanilla conversion. Subtle keeps most of vanilla's saturated blue;\n"
-                   "Full is the pure fitted conversion, which reads warmer and noticeably softer.\n"
-                   "Every step preserves brightness and energy.",
+        .tooltip = "More natural sky colors, applied to the sky dome, distant haze, and the sky's ambient light together.\n"
+                   "Off = vanilla sky, untouched.\n"
+                   "Subtle keeps most of vanilla's saturated blue; Full is the most natural fit, warmer and softer.\n"
+                   "Brightness is unchanged at every step.",
         .labels = {"Off", "Subtle", "Balanced", "Full"},
         .tint = rendering,
         .is_visible = []() { return current_settings_mode == rendering_group; },
@@ -1560,9 +1559,9 @@ renodx::utils::settings::Settings settings = {
         .can_reset = true,
         .label = "Direct Light Color Fix",
         .section = "Sky / Celestial",
-        .tooltip = "Fixes direct sun and moon light being converted to the working color space twice.\n"
-                   "Off = vanilla double conversion, which desaturates direct light at dawn and dusk.\n"
-                   "On = single conversion, so low-sun light keeps the color of the sky it arrives through.",
+        .tooltip = "Fixes sun and moon light losing color to a doubled color conversion bug in vanilla.\n"
+                   "Off = vanilla, noticeably gray light at dawn and dusk.\n"
+                   "On = low sun light keeps the color of the sky it shines through.",
         .labels = {"Off", "On"},
         .tint = rendering,
         .is_visible = []() { return current_settings_mode == rendering_group; },
@@ -1641,7 +1640,7 @@ renodx::utils::settings::Settings settings = {
         .default_value = 1.f,
         .packed_values = {0u, CUSTOM_FLAGS__DAWN_DUSK_IMPROVEMENTS},
         .can_reset = true,
-        .label = "Dawn/Dusk Improvements (WIP)",
+        .label = "Dawn/Dusk Improvements",
         .section = "Atmosphere / Weather",
         .tooltip = "Directionality additions to atmospheric lighting at dawn/dusk.\n",
         .labels = {"Off", "On"},
@@ -1655,7 +1654,7 @@ renodx::utils::settings::Settings settings = {
         .default_value = 1.f,
         .packed_values = {0u, CUSTOM_FLAGS__NIGHT_SKY_ATTENUATION},
         .can_reset = true,
-        .label = "Darker Nights/Dawn/Dusk (WIP)",
+        .label = "Darker Nights/Dawn/Dusk",
         .section = "Atmosphere / Weather",
         .tooltip = "Reduces sky brightness at night and during dawn/dusk.\n"
                    "Fixes the overly bright sky at 3-5am and after sunset.",
@@ -1670,7 +1669,7 @@ renodx::utils::settings::Settings settings = {
         .default_value = 1.f,
         .packed_values = {0u, CUSTOM_FLAGS__SNOW_FOG_FIX},
         .can_reset = true,
-        .label = "Snow / Fog Lighting Fixes (WIP)",
+        .label = "Snow / Fog Lighting Fixes",
         .section = "Atmosphere / Weather",
         .tooltip = "Fixes snow-region lighting artifacts.\n"
                    "Off = vanilla snow/fog scattering and surfel voxel GI.\n"
@@ -1699,14 +1698,14 @@ renodx::utils::settings::Settings settings = {
         .default_value = 1.f,
         .packed_values = {0u, CUSTOM_FLAGS__CUSTOM_WEATHER_EDITING},
         .can_reset = true,
-        .label = "Dynamic Dawn/Dusk Hues (WIP)",
+        .label = "Dynamic Dawn/Dusk Hues",
         .section = "Atmosphere / Weather",
         .tooltip = "Randomises dawn/dusk colour hues each day cycle.\n"
                    "Off = vanilla dawn/dusk hues.\n"
                    "On = uses randomised hue presets that vary per dawn.\n"
                    "Disabled until Ray Reconstruction / Ray Regeneration is detected and Dawn/Dusk Improvements is enabled.",
         .labels = {"Off", "On"},
-        .tint = wiprendering,
+        .tint = rendering,
         .is_enabled = []() { return RR_ENABLED && DAWN_DUSK_IMPROVEMENTS == 1.f; },
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
@@ -1803,9 +1802,9 @@ renodx::utils::settings::Settings settings = {
         .can_reset = true,
         .label = "Distant Shadow Band Fix",
         .section = "Shadows",
-        .tooltip = "Suppresses the organised terrace bands in far contact shadows on distant terrain.\n"
-                   "Off = vanilla far-march accumulation.\n"
-                   "On = banding suppressed while shadow depth and foliage self-shadow are preserved.",
+        .tooltip = "Removes stair-step banding in contact shadows on distant terrain.\n"
+                   "Off = vanilla banding.\n"
+                   "On = bands smoothed out; shadow depth and foliage self-shadow preserved.",
         .labels = {"Off", "On"},
         .tint = rendering,
         .is_visible = []() { return current_settings_mode == rendering_group; },
@@ -2035,10 +2034,10 @@ renodx::utils::settings::Settings settings = {
         .can_reset = true,
         .label = "Disable Distortion",
         .section = "Effects",
-        .tooltip = "The game's screen distortion pass, used for heat haze and similar particle effects.\n"
-                   "Vanilla = upsamples from half- and quarter-resolution buffers, which looks like\n"
-                   "particle noise around distortion sources.\n"
-                   "Disabled = skips the distortion pass, removing that noise.",
+        .tooltip = "The game's heat-haze and screen distortion effects run at reduced resolution,\n"
+                   "which looks like particle noise around the source.\n"
+                   "Vanilla = distortion on, with the noise.\n"
+                   "Disabled = skips the pass, removing the noise.",
         .labels = {"Vanilla", "Disabled"},
         .is_visible = []() { return current_settings_mode == experimental_group; },
     },

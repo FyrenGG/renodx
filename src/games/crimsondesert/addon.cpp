@@ -1500,35 +1500,20 @@ renodx::utils::settings::Settings settings = {
     // },
 
     new renodx::utils::settings::Setting{
-        .key = "SkyScattering",
-        .binding = &shader_injection.custom_flags,
+        .key = "SpectralSky",
+        .binding = &shader_injection.custom_flags_2,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,
-        .default_value = 1.f,
-        .packed_values = {0u, CUSTOM_FLAGS__SKY_SCATTERING},
+        .default_value = 2.f,
+        .packed_values = {0u, CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE, CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED, CUSTOM_FLAGS2__SPECTRAL_FIELD},
         .can_reset = true,
         .label = "Spectral Sky",
         .section = "Sky / Celestial",
         .tooltip = "Converts the sky with a spectral color transform fitted at the game's native wavelengths -\n"
                    "the sky dome, long-distance haze, and the sky's contribution to ambient light together.\n"
-                   "Off = vanilla conversion.\n"
-                   "On = fitted spectral conversion; more accurate daytime sky color, reads warmer and softer than vanilla.",
-        .labels = {"Off", "On"},
-        .tint = rendering,
-        .is_visible = []() { return current_settings_mode == rendering_group; },
-    },
-    new renodx::utils::settings::Setting{
-        .key = "SpectralSkyStrength",
-        .binding = &shader_injection.custom_flags_2,
-        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
-        .default_value = 1.f,
-        .packed_values = {CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE, CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED, 0u},
-        .can_reset = true,
-        .label = "Spectral Sky Strength",
-        .section = "Sky / Celestial",
-        .tooltip = "How far Spectral Sky moves from the vanilla conversion toward the fully accurate one.\n"
-                   "Subtle keeps most of vanilla's saturated blue; Full is the pure fitted conversion,\n"
-                   "which reads noticeably softer. Every step preserves brightness and energy.",
-        .labels = {"Subtle", "Balanced", "Full"},
+                   "Off = vanilla conversion. Subtle keeps most of vanilla's saturated blue;\n"
+                   "Full is the pure fitted conversion, which reads warmer and noticeably softer.\n"
+                   "Every step preserves brightness and energy.",
+        .labels = {"Off", "Subtle", "Balanced", "Full"},
         .tint = rendering,
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },

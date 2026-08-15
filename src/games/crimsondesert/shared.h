@@ -46,11 +46,13 @@
 
 // Second flag word: custom_flags is fully allocated (32/32 bits).
 #define CUSTOM_FLAGS2__DIRECT_LIGHT_MATRIX_FIX          0b1u
-// Spectral Sky strength ladder, reusing the bits freed when the aerial and ambient surfaces were
-// folded into the master toggle. Both bits clear = Full, so configs saved before the ladder existed
-// keep the pure fitted conversion.
+// Spectral Sky is a single two-bit field (reusing the bits freed when the aerial and ambient
+// surfaces were folded in): 00 = Off, 01 = Subtle, 10 = Balanced, 11 = Full. The master gate is
+// "field is non-zero", so one setting carries the whole state; the old master bit in the first
+// flag word (CUSTOM_FLAGS__SKY_SCATTERING) is dormant.
 #define CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE         0b10u
 #define CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED       0b100u
+#define CUSTOM_FLAGS2__SPECTRAL_FIELD                   (CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE | CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED)
 #define CUSTOM_FLAGS2__SHADOW_BAND_FIX                  0b1000u
 #define CUSTOM_FLAGS2                              shader_injection.custom_flags_2
 
@@ -76,7 +78,8 @@
 // Artistic dial between the game's own conversion (0) and the fitted spectral one (1). Both
 // endpoint matrices have near-unit row sums, so every blend between them is as energy-safe as
 // either endpoint; the dial chooses saturation character, never correctness of the fence.
-#define SKY_SPECTRAL_STRENGTH                  ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE) != 0u ? 0.35f : ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED) != 0u ? 0.7f : 1.f))
+// Field decode: 01 = Subtle, 10 = Balanced, 11 = Full (unused when the field is 00 = Off).
+#define SKY_SPECTRAL_STRENGTH                  (((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_FIELD) == CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE) ? 0.35f : (((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_FIELD) == CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED) ? 0.7f : 1.f))
 // Master gate for the far-contact shadow banding suppression (the connected-patch envelope and its
 // receiver-plane guard in the SceneShadowTiled far march). Off keeps the guard reject false and the
 // envelope factor at 1.0, so the accumulation resolves to the native expression exactly.
@@ -209,7 +212,9 @@
 #define MOON_BRIGHTNESS                        3.50f
 #define MOON_GLOW_STRENGTH                     1.00f
 #define MOON_LIMB_DARKENING                    1.00f
-#define SKY_SCATTERING                         ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__SKY_SCATTERING) != 0u ? 1.f : 0.f)
+// The gate derives from the Spectral Sky strength field (non-zero = on), so one setting carries
+// the whole state. The first flag word's CUSTOM_FLAGS__SKY_SCATTERING bit is dormant.
+#define SKY_SCATTERING                         ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_FIELD) != 0u ? 1.f : 0.f)
 #define DAWN_DUSK_IMPROVEMENTS                 ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__DAWN_DUSK_IMPROVEMENTS) != 0u ? 1.f : 0.f)
 // Snow / Fog Lighting Fixes is default-on; Off preserves vanilla snow/fog scattering and surfel voxel quantization.
 #define SNOW_FOG_FIX                           ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__SNOW_FOG_FIX) != 0u ? 1.f : 0.f)

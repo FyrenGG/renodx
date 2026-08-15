@@ -1506,9 +1506,10 @@ renodx::utils::settings::Settings settings = {
         .default_value = 1.f,
         .packed_values = {0u, CUSTOM_FLAGS__SKY_SCATTERING},
         .can_reset = true,
-        .label = "Spectral Sky Scattering",
+        .label = "Spectral Sky",
         .section = "Sky / Celestial",
-        .tooltip = "Converts the sky's Rayleigh in-scatter with a spectral color transform fitted at the game's native wavelengths.\n"
+        .tooltip = "Converts the sky with a spectral color transform fitted at the game's native wavelengths -\n"
+                   "the sky dome, long-distance haze, and the sky's contribution to ambient light together.\n"
                    "Off = vanilla conversion.\n"
                    "On = fitted spectral conversion; more accurate daytime sky color, reads warmer and softer than vanilla.",
         .labels = {"Off", "On"},
@@ -1527,38 +1528,6 @@ renodx::utils::settings::Settings settings = {
         .tooltip = "Fixes direct sun and moon light being converted to the working color space twice.\n"
                    "Off = vanilla double conversion, which desaturates direct light at dawn and dusk.\n"
                    "On = single conversion, so low-sun light keeps the color of the sky it arrives through.",
-        .labels = {"Off", "On"},
-        .tint = rendering,
-        .is_visible = []() { return current_settings_mode == rendering_group; },
-    },
-    new renodx::utils::settings::Setting{
-        .key = "SpectralAerialPerspective",
-        .binding = &shader_injection.custom_flags_2,
-        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
-        .default_value = 0.f,
-        .packed_values = {0u, CUSTOM_FLAGS2__SPECTRAL_AERIAL_PERSPECTIVE},
-        .can_reset = true,
-        .label = "Spectral Aerial Perspective",
-        .section = "Sky / Celestial",
-        .tooltip = "Converts long-distance atmospheric haze with the spectral color transform used by Spectral Sky Scattering.\n"
-                   "Off = vanilla conversion.\n"
-                   "On = fitted spectral conversion, so distant terrain haze matches the sky it fades into.",
-        .labels = {"Off", "On"},
-        .tint = rendering,
-        .is_visible = []() { return current_settings_mode == rendering_group; },
-    },
-    new renodx::utils::settings::Setting{
-        .key = "SpectralSkyAmbient",
-        .binding = &shader_injection.custom_flags_2,
-        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
-        .default_value = 0.f,
-        .packed_values = {0u, CUSTOM_FLAGS2__SPECTRAL_SKY_AMBIENT},
-        .can_reset = true,
-        .label = "Spectral Sky Ambient",
-        .section = "Sky / Celestial",
-        .tooltip = "Converts the sky's contribution to ambient world lighting with the spectral color transform.\n"
-                   "Off = vanilla conversion.\n"
-                   "On = fitted spectral conversion; tints how the sky lights the world, not the visible sky itself.",
         .labels = {"Off", "On"},
         .tint = rendering,
         .is_visible = []() { return current_settings_mode == rendering_group; },

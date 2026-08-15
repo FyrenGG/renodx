@@ -46,8 +46,8 @@
 
 // Second flag word: custom_flags is fully allocated (32/32 bits).
 #define CUSTOM_FLAGS2__DIRECT_LIGHT_MATRIX_FIX          0b1u
-#define CUSTOM_FLAGS2__SPECTRAL_AERIAL_PERSPECTIVE      0b10u
-#define CUSTOM_FLAGS2__SPECTRAL_SKY_AMBIENT             0b100u
+// Bits 0b10u and 0b100u are free: the aerial-perspective and sky-ambient spectral surfaces follow
+// the Spectral Sky master toggle rather than carrying their own bits.
 #define CUSTOM_FLAGS2__SHADOW_BAND_FIX                  0b1000u
 #define CUSTOM_FLAGS2                              shader_injection.custom_flags_2
 
@@ -63,14 +63,13 @@
 // (s*M*M*T where the sky gets M*T once). M has unit row sums, so the extra application is
 // luminance-neutral pure desaturation, strongest at low sun. On selects the single application.
 #define DIRECT_LIGHT_MATRIX_FIX                ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__DIRECT_LIGHT_MATRIX_FIX) != 0u ? 1.f : 0.f)
-// Applies the fitted spectral conversion to per-wavelength sky radiance on the aerial-perspective
-// path (long-distance haze), which vanilla lands in scene colour without the conversion the dome
-// receives. Same operator as SKY_SCATTERING, gated separately so the two surfaces can be judged
-// independently.
-#define SPECTRAL_AERIAL_PERSPECTIVE            ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_AERIAL_PERSPECTIVE) != 0u ? 1.f : 0.f)
-// Applies the fitted spectral conversion to the sky's contribution inside the precomputed ambient,
-// which tints world lighting rather than the visible sky. Gated separately for the same reason.
-#define SPECTRAL_SKY_AMBIENT                   ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_SKY_AMBIENT) != 0u ? 1.f : 0.f)
+// The aerial-perspective (long-distance haze) and sky-ambient (world GI tint) spectral surfaces
+// follow the Spectral Sky master toggle: haze that converts differently from the dome it fades
+// into reads as a seam, and the ambient share is too subtle to earn its own switch but keeps the
+// world's tint consistent with the corrected sky. The call sites keep their own macro names so the
+// surfaces stay separable if they ever need to be judged independently again.
+#define SPECTRAL_AERIAL_PERSPECTIVE            SKY_SCATTERING
+#define SPECTRAL_SKY_AMBIENT                   SKY_SCATTERING
 // Master gate for the far-contact shadow banding suppression (the connected-patch envelope and its
 // receiver-plane guard in the SceneShadowTiled far march). Off keeps the guard reject false and the
 // envelope factor at 1.0, so the accumulation resolves to the native expression exactly.

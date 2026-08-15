@@ -1517,6 +1517,22 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
+        .key = "SpectralSkyStrength",
+        .binding = &shader_injection.custom_flags_2,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 1.f,
+        .packed_values = {CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE, CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED, 0u},
+        .can_reset = true,
+        .label = "Spectral Sky Strength",
+        .section = "Sky / Celestial",
+        .tooltip = "How far Spectral Sky moves from the vanilla conversion toward the fully accurate one.\n"
+                   "Subtle keeps most of vanilla's saturated blue; Full is the pure fitted conversion,\n"
+                   "which reads noticeably softer. Every step preserves brightness and energy.",
+        .labels = {"Subtle", "Balanced", "Full"},
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
         .key = "DirectLightColorFix",
         .binding = &shader_injection.custom_flags_2,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,

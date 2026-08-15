@@ -68,11 +68,18 @@ float3 SkySpectralRayleighBeta(uint packed_color) {
 //   L_working[row] = sum_i M_spectral[row][i] x T(lambda_i) x beta(lambda_i) x phase
 //                  + (sum_i M_vanilla[row][i] x T(lambda_i)) x S_mie[row_colour]
 
+// Strength-blended conversion coefficient. SKY_SPECTRAL_STRENGTH dials between the game's own
+// matrix (0) and the fitted spectral one (1); both endpoints have near-unit row sums, so every
+// blend is equally energy-safe. The blend lives here so every spectral surface — dome, aerial,
+// ambient — moves together.
+#define SKY_SPEC_M(row, i) \
+  lerp(SKY_VANILLA_RGB_TO_WORKING[row][i], SKY_SPECTRAL_TO_WORKING[row][i], SKY_SPECTRAL_STRENGTH)
+
 // Spectral Rayleigh: per wavelength T x beta then matrix-convert to working space
 #define SKY_RAY_INSCATTER(row, T0, T1, T2, b0, b1, b2, phase) \
-  (SKY_SPECTRAL_TO_WORKING[row][0] * (T0) * (b0) * (phase)    \
-   + SKY_SPECTRAL_TO_WORKING[row][1] * (T1) * (b1) * (phase)  \
-   + SKY_SPECTRAL_TO_WORKING[row][2] * (T2) * (b2) * (phase))
+  (SKY_SPEC_M(row, 0) * (T0) * (b0) * (phase)                 \
+   + SKY_SPEC_M(row, 1) * (T1) * (b1) * (phase)               \
+   + SKY_SPEC_M(row, 2) * (T2) * (b2) * (phase))
 
 // Vanilla working-space dot product (for Mie and transmittance paths)
 #define SKY_VAN_DOT(row, T0, T1, T2)              \
@@ -84,8 +91,8 @@ float3 SkySpectralRayleighBeta(uint packed_color) {
 // Rayleigh radiance arrives pre-assembled, e.g. the LUT-driven aerial term). Ungated here; the
 // gate lives at the call site.
 #define SKY_SPEC_DOT(row, X0, X1, X2)             \
-  (SKY_SPECTRAL_TO_WORKING[row][0] * (X0)         \
-   + SKY_SPECTRAL_TO_WORKING[row][1] * (X1)       \
-   + SKY_SPECTRAL_TO_WORKING[row][2] * (X2))
+  (SKY_SPEC_M(row, 0) * (X0)                      \
+   + SKY_SPEC_M(row, 1) * (X1)                    \
+   + SKY_SPEC_M(row, 2) * (X2))
 
 #endif  // SRC_CRIMSONDESERT_SKY_ATMOSPHERIC_SKY_SPECTRAL_COMMON_HLSLI_

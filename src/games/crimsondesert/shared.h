@@ -46,8 +46,11 @@
 
 // Second flag word: custom_flags is fully allocated (32/32 bits).
 #define CUSTOM_FLAGS2__DIRECT_LIGHT_MATRIX_FIX          0b1u
-// Bits 0b10u and 0b100u are free: the aerial-perspective and sky-ambient spectral surfaces follow
-// the Spectral Sky master toggle rather than carrying their own bits.
+// Spectral Sky strength ladder, reusing the bits freed when the aerial and ambient surfaces were
+// folded into the master toggle. Both bits clear = Full, so configs saved before the ladder existed
+// keep the pure fitted conversion.
+#define CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE         0b10u
+#define CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED       0b100u
 #define CUSTOM_FLAGS2__SHADOW_BAND_FIX                  0b1000u
 #define CUSTOM_FLAGS2                              shader_injection.custom_flags_2
 
@@ -70,6 +73,10 @@
 // surfaces stay separable if they ever need to be judged independently again.
 #define SPECTRAL_AERIAL_PERSPECTIVE            SKY_SCATTERING
 #define SPECTRAL_SKY_AMBIENT                   SKY_SCATTERING
+// Artistic dial between the game's own conversion (0) and the fitted spectral one (1). Both
+// endpoint matrices have near-unit row sums, so every blend between them is as energy-safe as
+// either endpoint; the dial chooses saturation character, never correctness of the fence.
+#define SKY_SPECTRAL_STRENGTH                  ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE) != 0u ? 0.35f : ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED) != 0u ? 0.7f : 1.f))
 // Master gate for the far-contact shadow banding suppression (the connected-patch envelope and its
 // receiver-plane guard in the SceneShadowTiled far march). Off keeps the guard reject false and the
 // envelope factor at 1.0, so the accumulation resolves to the native expression exactly.

@@ -166,6 +166,7 @@ static bool trace_unmodified_shaders = false;
 static bool allow_multiple_push_constants = false;
 static bool push_injections_on_present = false;
 static bool revert_constant_buffer_ranges = false;
+static bool use_d3d12_injection_buffer = true;
 static float* resource_tag_float = nullptr;
 static int32_t expected_constant_buffer_index = -1;
 static uint32_t expected_constant_buffer_space = 0;
@@ -202,6 +203,10 @@ struct __declspec(uuid("018e7b9c-23fd-7863-baf8-a8dad2a6db9d")) DeviceData {
   // differs, so a frame that changes no setting does no work.
   std::vector<float> injection_buffer_contents;
   bool injection_buffer_upload_failed = false;
+  // Guards the deferred injection-buffer creation. Creation is attempted exactly once; a failed
+  // attempt leaves the handle null and every layout uniformly falls back to root constants.
+  std::mutex injection_buffer_creation_mutex;
+  bool injection_buffer_creation_attempted = false;
 };
 
 // Root descriptors are two dwords; root constants are one per float.
@@ -222,6 +227,9 @@ static void OnInitDevice(reshade::api::device* device) {
   reshade::log::message(reshade::log::level::info, s.str().c_str());
 
   auto* data = renodx::utils::data::Create<DeviceData>(device);
+  reshade::log::message(
+      reshade::log::level::info,
+      "mods::shader::OnInitDevice(device data created)");
   data->expected_constant_buffer_index = expected_constant_buffer_index;
   data->injected_descriptor_ranges.clear();
   data->injected_descriptor_param = std::nullopt;
@@ -274,6 +282,15 @@ static void OnInitDevice(reshade::api::device* device) {
     binding += range.count;
   }
 
+  {
+    std::stringstream s;
+    s << "mods::shader::OnInitDevice(descriptor ranges collected";
+    s << ", ranges: " << data->injected_descriptor_ranges.size();
+    s << ", bindings: " << binding;
+    s << ")";
+    reshade::log::message(reshade::log::level::info, s.str().c_str());
+  }
+
   if (!data->injected_descriptor_ranges.empty()) {
     if (data->injected_descriptor_ranges.size() > 1u) {
       reshade::api::pipeline_layout_param descriptor_param = {};
@@ -305,37 +322,86 @@ static void OnInitDevice(reshade::api::device* device) {
       break;
   }
 
-  // Only D3D12 has the 64-dword root signature budget that the injection block can exhaust, and
-  // only D3D12 reaches the root-constant path at all: D3D9 through D3D11 already have push
-  // constants emulated over a buffer, and Vulkan keeps its own push-constant path.
-  if (device->get_api() == reshade::api::device_api::d3d12 && shader_injection_size != 0u) {
-    const uint64_t byte_size = ((static_cast<uint64_t>(shader_injection_size) * sizeof(float))
-                                + (INJECTION_BUFFER_ALIGNMENT - 1u))
-                             & ~(INJECTION_BUFFER_ALIGNMENT - 1u);
-    const reshade::api::resource_desc desc(
-        byte_size,
-        reshade::api::memory_heap::cpu_to_gpu,
-        reshade::api::resource_usage::constant_buffer);
+  if (device->get_api() == reshade::api::device_api::d3d12
+      && shader_injection_size != 0u) {
+    reshade::log::message(
+        reshade::log::level::info,
+        use_d3d12_injection_buffer
+            ? "mods::shader::OnInitDevice(D3D12 shader injection constant buffer creation deferred to first pipeline layout)"
+            : "mods::shader::OnInitDevice(D3D12 shader injection constant buffer disabled; using root constants)");
+  }
+}
 
-    if (device->create_resource(desc, nullptr, reshade::api::resource_usage::cpu_access, &data->injection_buffer)) {
-      // Force the first present to upload, whatever the settings happen to be.
-      data->injection_buffer_contents.assign(shader_injection_size, std::numeric_limits<float>::quiet_NaN());
-      std::stringstream s;
-      s << "mods::shader::OnInitDevice(shader injection bound as a constant buffer";
-      s << ", floats: " << shader_injection_size;
-      s << ", bytes: " << byte_size;
-      s << ")";
-      reshade::log::message(reshade::log::level::info, s.str().c_str());
-    } else {
-      // Without the buffer there is nothing to bind, so the layout stays on root constants and
-      // the original dword-budget truncation applies again. Loud, because every setting whose
-      // slot falls outside the budget silently stops responding.
-      data->injection_buffer = {0u};
-      reshade::log::message(
-          reshade::log::level::error,
-          "mods::shader::OnInitDevice(failed to create the shader injection constant buffer; "
-          "falling back to root constants, which are subject to the 64-dword root signature budget)");
-    }
+// Creates the D3D12 injection constant buffer the first time a pipeline layout can use it.
+// It must not be created during init_device: that callback runs while the game is still inside
+// D3D12CreateDevice, and AMD's driver does not return from CreateCommittedResource on that
+// callstack, freezing the game at the splash screen. The first create_pipeline_layout event is
+// an ordinary driver callstack and precedes every layout's buffer-versus-root-constants
+// decision, so creating the buffer here leaves layout construction unchanged.
+//
+// Only D3D12 has the 64-dword root signature budget that the injection block can exhaust, and
+// only D3D12 reaches the root-constant path at all: D3D9 through D3D11 already have push
+// constants emulated over a buffer, and Vulkan keeps its own push-constant path.
+static void CreateInjectionBufferIfNeeded(reshade::api::device* device, DeviceData* data) {
+  if (data == nullptr) return;
+  if (!use_d3d12_injection_buffer) return;
+  if (shader_injection_size == 0u) return;
+  if (device->get_api() != reshade::api::device_api::d3d12) return;
+
+  const std::lock_guard lock(data->injection_buffer_creation_mutex);
+  if (data->injection_buffer_creation_attempted) return;
+  data->injection_buffer_creation_attempted = true;
+
+  const uint64_t byte_size = ((static_cast<uint64_t>(shader_injection_size) * sizeof(float))
+                              + (INJECTION_BUFFER_ALIGNMENT - 1u))
+                            & ~(INJECTION_BUFFER_ALIGNMENT - 1u);
+  const reshade::api::resource_desc desc(
+      byte_size,
+      reshade::api::memory_heap::cpu_to_gpu,
+      reshade::api::resource_usage::constant_buffer);
+
+  {
+    std::stringstream s;
+    s << "mods::shader::CreateInjectionBufferIfNeeded(creating shader injection constant buffer";
+    s << ", floats: " << shader_injection_size;
+    s << ", bytes: " << byte_size;
+    s << ")";
+    reshade::log::message(reshade::log::level::info, s.str().c_str());
+  }
+
+  const bool created = device->create_resource(
+      desc,
+      nullptr,
+      reshade::api::resource_usage::cpu_access,
+      &data->injection_buffer);
+
+  {
+    std::stringstream s;
+    s << "mods::shader::CreateInjectionBufferIfNeeded(shader injection constant buffer creation returned";
+    s << ", created: " << (created ? "true" : "false");
+    s << ", handle: " << data->injection_buffer.handle;
+    s << ")";
+    reshade::log::message(reshade::log::level::info, s.str().c_str());
+  }
+
+  if (created) {
+    // Force the first present to upload, whatever the settings happen to be.
+    data->injection_buffer_contents.assign(shader_injection_size, std::numeric_limits<float>::quiet_NaN());
+    std::stringstream s;
+    s << "mods::shader::CreateInjectionBufferIfNeeded(shader injection bound as a constant buffer";
+    s << ", floats: " << shader_injection_size;
+    s << ", bytes: " << byte_size;
+    s << ")";
+    reshade::log::message(reshade::log::level::info, s.str().c_str());
+  } else {
+    // Without the buffer there is nothing to bind, so the layout stays on root constants and
+    // the original dword-budget truncation applies again. Loud, because every setting whose
+    // slot falls outside the budget silently stops responding.
+    data->injection_buffer = {0u};
+    reshade::log::message(
+        reshade::log::level::error,
+        "mods::shader::CreateInjectionBufferIfNeeded(failed to create the shader injection constant buffer; "
+        "falling back to root constants, which are subject to the 64-dword root signature budget)");
   }
 }
 
@@ -730,6 +796,8 @@ static bool OnCreatePipelineLayout(
     const uint32_t slots = shader_injection_size;
     const uint32_t used_dword_count = dword_count + descriptor_injection_cost;
     const uint32_t remaining_dword_count = used_dword_count >= 64u ? 0u : 64u - used_dword_count;
+
+    CreateInjectionBufferIfNeeded(device, data);
 
     // Where a buffer is available the injection block is bound as a root constant buffer view,
     // which costs two dwords no matter how many floats it carries. Shaders are unaffected: the

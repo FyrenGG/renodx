@@ -1309,7 +1309,25 @@ void main(
             //              contact result before the finer sub-pixel detail is composited on top of it and
             //              the two do not stack into crushed black contacts. At the Off value the gain is
             //              exactly 1.0 and the expression reduces to the vanilla one bit for bit.
-            float _rndx_microNearAccum = (saturate(1.0f - ((_2098 * _2098) * _2093)) * (1.0f - _1998)) * saturate((-0.0f - _2022) / (_1994 * 0.0046548597f));
+            //              With the Micro Shadow Flicker Fix on, each hit is additionally weighted by its
+            //              classification margin inside the thickness window divided by the sample's
+            //              jitter-uncertainty band - the measured along-ray depth gradient per screen pixel
+            //              times one texel of jitter envelope while jitter is live. A hit is trusted exactly in
+            //              proportion to how far its classification sits from what one jitter step can
+            //              overturn: stable flat content weighs 1, a texel that swaps surfaces between
+            //              frames collapses in both frames, so sub-pixel alternation loses its amplitude
+            //              instead of flipping the pixel's whole contact term. With the fix off the weight
+            //              is exactly 1 and the expression is unchanged.
+            float _rndxEvidenceW = 1.0f;
+            if (MICRO_SHADOW_FLICKER_FIX != 0.f && !_2014) {
+              float _rndxJitterPx = (length(_temporalAAJitter.xy - _temporalAAJitter.zw) > 0.0f) ? 1.0f : 0.0f;
+              float _rndxStepPx = max(length(float2((_1995 * _1971) * _bufferSizeAndInvSize.x, (_1995 * _1973) * _bufferSizeAndInvSize.y)), 1.0f);
+              float _rndxGradPerPx = abs(_2012 - _1997) / _rndxStepPx;
+              float _rndxBand = _rndxGradPerPx * _rndxJitterPx;
+              float _rndxMargin = _1968 - abs((_1993 + _1968) - _2012);
+              _rndxEvidenceW = (_rndxBand > 0.0f) ? saturate(_rndxMargin / _rndxBand) : 1.0f;
+            }
+            float _rndx_microNearAccum = (saturate(1.0f - ((_2098 * _2098) * _2093)) * (1.0f - _1998)) * saturate((-0.0f - _2022) / (_1994 * 0.0046548597f)) * _rndxEvidenceW;
             _2114 = saturate((_rndx_microNearAccum * lerp(1.0f, 0.7f, CONTACT_SHADOW_BASE_TUNING)) + _1998);
             // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
           } else {
@@ -1381,7 +1399,18 @@ void main(
         _2225 = 1.0f / ((float)((uint)((uint)(_1757))));
         _2236 = max(_2225, (1.0f / min(1.0f, (max(((_bufferSizeAndInvSize.x * 0.5f) * abs(_2221)), ((_bufferSizeAndInvSize.y * 0.5f) * abs(_2222))) * _2225))));
         _2237 = _2236 * (((mad((_viewProjRelative[2].z), _2198, mad((_viewProjRelative[2].y), _2197, ((_viewProjRelative[2].x) * _2196))) + (_viewProjRelative[2].w)) / _2214) - _2217);
-        _2256 = ((_1763 * 0.5f) * max(abs(_2237), (_2217 - ((mad((_proj[2].z), _113, 0.0f) + _2188) / (mad((_proj[3].z), _113, 0.0f) + _2192))))) * max(0.0625f, _2225);
+        // RenoDX: >>> [Patch: ShadowDistanceSeamFix] [Version: 1.18.00]
+        // Description: The far march halves the occluder acceptance window the vanilla near march uses,
+        //              and the switch between the two is a hard per-pixel branch at 8 m, so shadows step
+        //              in strength exactly at that distance. The half-width constant becomes a continuous
+        //              scale: the near march's full width at the boundary, converging to the native half
+        //              width by twice the split depth. Pixels beyond that span and the near march itself
+        //              are untouched, and with the fix off the scale is the native constant.
+        float _rndxFarWindowScale = (SHADOW_DISTANCE_SEAM_FIX != 0.f)
+                                        ? lerp(1.0f, 0.5f, saturate((_113 - 8.0f) * 0.125f))
+                                        : 0.5f;
+        _2256 = ((_1763 * _rndxFarWindowScale) * max(abs(_2237), (_2217 - ((mad((_proj[2].z), _113, 0.0f) + _2188) / (mad((_proj[3].z), _113, 0.0f) + _2192))))) * max(0.0625f, _2225);
+        // RenoDX: <<< [Patch: ShadowDistanceSeamFix]
         _2257 = _2236 * _2225;
         _2259 = (_2221 * 0.5f) * _2257;
         _2261 = (_2222 * -0.5f) * _2257;
@@ -1478,7 +1507,25 @@ void main(
             //              contact result before the finer sub-pixel detail is composited on top of it and
             //              the two do not stack into crushed black contacts. At the Off value the gain is
             //              exactly 1.0 and the expression reduces to the vanilla one bit for bit.
-            float _rndx_microFarAccum = (saturate(1.0f - ((_2386 * _2386) * _2381)) * (1.0f - _2286)) * saturate((-0.0f - _2310) / (_2280 * 0.0046548597f));
+            //              With the Micro Shadow Flicker Fix on, each hit is additionally weighted by its
+            //              classification margin inside the thickness window divided by the sample's
+            //              jitter-uncertainty band - the measured along-ray depth gradient per screen pixel
+            //              times one texel of jitter envelope while jitter is live. A hit is trusted exactly in
+            //              proportion to how far its classification sits from what one jitter step can
+            //              overturn: stable flat content weighs 1, a texel that swaps surfaces between
+            //              frames collapses in both frames, so sub-pixel alternation loses its amplitude
+            //              instead of flipping the pixel's whole contact term. With the fix off the weight
+            //              is exactly 1 and the expression is unchanged.
+            float _rndxEvidenceW = 1.0f;
+            if (MICRO_SHADOW_FLICKER_FIX != 0.f && !_2302) {
+              float _rndxJitterPx = (length(_temporalAAJitter.xy - _temporalAAJitter.zw) > 0.0f) ? 1.0f : 0.0f;
+              float _rndxStepPx = max(length(float2((_2279 * _2259) * _bufferSizeAndInvSize.x, (_2279 * _2261) * _bufferSizeAndInvSize.y)), 1.0f);
+              float _rndxGradPerPx = abs(_2300 - _2285) / _rndxStepPx;
+              float _rndxBand = _rndxGradPerPx * _rndxJitterPx;
+              float _rndxMargin = _2256 - abs((_2283 + _2256) - _2300);
+              _rndxEvidenceW = (_rndxBand > 0.0f) ? saturate(_rndxMargin / _rndxBand) : 1.0f;
+            }
+            float _rndx_microFarAccum = (saturate(1.0f - ((_2386 * _2386) * _2381)) * (1.0f - _2286)) * saturate((-0.0f - _2310) / (_2280 * 0.0046548597f)) * _rndxEvidenceW;
             _2402 = saturate((_rndx_microFarAccum * lerp(1.0f, 0.7f, CONTACT_SHADOW_BASE_TUNING)) + _2286);
             // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
           } else {

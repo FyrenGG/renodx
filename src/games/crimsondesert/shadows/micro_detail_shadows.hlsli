@@ -27,8 +27,8 @@
 // continuous thickness window with graduated occlusion, self-shadow rejection, stencil-id
 // exclusion (sky/VFX/cloth/velvet, table below), foliage thickness/occlusion boosts, and a
 // distance fade. Consumers: included only by the seven SceneShadowTiled replacement shaders
-// (SceneShadowTiled_0x0335F364, _0x27ED6B54, _0x42099399, _0xA216E553, _0xD770C829,
-// _0xF97D504B and SceneShadowTiledNight_0xBB1C6110); each call site passes its own tuning
+// (SceneShadowTiled_0x09B7D915, _0x2A3098C2, _0x41FB10C2, _0x5419027B, _0x5F9DC9F3,
+// _0x75CAD623 and SceneShadowTiledNight_0x004AE734); each call site passes its own tuning
 // constants from shared.h. Gate: internally gated at the top of ApplyContactMicroDetailShadow -
 // when MICRO_SHADOW_QUALITY <= MICRO_SHADOW_QUALITY_OFF or detailStrength <= 0 the helper
 // returns the incoming contact shadow unchanged, so setting the "Contact Micro Shadows" UI
@@ -118,6 +118,32 @@ float ApplyContactMicroDetailShadow(
 
   float _microShadow = 1.0f;
 
+  // Flicker-robust evidence weighting (gated by the Micro Shadow Flicker Fix setting; with it off
+  // every quantity below is dead and the march is bit-identical to the ungated code).
+  //
+  // DLSS jitter shifts the rasterized depth field by a sub-pixel amount every frame, and a march
+  // sample whose classification flips with that shift flips this pixel's whole shadow through the
+  // min() accumulation. Two measured discriminators bound that amplitude without any tuned
+  // threshold. First, each hit's contribution is weighted by its classification margin divided by
+  // its jitter-uncertainty band - the measured along-ray depth gradient per screen pixel times one
+  // texel of jitter envelope - so a sample is trusted exactly in proportion to how far its
+  // classification sits from what a sub-pixel jitter step can overturn. The envelope is a constant
+  // while the jitter sequence is live, never the instantaneous frame delta: the delta's magnitude
+  // varies with the jitter schedule, and a weight built from it would oscillate on samples whose
+  // classification is perfectly stable. On stable flat content the band is ~0 and the weight is
+  // exactly 1; on a texel that swaps surfaces between frames the gradient is gap-scale and the
+  // weight collapses in both frames. Second, a hit not corroborated by the previous step
+  // contributes at half amplitude: a real occluder spans consecutive steps, isolated single-step
+  // evidence is the signature of sub-pixel alternation.
+  float _microPrevLinScene = 0.0f;
+  float2 _microPrevUV = _microOriginUV;
+  float _microPrevValid = 0.0f;
+  float _microPrevHit = 0.0f;
+  float _microJitterPx = (MICRO_SHADOW_FLICKER_FIX != 0.f
+                          && length(_temporalAAJitter.xy - _temporalAAJitter.zw) > 0.0f)
+                             ? 1.0f
+                             : 0.0f;
+
   [loop]
   for (int _mi = 0; _mi < CONTACT_MICRO_STEPS; _mi++) {
     float _mt = mad((float)_mi + 0.5f, _microStep, _microJitter * _microStep);
@@ -136,19 +162,31 @@ float ApplyContactMicroDetailShadow(
                   mad(_viewProjRelative[3].y, _msp.y,
                       _viewProjRelative[3].x * _msp.x)) + _viewProjRelative[3].w;
 
-    if (_mcw <= 0.0f) continue;
+    if (_mcw <= 0.0f) {
+      _microPrevHit = 0.0f;
+      _microPrevValid = 0.0f;
+      continue;
+    }
 
     float _rcpW = rcp(_mcw);
     float2 _muv = float2(mad(_mcx, _rcpW, 1.0f) * 0.5f,
                          mad(-_mcy, _rcpW, 1.0f) * 0.5f);
-    if (any(_muv < 0.0f) || any(_muv > 1.0f)) continue;
+    if (any(_muv < 0.0f) || any(_muv > 1.0f)) {
+      _microPrevHit = 0.0f;
+      _microPrevValid = 0.0f;
+      continue;
+    }
 
     // Self shadow rejection.
     float2 _mPixelDist = abs(_muv - _microOriginUV) * _bufferSizeAndInvSize.xy;
     float _microSelfDist = max(_mPixelDist.x, _mPixelDist.y);
     float _microSelfFade = saturate((_microSelfDist - selfRejectPixels) / selfFadePixels);
     _microSelfFade = _microSelfFade * _microSelfFade * (3.0f - (2.0f * _microSelfFade));
-    if (_microSelfFade <= 0.0f) continue;
+    if (_microSelfFade <= 0.0f) {
+      _microPrevHit = 0.0f;
+      _microPrevValid = 0.0f;
+      continue;
+    }
 
     float _mRayDepth = _mcz * _rcpW;
     // The bounds test above rejects UVs above 1 but admits exactly 1, which scales to the pixel index
@@ -169,7 +207,11 @@ float ApplyContactMicroDetailShadow(
         || _mst == 21u
         || _mst == 22u
         || _mst == 33u
-        || _mst == 54u) continue;
+        || _mst == 54u) {
+      _microPrevHit = 0.0f;
+      _microPrevValid = 0.0f;
+      continue;
+    }
 
     float _microFoliageSample = (((_mst >= 11u && _mst <= 19u) || _mst == 66u || _mst == 107u) ? 1.0f : 0.0f);
     float _microSampleThick = _microWorldThick * lerp(1.0f, foliageThicknessBoost, _microFoliageSample);
@@ -177,19 +219,47 @@ float ApplyContactMicroDetailShadow(
 
     float _msd = float(_mdr & 0xFFFFFF) * 5.960465188081798e-08f;
 
-    if (_msd < 1e-7f || _msd >= 1.0f) continue;
+    if (_msd < 1e-7f || _msd >= 1.0f) {
+      _microPrevHit = 0.0f;
+      _microPrevValid = 0.0f;
+      continue;
+    }
 
     // Perspective corrected depth comparison.
     float _mLinScene = _nearFarProj.x / max(1e-7f, _msd);
     float _mLinRay = _nearFarProj.x / max(1e-7f, _mRayDepth);
     float _mLinDelta = _mLinRay - _mLinScene;
 
+    // Jitter-uncertainty band of this sample: the measured along-ray depth gradient per screen
+    // pixel times one texel of jitter envelope while jitter is live. Zero with the fix off, with TAA
+    // off, or at the first comparable sample of the ray.
+    float _mSamplePixDist = length((_muv - _microPrevUV) * _bufferSizeAndInvSize.xy);
+    float _mGradPx = (_microPrevValid > 0.0f)
+                         ? abs(_mLinScene - _microPrevLinScene) / max(_mSamplePixDist, 1.0f)
+                         : 0.0f;
+    float _mBand = _mGradPx * _microJitterPx;
+
     // Scene must be closer than ray (positive delta = scene in front of ray)
     // and within the thickness window.
     if (_mLinDelta >= 0.0f && _mLinDelta <= _microSampleThick) {
       float _mocc = saturate(_mLinDelta / _microSampleThick * _microSampleOcclusionScale) * _microSelfFade;
+      if (MICRO_SHADOW_FLICKER_FIX != 0.f) {
+        // Trust the hit in proportion to how far its classification sits from what a sub-pixel
+        // jitter step can overturn, and halve isolated single-step evidence. Both act only while
+        // the jitter sequence is live; without jitter the alternation they bound cannot occur.
+        float _mMargin = min(_mLinDelta, _microSampleThick - _mLinDelta);
+        float _mW = (_mBand > 0.0f) ? saturate(_mMargin / _mBand) : 1.0f;
+        _mocc *= _mW * lerp((_microJitterPx > 0.0f) ? 0.5f : 1.0f, 1.0f, _microPrevHit);
+      }
       _microShadow = min(_microShadow, 1.0f - _mocc);
+      _microPrevHit = 1.0f;
+    } else {
+      _microPrevHit = 0.0f;
     }
+
+    _microPrevLinScene = _mLinScene;
+    _microPrevUV = _muv;
+    _microPrevValid = 1.0f;
   }
 
   float _microResult = lerp(1.0f, _microShadow, saturate(_microDistFade * detailStrength));

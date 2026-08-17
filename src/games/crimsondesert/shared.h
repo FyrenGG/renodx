@@ -54,6 +54,8 @@
 #define CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED       0b100u
 #define CUSTOM_FLAGS2__SPECTRAL_FIELD                   (CUSTOM_FLAGS2__SPECTRAL_STRENGTH_SUBTLE | CUSTOM_FLAGS2__SPECTRAL_STRENGTH_BALANCED)
 #define CUSTOM_FLAGS2__SHADOW_BAND_FIX                  0b1000u
+#define CUSTOM_FLAGS2__MICRO_SHADOW_FLICKER_FIX         0b10000u
+#define CUSTOM_FLAGS2__SHADOW_DISTANCE_SEAM_FIX         0b1000000u
 #define CUSTOM_FLAGS2                              shader_injection.custom_flags_2
 
 #ifdef __cplusplus
@@ -84,6 +86,18 @@
 // receiver-plane guard in the SceneShadowTiled far march). Off keeps the guard reject false and the
 // envelope factor at 1.0, so the accumulation resolves to the native expression exactly.
 #define SHADOW_BAND_FIX                        ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SHADOW_BAND_FIX) != 0u ? 1.f : 0.f)
+// Master gate for the contact-shadow stability pair. Under it: the evidence weighting in the micro
+// and native contact marches (each hit trusted by its classification margin against the
+// jitter-uncertainty band, isolated micro hits halved), and the jitter-stable SSDM fill-hole depth
+// displacement. Off keeps both paths bit-for-bit vanilla.
+#define MICRO_SHADOW_FLICKER_FIX               ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__MICRO_SHADOW_FLICKER_FIX) != 0u ? 1.f : 0.f)
+// Gate for dissolving the contact-shadow seam at the 8 m near/far march split. The two-march
+// SceneShadowTiled lanes halve the occluder acceptance window and engage the far-only band-fix
+// attenuation the instant a pixel crosses 8 m, with no feather, which reads as a strength seam at
+// that distance. On raises the far march's window to the near march's full width at the boundary
+// and converges it to the native half width by twice the split depth, and feathers the band-fix
+// onset over the same span. The near march is never touched, so inside 8 m nothing changes.
+#define SHADOW_DISTANCE_SEAM_FIX               ((CUSTOM_FLAGS2_AS_UINT & CUSTOM_FLAGS2__SHADOW_DISTANCE_SEAM_FIX) != 0u ? 1.f : 0.f)
 
 #define RENODX_TONE_MAP_TYPE                   ((CUSTOM_FLAGS_AS_UINT & CUSTOM_FLAGS__TONE_MAP_TYPE) != 0u ? 1.f : 0.f)
 #define RENODX_PEAK_WHITE_NITS                 shader_injection.peak_white_nits

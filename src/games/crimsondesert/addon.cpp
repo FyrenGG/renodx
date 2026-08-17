@@ -1810,6 +1810,44 @@ renodx::utils::settings::Settings settings = {
         .is_visible = []() { return current_settings_mode == rendering_group; },
     },
     new renodx::utils::settings::Setting{
+        .key = "MicroShadowFlickerFix",
+        .binding = &shader_injection.custom_flags_2,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 1.f,
+        .packed_values = {0u, CUSTOM_FLAGS2__MICRO_SHADOW_FLICKER_FIX},
+        .can_reset = true,
+        .label = "Micro Shadow Flicker Fix",
+        .section = "Shadows",
+        .tooltip = "Stabilises the frame-to-frame flicker in fine contact shadows on stairs, foliage and\n"
+                   "displaced ground. Shadow samples are trusted in proportion to how firmly they survive the\n"
+                   "upscaler's sub-pixel jitter, and the depth written into displaced-surface holes is steadied\n"
+                   "at its source.\n"
+                   "Off = vanilla shadows.\n"
+                   "On = same shadow strength, steadier between frames.",
+        .labels = {"Off", "On"},
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
+        .key = "ShadowDistanceSeamFix",
+        .binding = &shader_injection.custom_flags_2,
+        .value_type = renodx::utils::settings::SettingValueType::INTEGER,
+        .default_value = 1.f,
+        .packed_values = {0u, CUSTOM_FLAGS2__SHADOW_DISTANCE_SEAM_FIX},
+        .can_reset = true,
+        .label = "Shadow Distance Seam Fix",
+        .section = "Shadows",
+        .tooltip = "Dissolves the visible seam where near and far contact shadows meet at a fixed distance\n"
+                   "from the camera on lighting settings that split the shadow march in two. The far side is\n"
+                   "raised to match the near side at the boundary and eased back over distance, so close-range\n"
+                   "shadows are untouched and the transition band gains detail instead of losing it.\n"
+                   "Off = vanilla hard hand-over.\n"
+                   "On = continuous hand-over.",
+        .labels = {"Off", "On"},
+        .tint = rendering,
+        .is_visible = []() { return current_settings_mode == rendering_group; },
+    },
+    new renodx::utils::settings::Setting{
         .key = "ContactShadowQuality",
         .binding = &shader_injection.custom_flags,
         .value_type = renodx::utils::settings::SettingValueType::INTEGER,

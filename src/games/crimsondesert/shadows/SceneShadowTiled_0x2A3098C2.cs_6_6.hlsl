@@ -3326,7 +3326,25 @@ void main(
             //              the ray-traced lane can deepen its own coarse contact term to match the finer
             //              sub-pixel detail composited later. At the Off value the tuning weight is 0, the gain
             //              is exactly 1.0, and the expression reduces to the vanilla one bit for bit.
-            float _microNearAccum = (saturate(1.0f - ((_5877 * _5877) * _5872)) * (1.0f - _5777)) * saturate((-0.0f - _5801) / (_5773 * 0.0046548597f));
+            //              With the Micro Shadow Flicker Fix on, each hit is additionally weighted by its
+            //              classification margin inside the thickness window divided by the sample's
+            //              jitter-uncertainty band - the measured along-ray depth gradient per screen pixel
+            //              times one texel of jitter envelope while jitter is live. A hit is trusted exactly in
+            //              proportion to how far its classification sits from what one jitter step can
+            //              overturn: stable flat content weighs 1, a texel that swaps surfaces between
+            //              frames collapses in both frames, so sub-pixel alternation loses its amplitude
+            //              instead of flipping the pixel's whole contact term. With the fix off the weight
+            //              is exactly 1 and the expression is unchanged.
+            float _rndxEvidenceW = 1.0f;
+            if (MICRO_SHADOW_FLICKER_FIX != 0.f && !_5793) {
+              float _rndxJitterPx = (length(_temporalAAJitter.xy - _temporalAAJitter.zw) > 0.0f) ? 1.0f : 0.0f;
+              float _rndxStepPx = max(length(float2((_5774 * _5750) * _bufferSizeAndInvSize.x, (_5774 * _5752) * _bufferSizeAndInvSize.y)), 1.0f);
+              float _rndxGradPerPx = abs(_5791 - _5776) / _rndxStepPx;
+              float _rndxBand = _rndxGradPerPx * _rndxJitterPx;
+              float _rndxMargin = _5747 - abs((_5772 + _5747) - _5791);
+              _rndxEvidenceW = (_rndxBand > 0.0f) ? saturate(_rndxMargin / _rndxBand) : 1.0f;
+            }
+            float _microNearAccum = (saturate(1.0f - ((_5877 * _5877) * _5872)) * (1.0f - _5777)) * saturate((-0.0f - _5801) / (_5773 * 0.0046548597f)) * _rndxEvidenceW;
             _5893 = saturate((_microNearAccum * lerp(1.0f, CONTACT_SHADOW_RT_ACCUM_STRENGTH, CONTACT_SHADOW_RT_TUNING)) + _5777);
             // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
           } else {
@@ -3398,7 +3416,18 @@ void main(
         _6004 = 1.0f / ((float)((uint)((uint)(_5399))));
         _6015 = max(_6004, (1.0f / min(1.0f, (max(((_bufferSizeAndInvSize.x * 0.5f) * abs(_6000)), ((_bufferSizeAndInvSize.y * 0.5f) * abs(_6001))) * _6004))));
         _6016 = _6015 * (((mad((_viewProjRelative[2].z), _5977, mad((_viewProjRelative[2].y), _5976, ((_viewProjRelative[2].x) * _5975))) + (_viewProjRelative[2].w)) / _5993) - _5996);
-        _6035 = ((_5405 * 0.5f) * max(abs(_6016), (_5996 - ((mad((_proj[2].z), _115, 0.0f) + _5967) / (mad((_proj[3].z), _115, 0.0f) + _5971))))) * max(0.0625f, _6004);
+        // RenoDX: >>> [Patch: ShadowDistanceSeamFix] [Version: 1.18.00]
+        // Description: The far march halves the occluder acceptance window the vanilla near march uses,
+        //              and the switch between the two is a hard per-pixel branch at 8 m, so shadows step
+        //              in strength exactly at that distance. The half-width constant becomes a continuous
+        //              scale: the near march's full width at the boundary, converging to the native half
+        //              width by twice the split depth. Pixels beyond that span and the near march itself
+        //              are untouched, and with the fix off the scale is the native constant.
+        float _rndxFarWindowScale = (SHADOW_DISTANCE_SEAM_FIX != 0.f)
+                                        ? lerp(1.0f, 0.5f, saturate((_115 - 8.0f) * 0.125f))
+                                        : 0.5f;
+        _6035 = ((_5405 * _rndxFarWindowScale) * max(abs(_6016), (_5996 - ((mad((_proj[2].z), _115, 0.0f) + _5967) / (mad((_proj[3].z), _115, 0.0f) + _5971))))) * max(0.0625f, _6004);
+        // RenoDX: <<< [Patch: ShadowDistanceSeamFix]
         _6036 = _6015 * _6004;
         _6038 = (_6000 * 0.5f) * _6036;
         _6040 = (_6001 * -0.5f) * _6036;
@@ -3522,6 +3551,17 @@ void main(
               _rndxSiReject = (SHADOW_BAND_FIX != 0.f) && isfinite(_rndxSiPlaneZ) && (_rndxSiPlaneZ >= 0.0f) && (_rndxSiPlaneZ <= 1.0f) && (_rndxSiFront <= _rndxSiEps);
             }
             // RenoDX: <<< [Patch: ContactSelfIntersectionGuard]
+            // RenoDX: >>> [Patch: ShadowDistanceSeamFix] [Version: 1.18.00]
+            // Description: The self-intersection guard exists only in the far march, so its
+            //              reclassification engages as a hard step the instant a pixel crosses the
+            //              8 m split. It is held inert across the same span the window scale
+            //              converges over and becomes native beyond it: the banding it suppresses
+            //              scales with distance and is negligible inside that span, and the near
+            //              march it hands over from runs no guard at all.
+            if ((SHADOW_DISTANCE_SEAM_FIX != 0.f) && (((_115 - 8.0f) * 0.125f) < 1.0f)) {
+              _rndxSiReject = false;
+            }
+            // RenoDX: <<< [Patch: ShadowDistanceSeamFix]
             // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
             // Description: Suppresses far contact hits finer than the receiver surface's own measured relief.
             // E is the maximum nearer-side deviation, in unorm24 depth codes, of the depth-continuous
@@ -3656,6 +3696,18 @@ void main(
                 }
               }
             }
+            // RenoDX: >>> [Patch: ShadowDistanceSeamFix] [Version: 1.18.00]
+            // Description: The band-fix envelope exists only in the far march, so its attenuation
+            //              engages at full strength the instant a pixel crosses the 8 m split and
+            //              contributes a second step to the near/far seam. Its effect is feathered in
+            //              across the same span the window scale converges over: no attenuation at the
+            //              boundary, full native band-fix behaviour by twice the split depth. Applied
+            //              before the full-suppression test so a feathered sample can never be rejected
+            //              harder than an unfeathered one.
+            if (SHADOW_DISTANCE_SEAM_FIX != 0.f) {
+              _rndxCpeFactor = lerp(1.0f, _rndxCpeFactor, saturate((_115 - 8.0f) * 0.125f));
+            }
+            // RenoDX: <<< [Patch: ShadowDistanceSeamFix]
             if (_rndxCpeFactor <= 0.0f) {
               _rndxSiReject = true;
             }
@@ -3676,12 +3728,30 @@ void main(
             //              the ray-traced lane can deepen its own coarse contact term to match the finer
             //              sub-pixel detail composited later. At the Off value the tuning weight is 0, the gain
             //              is exactly 1.0, and the expression reduces to the vanilla one bit for bit.
+            //              With the Micro Shadow Flicker Fix on, each hit is additionally weighted by its
+            //              classification margin inside the thickness window divided by the sample's
+            //              jitter-uncertainty band - the measured along-ray depth gradient per screen pixel
+            //              times one texel of jitter envelope while jitter is live. A hit is trusted exactly in
+            //              proportion to how far its classification sits from what one jitter step can
+            //              overturn: stable flat content weighs 1, a texel that swaps surfaces between
+            //              frames collapses in both frames, so sub-pixel alternation loses its amplitude
+            //              instead of flipping the pixel's whole contact term. With the fix off the weight
+            //              is exactly 1 and the expression is unchanged.
             // RenoDX: >>> [Patch: ConnectedPatchEnvelope] [Version: 1.16.00]
             // Description: Scales this accepted sample's occlusion by the connected-patch envelope factor.
             // Every native factor already in the product is carried through unchanged and the envelope
             // factor is appended, never substituted. A suppressed sample carries the prior accumulation.
             if (!_rndxSiReject) {
-              float _microFarAccum = (saturate(1.0f - ((_6165 * _6165) * _6160)) * (1.0f - _6065)) * saturate((-0.0f - _6089) / (_6059 * 0.0046548597f)) * _rndxCpeFactor;
+              float _rndxEvidenceW = 1.0f;
+              if (MICRO_SHADOW_FLICKER_FIX != 0.f && !_6081) {
+                float _rndxJitterPx = (length(_temporalAAJitter.xy - _temporalAAJitter.zw) > 0.0f) ? 1.0f : 0.0f;
+                float _rndxStepPx = max(length(float2((_6058 * _6038) * _bufferSizeAndInvSize.x, (_6058 * _6040) * _bufferSizeAndInvSize.y)), 1.0f);
+                float _rndxGradPerPx = abs(_6079 - _6064) / _rndxStepPx;
+                float _rndxBand = _rndxGradPerPx * _rndxJitterPx;
+                float _rndxMargin = _6035 - abs((_6062 + _6035) - _6079);
+                _rndxEvidenceW = (_rndxBand > 0.0f) ? saturate(_rndxMargin / _rndxBand) : 1.0f;
+              }
+              float _microFarAccum = (saturate(1.0f - ((_6165 * _6165) * _6160)) * (1.0f - _6065)) * saturate((-0.0f - _6089) / (_6059 * 0.0046548597f)) * _rndxCpeFactor * _rndxEvidenceW;
               _6181 = saturate((_microFarAccum * lerp(1.0f, CONTACT_SHADOW_RT_ACCUM_STRENGTH, CONTACT_SHADOW_RT_TUNING)) + _6065);
             } else {
               _6181 = _6065;

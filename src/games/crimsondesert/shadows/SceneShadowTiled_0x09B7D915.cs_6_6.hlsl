@@ -1156,7 +1156,25 @@ void main(
           //              contact result before the finer sub-pixel detail is composited on top of it and
           //              the two do not stack into crushed black contacts. At the Off value the gain is
           //              exactly 1.0 and the expression reduces to the vanilla one bit for bit.
-          float _rndxMicroFarAccum = (saturate(1.0f - ((_1749 * _1749) * _1744)) * (1.0f - _1649)) * saturate((-0.0f - _1673) / (_1644 * 0.0046548597f));
+          //              With the Micro Shadow Flicker Fix on, each hit is additionally weighted by its
+          //              classification margin inside the thickness window divided by the sample's
+          //              jitter-uncertainty band - the measured along-ray depth gradient per screen pixel
+          //              times one texel of jitter envelope while jitter is live. A hit is trusted exactly in
+          //              proportion to how far its classification sits from what one jitter step can
+          //              overturn: stable flat content weighs 1, a texel that swaps surfaces between
+          //              frames collapses in both frames, so sub-pixel alternation loses its amplitude
+          //              instead of flipping the pixel's whole contact term. With the fix off the weight
+          //              is exactly 1 and the expression is unchanged.
+          float _rndxEvidenceW = 1.0f;
+          if (MICRO_SHADOW_FLICKER_FIX != 0.f && !_1665) {
+            float _rndxJitterPx = (length(_temporalAAJitter.xy - _temporalAAJitter.zw) > 0.0f) ? 1.0f : 0.0f;
+            float _rndxStepPx = max(length(float2((_1645 * _1622) * _bufferSizeAndInvSize.x, (_1645 * _1624) * _bufferSizeAndInvSize.y)), 1.0f);
+            float _rndxGradPerPx = abs(_1663 - _1648) / _rndxStepPx;
+            float _rndxBand = _rndxGradPerPx * _rndxJitterPx;
+            float _rndxMargin = _1619 - abs((_1643 + _1619) - _1663);
+            _rndxEvidenceW = (_rndxBand > 0.0f) ? saturate(_rndxMargin / _rndxBand) : 1.0f;
+          }
+          float _rndxMicroFarAccum = (saturate(1.0f - ((_1749 * _1749) * _1744)) * (1.0f - _1649)) * saturate((-0.0f - _1673) / (_1644 * 0.0046548597f)) * _rndxEvidenceW;
           _1765 = saturate((_rndxMicroFarAccum * lerp(1.0f, 0.7f, CONTACT_SHADOW_BASE_TUNING)) + _1649);
           // RenoDX: <<< [Patch: ContactMicroShadowsFamily]
         } else {

@@ -4571,6 +4571,20 @@ void main(
                   _4294 = 0.0f;
                   _4295 = 0.0f;
                 }
+                // RenoDX: >>> [Patch: MaterialSmoothTerminator] [Version: 1.18.00]
+                // Description: Softens the geometric shadow terminator after this direct-light clone has
+                //              resolved its diffuse scalar and specular RGB. The shared factor multiplies
+                //              all four outputs at the clone's common post-specular boundary so the direct
+                //              lighting response remains consistent across material branches. The entire
+                //              mutation is gated; at zero no output is written.
+                if (SMOOTH_TERMINATOR > 0.0f) {
+                  float _rndx_c2 = CallistoSmoothTerminator(_4206, _3727, _3724, SMOOTH_TERMINATOR, 0.5f);
+                  _4247 *= _rndx_c2;
+                  _4293 *= _rndx_c2;
+                  _4294 *= _rndx_c2;
+                  _4295 *= _rndx_c2;
+                }
+                // RenoDX: <<< [Patch: MaterialSmoothTerminator]
                 if (_3635) {
                   if (_3566 == 65) {
                     _4339 = _4293;
@@ -5259,6 +5273,20 @@ void main(
                 _4294 = 0.0f;
                 _4295 = 0.0f;
               }
+              // RenoDX: >>> [Patch: MaterialSmoothTerminator] [Version: 1.18.00]
+              // Description: Softens the geometric shadow terminator after this direct-light clone has
+              //              resolved its diffuse scalar and specular RGB. The shared factor multiplies
+              //              all four outputs at the clone's common post-specular boundary so the direct
+              //              lighting response remains consistent across material branches. The entire
+              //              mutation is gated; at zero no output is written.
+              if (SMOOTH_TERMINATOR > 0.0f) {
+                float _rndx_c2 = CallistoSmoothTerminator(_4206, _3727, _3724, SMOOTH_TERMINATOR, 0.5f);
+                _4247 *= _rndx_c2;
+                _4293 *= _rndx_c2;
+                _4294 *= _rndx_c2;
+                _4295 *= _rndx_c2;
+              }
+              // RenoDX: <<< [Patch: MaterialSmoothTerminator]
               if (_3635) {
                 if (_3566 == 65) {
                   _4339 = _4293;
@@ -5522,6 +5550,20 @@ void main(
                   _4294 = 0.0f;
                   _4295 = 0.0f;
                 }
+                // RenoDX: >>> [Patch: MaterialSmoothTerminator] [Version: 1.18.00]
+                // Description: Softens the geometric shadow terminator after this direct-light clone has
+                //              resolved its diffuse scalar and specular RGB. The shared factor multiplies
+                //              all four outputs at the clone's common post-specular boundary so the direct
+                //              lighting response remains consistent across material branches. The entire
+                //              mutation is gated; at zero no output is written.
+                if (SMOOTH_TERMINATOR > 0.0f) {
+                  float _rndx_c2 = CallistoSmoothTerminator(_4206, _3727, _3724, SMOOTH_TERMINATOR, 0.5f);
+                  _4247 *= _rndx_c2;
+                  _4293 *= _rndx_c2;
+                  _4294 *= _rndx_c2;
+                  _4295 *= _rndx_c2;
+                }
+                // RenoDX: <<< [Patch: MaterialSmoothTerminator]
                 if (_3635) {
                   if (_3566 == 65) {
                     _4339 = _4293;

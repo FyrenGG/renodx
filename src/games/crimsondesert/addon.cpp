@@ -331,8 +331,8 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
   // fails — the draw simply never matches, RR is never detected, and every RR-gated setting silently
   // greys out. Verify with tools/crimsondesert/shader-port/audit-addon-hash-literals.py, which checks
   // every literal here against the old and new package indexes.
-  constexpr uint32_t kDlssRayReconstructionDetectorHash = 0xDD42F2AFu;    // PrepareDlssRRCS
-  constexpr uint32_t kSpecularRayRegenerationDetectorHash = 0x38AF6512u;  // EvaluateSpecularRadianceCS
+  constexpr uint32_t kDlssRayReconstructionDetectorHash = 0xE74E7BB9u;    // PrepareDlssRRCS
+  constexpr uint32_t kSpecularRayRegenerationDetectorHash = 0x502D29E4u;  // EvaluateSpecularRadianceCS
   for (uint32_t hash : {kDlssRayReconstructionDetectorHash, kSpecularRayRegenerationDetectorHash}) {
     if (auto it = shaders.find(hash); it != shaders.end()) {
       MarkShaderDraw(it->second, &rr_draw);
@@ -385,7 +385,7 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
            0x3BD9B659u,
            0xDA8FBAE0u,
            0xEE0CECD7u,
-           0xC7260E2Cu,
+           0xE17AA15Bu,
            0x7AFF85FBu,
            0x5AC52CC0u,
            0xABD4F0F0u,
@@ -396,7 +396,7 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
            0x7435F82Eu,
            0xBAF22F5Du,
            0x3E48D7FBu,
-           0x529905BFu,
+           0xB74CB520u,
            0x56CA7884u,
            0x2BF2EEBDu,
            0x1F607AFBu,
@@ -406,7 +406,7 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
            0xFD190C4Bu,
            0x983BBCCBu,
            0x610A098Du,
-           0x65EF1B25u,
+           0xB924B38Au,
            0xD61ECE5Au,
            0xB3150D35u,
            0x7FCE36A0u,
@@ -427,7 +427,7 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
            0x92261C72u,
            0x006F1984u,
            0x38214B2Eu,
-           0x7E7DE3F0u,
+           0xFC6CEAE2u,
            0x8CB8175Cu,
            0x4A7DA03Bu,
            0x68FC926Du,
@@ -438,7 +438,7 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
            0x9ED2E4BEu,
            0x800DB1E9u,
            0x703800A6u,
-           0xF4696827u,
+           0x2D91BDF0u,
            0xCEC0498Fu,
            0x1853B108u,
            0x5473F561u,
@@ -449,7 +449,7 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
            0x560CB899u,
            0x4F440E8Du,
            0xA14EECA2u,
-           0xC156A006u,
+           0xA8E7F95Bu,
            0xE4B1EF01u,
            0x832CFB07u,
            0x32C7561Eu,
@@ -465,7 +465,7 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
            0x7A2F38C1u,
            0x6CAFE1CAu,
            0x533564B2u,
-           0x041BD291u,
+           0x45C9A3F1u,
            0xB7505775u,
            0x27A179B2u,
            0xEC3F2388u,
@@ -477,7 +477,7 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
            0xB8AEC8BCu,
            0xADAD3E01u,
            0x56606D3Cu,
-           0xF9D641ADu,
+           0xD543B916u,
            0x42FEFA36u,
            0x7BE1FCFBu,
            0xE0E9B821u,
@@ -603,8 +603,8 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
   // UI/HUD draw gates from SDR/HDR DevKit snapshots.
   // These VSMain families cover the observed UI pixel shader variants
   for (uint32_t hash : {
-           0x8D440999u,
-           0xC6582593u,
+           0x003A819Eu,
+           0x84EA6B54u,
        }) {
     AttachUIShaderDrawGate(shaders, hash);
   }

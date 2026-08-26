@@ -245,10 +245,16 @@ std::chrono::steady_clock::time_point dawn_dusk_blend_start{};
 float dawn_dusk_blend_duration = 60.f;  // seconds to crossfade between presets
 bool postprocess_material_draw = false;
 bool final_sdr_draw = false;
+bool scene_output_draw = false;
 // Presents-since-last-sighting counters for basic postprocess final detection (see
 // OnPresent). Initialized high so the flag starts disengaged until each path is seen.
 int presents_since_material_draw = 1000;
 int presents_since_final_sdr_draw = 1000;
+// Presents since a scene-render detector (exposure/histogram/bloom) was seen (see
+// custom_shaders). Arms the Disable UI/HUD skip: boot logos, the title screen, and
+// front-end menus are UI-only frames, so a saved-on setting stays inert there instead
+// of blacking out the startup path. Initialized high so the gate starts disarmed.
+int presents_since_scene_output_draw = 1000;
 
 constexpr uint32_t kAuroraSessionSeedMask = 0x00ffffffu;
 constexpr float kAuroraSessionSeedScale = 1.f / 16777215.f;
@@ -291,6 +297,11 @@ void MarkShaderDraw(renodx::mods::shader::CustomShader& shader, bool* marker) {
   };
 }
 
+// How many presents scene-output evidence stays fresh for the UI/HUD skip. Long enough to
+// bridge frame-generation presents and brief postprocess arrangement switches, short enough
+// that quitting to the title screen brings the UI back within about half a second.
+constexpr int kUIDisableSceneLookback = 30;
+
 void AttachUIShaderDrawGate(renodx::mods::shader::CustomShaders& shaders, uint32_t hash) {
   auto [it, inserted] = shaders.try_emplace(hash);
   if (inserted) it->second.crc32 = hash;
@@ -299,7 +310,13 @@ void AttachUIShaderDrawGate(renodx::mods::shader::CustomShaders& shaders, uint32
   it->second.on_draw = [previous_on_draw = std::move(previous_on_draw)](reshade::api::command_list* cmd_list) {
     // on_draw runs before on_replace and can skip the draw outright, so the master gate cannot
     // reach this through the replacement veto and is checked directly.
-    if (renodx_active != 0.f && disable_ui_shaders != 0.f) return false;
+    // Scene check: UI-only frames (boot logos, title screen, front-end menus) never arm
+    // the skip, so a saved-on setting cannot black out the startup path. The live bool
+    // covers the current frame; the counter covers recent presents (frame-gen gaps).
+    if (renodx_active != 0.f && disable_ui_shaders != 0.f
+        && (scene_output_draw || presents_since_scene_output_draw <= kUIDisableSceneLookback)) {
+      return false;
+    }
     return previous_on_draw == nullptr || previous_on_draw(cmd_list);
   };
 }
@@ -598,6 +615,20 @@ renodx::mods::shader::CustomShaders custom_shaders = [] {
        }) {
     if (auto it = shaders.find(hash); it != shaders.end()) {
       MarkShaderDraw(it->second, &final_sdr_draw);
+    }
+  }
+  // Scene-render detectors for the Disable UI/HUD gate. AdaptExposure, the exposure
+  // histogram, and the bloom downsample run every frame the 3D scene renders, in SDR
+  // and HDR alike, and never on the UI-only frames of the startup path (boot logos,
+  // title screen, front-end menus): with UI draws skipped those frames were fully
+  // black, so no scene pass can be running there. While none has drawn recently the
+  // UI/HUD skip stays inert.
+  constexpr uint32_t kAdaptExposureDetectorHash = 0xEC695D7Du;      // AdaptExposureCS
+  constexpr uint32_t kExposureHistogramDetectorHash = 0x40C49F1Eu;  // Histogram-AWB CS
+  constexpr uint32_t kBloomDownsampleDetectorHash = 0x6E65D8B1u;    // BloomDownsampleCS
+  for (uint32_t hash : {kAdaptExposureDetectorHash, kExposureHistogramDetectorHash, kBloomDownsampleDetectorHash}) {
+    if (auto it = shaders.find(hash); it != shaders.end()) {
+      MarkShaderDraw(it->second, &scene_output_draw);
     }
   }
   // UI/HUD draw gates from SDR/HDR DevKit snapshots.
@@ -2088,6 +2119,9 @@ renodx::utils::settings::Settings settings = {
         .label = "Disable UI/HUD",
         .section = "Capture Tools",
         .tooltip = "Skips known UI vertex shader draw families for gameplay captures.\n"
+                   "Only takes effect while gameplay is rendering: boot logos, the title\n"
+                   "screen, and menus before a save is loaded keep their UI, so starting\n"
+                   "the game with this enabled never shows a black screen.\n"
                    "Off = normal UI/HUD rendering.",
         .labels = {"Off", "On"},
         .is_visible = []() { return current_settings_mode == experimental_group; },
@@ -2298,14 +2332,21 @@ void OnPresent(reshade::api::command_queue* /*queue*/,
   if (presents_since_final_sdr_draw < 1000) {
     presents_since_final_sdr_draw++;
   }
+  if (presents_since_scene_output_draw < 1000) {
+    presents_since_scene_output_draw++;
+  }
   if (postprocess_material_draw) {
     presents_since_material_draw = 0;
   }
   if (final_sdr_draw) {
     presents_since_final_sdr_draw = 0;
   }
+  if (scene_output_draw) {
+    presents_since_scene_output_draw = 0;
+  }
   postprocess_material_draw = false;
   final_sdr_draw = false;
+  scene_output_draw = false;
 
   uint32_t custom_flags = CUSTOM_FLAGS_AS_UINT;
   const bool basic_postprocess_now = !last_is_hdr

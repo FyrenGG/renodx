@@ -1,3 +1,10 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the shared options and helpers used by this shader's RenoDX patches. This dependency-only prefix adds no native executable statement; removing it restores the native shader body byte-for-byte.
+#include "../shared.h"
+#include "diffuse_brdf.hlsli"
+#include "foliage_common.hlsli"
+#include "purkinje_common.hlsli"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
 Texture2D<float4> __3__36__0__0__g_puddleMask : register(t136, space36);
 
 Texture2D<float4> __3__36__0__0__g_climateSandTex : register(t137, space36);
@@ -322,6 +329,12 @@ void main(
   uint3 SV_GroupThreadID : SV_GroupThreadID,
   uint SV_GroupIndex : SV_GroupIndex
 ) {
+  // RenoDX: >>> [Patch: FoliageTransmissionState] [Version: 1.16.00]
+  // Description: Declares per-invocation foliage transmission accumulators at main-function scope so the structurally consolidated lighting branch can write them and the later clean-decompile output join can consume them. They remain zero when the gated hook does not run.
+  float _rndx_foliageTransR = 0.0f;
+  float _rndx_foliageTransG = 0.0f;
+  float _rndx_foliageTransB = 0.0f;
+  // RenoDX: <<< [Patch: FoliageTransmissionState]
   int _63;
   int _64;
   int4 _72;
@@ -1200,6 +1213,25 @@ void main(
       _456 = _301;
       _457 = _302;
     }
+    // RenoDX: >>> [Patch: FoliageColorCorrect] [Version: 1.16.00]
+    // Description: Applies RenoDX foliage color shaping to foliage stencil materials (stencil ids
+    //              12..18) right after the shader has resolved the direct-diffuse base color for the
+    //              pixel. Vanilla foliage albedo reads flat and yellow-green under strong sun, so the
+    //              helper re-balances hue and saturation. The shadow-map visibility term from
+    //              g_sceneShadowColor is passed in so foliage that is shadowed is not pushed through
+    //              the fully sunlit shaping curve, which would otherwise make shaded leaves glow.
+    //              Gated by FOLIAGE_COLOR_CORRECT; at 0 the block does not execute.
+    if (FOLIAGE_COLOR_CORRECT > 0.0f && ((uint)(_110 - 12) < 7u)) {
+      float3 _rndx_fcBaseColor = float3(float(_455), float(_456), float(_457));
+      half4 _rndx_fcShadow = __3__36__0__0__g_sceneShadowColor.Load(int3(_92, _94, 0));
+      float _rndx_fcShadowVis = saturate(dot(float3(_rndx_fcShadow.xyz), float3(0.2126f, 0.7152f, 0.0722f)));
+      float3 _rndx_fcCorrected = FoliageColorCorrect(_rndx_fcBaseColor, _sunDirection.xyz, _rndx_fcShadowVis, float3(1.0f, 1.0f, 1.0f));
+      float3 _rndx_fscColor = FoliageSelectiveColor(_rndx_fcCorrected);
+      _455 = half(_rndx_fscColor.x);
+      _456 = half(_rndx_fscColor.y);
+      _457 = half(_rndx_fscColor.z);
+    }
+    // RenoDX: <<< [Patch: FoliageColorCorrect]
     _458 = float(_276);
     _459 = float(_277);
     _460 = float(_278);
@@ -1976,9 +2008,64 @@ void main(
     _2593 = _2592 * (((_2509 * 0.33951f) + (_2508 * 0.61312f)) + (_2510 * 0.04737f));
     _2594 = _2592 * (((_2509 * 0.91636f) + (_2508 * 0.0702f)) + (_2510 * 0.01345f));
     _2595 = _2592 * (((_2509 * 0.10958f) + (_2508 * 0.02062f)) + (_2510 * 0.8698f));
-    _2611 = (((_2593 * 0.61312f) + (_2594 * 0.33951f)) + (_2595 * 0.04737f)) * _2399;
-    _2612 = (((_2593 * 0.0702f) + (_2594 * 0.91636f)) + (_2595 * 0.01345f)) * _2399;
-    _2613 = (((_2593 * 0.02062f) + (_2594 * 0.10958f)) + (_2595 * 0.8698f)) * _2399;
+    // RenoDX: >>> [Patch: DirectLightMatrixFix] [Version: 1.16.00]
+    // Description: The direct beam's atmospheric transmittance is converted to working space on the three
+    //              lines above, and the game converts the result a second time here. The conversion's rows
+    //              sum to one, so applying it twice keeps the overall brightness and only pulls the colour
+    //              toward grey, which strips the warmth the transmittance itself carries. On uses the single
+    //              conversion and keeps every other factor, including the cloud blend already folded into
+    //              the inputs and the trailing sun/moon scalar, so low-sun light keeps the colour of the sky
+    //              it arrives through. Off is the exact vanilla expression.
+    _2611 = (DIRECT_LIGHT_MATRIX_FIX != 0.f)
+                ? (_2593 * _2399)
+                : ((((_2593 * 0.61312f) + (_2594 * 0.33951f)) + (_2595 * 0.04737f)) * _2399);
+    _2612 = (DIRECT_LIGHT_MATRIX_FIX != 0.f)
+                ? (_2594 * _2399)
+                : ((((_2593 * 0.0702f) + (_2594 * 0.91636f)) + (_2595 * 0.01345f)) * _2399);
+    _2613 = (DIRECT_LIGHT_MATRIX_FIX != 0.f)
+                ? (_2595 * _2399)
+                : ((((_2593 * 0.02062f) + (_2594 * 0.10958f)) + (_2595 * 0.8698f)) * _2399);
+    // RenoDX: <<< [Patch: DirectLightMatrixFix]
+    // RenoDX: >>> [Patch: DawnDuskDirectLightTint] [Version: 1.16.00]
+    // Description: Applies the weather-driven dawn/dusk hue shift to the active sun or moon colour. Vanilla
+    //              reddens direct light only through atmospheric transmittance, which leaves twilight
+    //              sunlight closer to neutral than the sky it arrives through, so lit surfaces read cool
+    //              against a warm horizon. This shifts the direct light in LMS toward the current dawn/dusk
+    //              weather preset. The helper attenuates that shift to a tenth of the inscatter shift
+    //              because direct light is high energy and feeds the BRDF on every surface, and it clamps
+    //              the result to non-negative.
+    //              Placed immediately before the Purkinje shift and after the native cloud and atmosphere
+    //              transforms, so the ordering is physical: the atmosphere colours the light, then the
+    //              scotopic response reacts to the light that actually arrives. It is also before the scene
+    //              shadow and ambient-occlusion channels are consumed, matching the Purkinje placement.
+    //              Triple-gated and inert by default: DAWN_DUSK_IMPROVEMENTS here, the helper returns its
+    //              input unchanged when DawnDuskFactor is 0 (outside the twilight window) or when the
+    //              weather preset is identity, and CUSTOM_WEATHER_EDITING additionally requires Ray
+    //              Reconstruction (shared.h). Off is bit-exact vanilla.
+    if (DAWN_DUSK_IMPROVEMENTS == 1.f) {
+      float3 _rndx_dd_direct = WeatherDirectLightCorrection(
+          float3(_2611, _2612, _2613), DawnDuskFactor(_sunDirection.y));
+      _2611 = _rndx_dd_direct.x;
+      _2612 = _rndx_dd_direct.y;
+      _2613 = _rndx_dd_direct.z;
+    }
+    // RenoDX: <<< [Patch: DawnDuskDirectLightTint]
+    // RenoDX: >>> [Patch: PurkinjeDirectLight] [Version: 1.16.00]
+    // Description: Applies the scotopic direct-light shift only after the active sun or moon color has
+    //              passed through the native cloud and atmosphere transforms and before scene shadow or
+    //              ambient-occlusion channels are consumed. The moon predicate reuses the native
+    //              sun-above-horizon selector and the shader's sun-versus-moon elevation rule.
+    //              The explicit feature gate performs no RGB write when disabled; the helper repeats the
+    //              same gate and returns its input for all inactive cases.
+    if (PURKINJE_EFFECT == 1.f) {
+      bool _rndx_purkinje_is_moon = !_2365 && (_sunDirection.y <= _moonDirection.y);
+      float3 _rndx_purkinje_light = ApplyPurkinjeShift(
+          float3(_2611, _2612, _2613), _sunDirection.y, _rndx_purkinje_is_moon);
+      _2611 = _rndx_purkinje_light.x;
+      _2612 = _rndx_purkinje_light.y;
+      _2613 = _rndx_purkinje_light.z;
+    }
+    // RenoDX: <<< [Patch: PurkinjeDirectLight]
     _2616 = float(_2326.x);  // [sem: _3__36__0__0__g_sceneShadowColor_load_derived]
     _2617 = float(_2326.y);  // [sem: _3__36__0__0__g_sceneShadowColor_load_derived]
     _2618 = float(_2326.z);  // [sem: _3__36__0__0__g_sceneShadowColor_load_derived]
@@ -2048,7 +2135,22 @@ void main(
     _2718 = saturate(dot(float3(_2696, _2697, _2698), float3(_2707, _2708, _2709)));  // [sem: expr_sat]
     _2720 = float(max(0.010002136h, _2320));
     _2721 = saturate(_2710);  // [sem: _2710_sat]
-    _2722 = _2720 * _2720;
+    // RenoDX: >>> [Patch: MaterialSpecularAA] [Version: 1.16.00]
+    // Description: Squaring the raw material roughness here produces the GGX alpha used by every
+    //              direct-light specular branch below. On surfaces whose shading normal varies rapidly
+    //              within a pixel, a low roughness leaves the specular lobe narrower than the pixel
+    //              footprint, which shimmers and crawls under camera motion. This block widens the
+    //              roughness first using a normal-derivative (NDF) filter driven by the current
+    //              shading normal, so the lobe covers at least the pixel footprint. Gated by
+    //              SPECULAR_AA; at 0 the filtered roughness is the unmodified material roughness and
+    //              the squared value below is unchanged. `_rndx_spec_rough` is also reused by the
+    //              diffraction hook further down.
+    float _rndx_spec_rough = _2720;
+    if (SPECULAR_AA > 0.0f) {
+      _rndx_spec_rough = NDFFilterRoughnessCS(float3(_2682, _2683, _2684), _2720, SPECULAR_AA);
+    }
+    _2722 = _rndx_spec_rough * _rndx_spec_rough;
+    // RenoDX: <<< [Patch: MaterialSpecularAA]
     _2723 = _2722 * _2722;
     _2724 = 1.0f - _2723;
     _2725 = 1.0f - _2718;
@@ -2059,7 +2161,21 @@ void main(
     _2736 = 1.0f - _2713;
     _2737 = _2736 * _2736;
     // [sem: expr_sat]
-    _2765 = saturate((_2721 * 0.31830987f) * ((((((1.0f - ((_2731 * _2731) * (_2730 * 0.75f))) * (1.0f - ((_2737 * _2737) * (_2736 * 0.75f)))) - _2729) * saturate((_2724 * 2.2f) + -0.5f)) + _2729) + ((exp2(-0.0f - (max(((_2724 * 73.2f) + -21.2f), 8.9f) * sqrt(_2715))) * _2718) * ((((_2724 * 34.5f) + -59.0f) * _2724) + 24.5f))));
+    // RenoDX: >>> [Patch: MaterialDiffuseBRDF] [Version: 1.16.00]
+    // Description: Replaces the vanilla direct-light diffuse scalar with the RenoDX diffuse BRDF
+    //              when a non-default diffuse model is selected. The vanilla expression is a
+    //              Lambert term with a fitted multi-scatter/retro-reflection correction; the
+    //              replacement is an energy-conserving rough-diffuse model that additionally
+    //              depends on the light-view angle, which keeps rough dielectrics from losing
+    //              energy at grazing angles. With DIFFUSE_BRDF_MODE below 1 the else branch runs
+    //              the vanilla expression unchanged.
+    if (DIFFUSE_BRDF_MODE >= 1.0f) {
+      float _eon_LdotV = dot(float3(_2696, _2697, _2698), float3(_462, _464, _466));
+      _2765 = _2721 * EON_DiffuseScalar(_2721, _2713, _eon_LdotV, _2720);
+    } else {
+      _2765 = saturate((_2721 * 0.31830987f) * ((((((1.0f - ((_2731 * _2731) * (_2730 * 0.75f))) * (1.0f - ((_2737 * _2737) * (_2736 * 0.75f)))) - _2729) * saturate((_2724 * 2.2f) + -0.5f)) + _2729) + ((exp2(-0.0f - (max(((_2724 * 73.2f) + -21.2f), 8.9f) * sqrt(_2715))) * _2718) * ((((_2724 * 34.5f) + -59.0f) * _2724) + 24.5f))));
+    }
+    // RenoDX: <<< [Patch: MaterialDiffuseBRDF]
     _2766 = _2653 & 126;
     bool __branch_chain_2695;
     if ((_2653 == 98) || (_2766 == 96)) {
@@ -2136,6 +2252,73 @@ void main(
       _2890 = 0.0f;
       _2891 = 0.0f;
     }
+    // RenoDX: >>> [Patch: MaterialDiffraction] [Version: 1.16.00]
+    // Description: Adds a wavelength-dependent tint and speckle to specular highlights on
+    //              materials with a metal/specular weight, approximating the iridescence of
+    //              finely structured surfaces that a single-lobe GGX cannot produce; the effect
+    //              is blended by the material weight so dielectrics are unaffected. Gated by
+    //              DIFFRACTION; at 0 the branch does not execute and the specular RGB is
+    //              untouched.
+    if (DIFFRACTION > 0.0f && _2785 > 0.0f) {
+      float3 _rndx_dShift = DiffractionShiftAndSpeckleCS(
+          _2715, _2713, _rndx_spec_rough,
+          float2(_102, _103), _114,
+          float3(_2707, _2708, _2709),
+          float3(_2682, _2683, _2684),
+          float3(_2787, _2788, _2789));
+      float3 _rndx_dMod = lerp(1.0f, _rndx_dShift, DIFFRACTION * _2785);
+      _2889 *= _rndx_dMod.x;
+      _2890 *= _rndx_dMod.y;
+      _2891 *= _rndx_dMod.z;
+    }
+    // RenoDX: <<< [Patch: MaterialDiffraction]
+    // RenoDX: >>> [Patch: MaterialSmoothTerminator] [Version: 1.16.00]
+    // Description: Softens the geometric shadow terminator after this branch has resolved its diffuse
+    //              scalar and specular RGB. The factor is derived from the matched N.L, V.H, and N.H
+    //              roles and multiplies all four resolved outputs at their shared post-branch boundary.
+    //              The entire mutation is inside the SMOOTH_TERMINATOR gate; at 0 no output is written.
+    if (SMOOTH_TERMINATOR > 0.0f) {
+      float _rndx_c2 = CallistoSmoothTerminator(_2721, _2718, _2715, SMOOTH_TERMINATOR, 0.5f);
+      _2765 *= _rndx_c2;
+      _2889 *= _rndx_c2;
+      _2890 *= _rndx_c2;
+      _2891 *= _rndx_c2;
+    }
+    // RenoDX: <<< [Patch: MaterialSmoothTerminator]
+    // RenoDX: >>> [Patch: FoliageTransmission] [Version: 1.16.00]
+    // Description: Vanilla shades foliage stencil materials (stencil ids 12..18) with an opaque
+    //              diffuse lobe, so leaves lit from behind go black instead of glowing. This block
+    //              adds a back-lit transmission term for those materials during direct diffuse
+    //              lighting: the _rndx_foliageTrans* accumulators declared here hold the light that
+    //              the helper reports passing through the leaf, which is added into the direct
+    //              diffuse output at the [Patch: FoliageTransmission] add-back block below, plus a
+    //              replacement scale for the front-facing diffuse lobe so total energy stays
+    //              bounded. When the helper reports no scale, a wrapped-diffuse fallback derived
+    //              from the raw N.L is used instead. Gated by FOLIAGE_TRANSMISSION; at 0 the
+    //              transmission accumulators stay zero and the vanilla diffuse term is untouched.
+    if (FOLIAGE_TRANSMISSION > 0.0f && ((uint)(_110 - 12) < 7u)) {
+      FoliageTransmissionResult _rndx_ftResult = FoliageTransmission(
+          float3(_462, _464, _466),
+          float3(_2696, _2697, _2698),
+          float3(_2640, _2641, _2642),
+          _2710,
+          float3(_2787, _2788, _2789),
+          float3(_2616, _2617, _2618),
+          float3(_2699, _2700, _2701),
+          FOLIAGE_TRANSMISSION_THICKNESS);
+
+      _rndx_foliageTransR = _rndx_ftResult.transmission.x;
+      _rndx_foliageTransG = _rndx_ftResult.transmission.y;
+      _rndx_foliageTransB = _rndx_ftResult.transmission.z;
+
+      if (_rndx_ftResult.diffuseScale > 0.0f) {
+        _2765 *= _rndx_ftResult.diffuseScale;
+      } else {
+        float _rndx_wrap = 0.25f * (1.0f - FOLIAGE_TRANSMISSION_THICKNESS);
+        _2765 = max(0.0f, (_2710 + _rndx_wrap) / (1.0f + _rndx_wrap)) * 0.31830987334251404f * 0.75f;
+      }
+    }
+    // RenoDX: <<< [Patch: FoliageTransmission]
     if (_2626 || (_2766 == 6)) {
       _2900 = ((max(0.0f, (0.3f - _2710)) * 0.23190688f) + _2765);
     } else {
@@ -2144,6 +2327,12 @@ void main(
     _2907 = ((_2616 * _2900) * _2699) + (_1236 * _1178);
     _2908 = ((_2617 * _2900) * _2700) + (_1237 * _1178);
     _2909 = ((_2618 * _2900) * _2701) + (_1238 * _1178);
+    // RenoDX: >>> [Patch: FoliageTransmission] [Version: 1.16.00]
+    // Description: Adds the gated foliage transmission accumulated above to the three clean-decompile direct-diffuse outputs after all native component equations have completed. With the feature disabled the accumulators are zero, so this insertion is exactly neutral.
+    _2907 += _rndx_foliageTransR;
+    _2908 += _rndx_foliageTransG;
+    _2909 += _rndx_foliageTransB;
+    // RenoDX: <<< [Patch: FoliageTransmission]
     _2912 = (uint)((uint)(_frameNumber.x)) * (uint)(13);
     [branch]
     if ((((int)((int)((uint)((uint)(_2912)) + (uint)((uint)(_92)))) | (int)((int)((uint)((uint)(_2912)) + (uint)((uint)(_94))))) & 31) == 0) {
@@ -2280,6 +2469,24 @@ void main(
         _3240 = _3219;
         _3241 = _3220;
       }
+      // RenoDX: >>> [Patch: FoliageFinalAO] [Version: 1.16.00]
+      // Description: Applies RenoDX foliage ambient-occlusion darkening to the final direct-lit scene
+      //              color for foliage stencil materials (stencil ids 12..18). Vanilla leaves the
+      //              direct sun contribution on foliage almost entirely unoccluded, so dense canopies
+      //              read flat and over-bright. The screen-space AO term is blended in proportionally
+      //              to how directly lit the pixel is, taken from the shadow-map colour, so already
+      //              shadowed foliage is not darkened twice. Gated by FOLIAGE_AO_STRENGTH; at 0 the
+      //              block does not execute, and the lerp keeps the multiplier at exactly 1.0 for
+      //              fully shadowed pixels.
+      if (FOLIAGE_AO_STRENGTH > 0.0f && ((uint)(_110 - 12) < 7u)) {
+        half4 _rndx_shadow = __3__36__0__0__g_sceneShadowColor.Load(int3(_92, _94, 0));
+        float _rndx_directRatio = saturate(dot(float3(_rndx_shadow.xyz), float3(0.333f, 0.333f, 0.333f)));
+        float _rndx_ao = lerp(1.0f, float(_360.x), _rndx_directRatio * FOLIAGE_AO_STRENGTH);
+        _3239 *= _rndx_ao;
+        _3240 *= _rndx_ao;
+        _3241 *= _rndx_ao;
+      }
+      // RenoDX: <<< [Patch: FoliageFinalAO]
       __3__38__0__1__g_sceneColorUAV[int2(_92, _94)] = float4(_3239, _3240, _3241, 1.0f);
     }
   }

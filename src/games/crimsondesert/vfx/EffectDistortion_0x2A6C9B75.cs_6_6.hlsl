@@ -1,3 +1,8 @@
+// RenoDX: >>> [Patch: RenoDXDependencyBindings] [Version: 1.16.00]
+// Description: Imports the shared RenoDX option macros used by the gated distortion bypass; this declaration does not alter native output.
+#include "../shared.h"
+// RenoDX: <<< [Patch: RenoDXDependencyBindings]
+
 Texture2D<uint> __3__36__0__0__g_effectTileCoords : register(t30, space36);
 
 Texture2D<float4> __3__36__0__0__g_sceneColor : register(t31, space36);
@@ -124,6 +129,15 @@ void main(
   uint3 SV_GroupThreadID : SV_GroupThreadID,
   uint SV_GroupIndex : SV_GroupIndex
 ) {
+  // RenoDX: >>> [Patch: EffectDistortionCompositeNoOp] [Version: 1.17.00]
+  // Description: Returns before the half- and quarter-resolution distortion composite. The composite upsamples
+  //              those lower-resolution buffers into the scene, which reads as particle noise around distortion
+  //              sources. Gated by the Disable Distortion setting; on Vanilla this falls through into the
+  //              untouched native function body and the game's distortion pass runs unchanged.
+  if (DISABLE_DISTORTION == 1.f) {
+    return;
+  }
+  // RenoDX: <<< [Patch: EffectDistortionCompositeNoOp]
   uint _19;
   uint _37;
   uint _38;
